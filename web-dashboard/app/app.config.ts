@@ -1,25 +1,25 @@
 export default defineAppConfig({
   ui: {
     colors: {
-      primary: 'green',
+      primary: 'emerald',
       neutral: 'zinc'
     },
 
-    // Sidebar menetap mulai 500 px, jadi jendela separuh layar tetap punya navigasi.
+    // Drawer tetap jadi navigasi utama sampai layar cukup lebar untuk sidebar.
     dashboardSidebar: {
       slots: {
-        root: 'min-[500px]:flex min-[500px]:max-lg:max-w-52',
-        content: 'min-[500px]:hidden',
-        overlay: 'min-[500px]:hidden'
+        root: 'md:flex md:max-lg:max-w-52',
+        content: 'md:hidden',
+        overlay: 'md:hidden'
       }
     },
 
     // Tombol menu HP dan lipat manual mengikuti batas tampilan sidebar yang sama.
     dashboardSidebarToggle: {
-      base: 'min-[500px]:hidden'
+      base: 'md:hidden'
     },
     dashboardSidebarCollapse: {
-      base: 'min-[500px]:flex'
+      base: 'md:flex'
     }
   }
 })

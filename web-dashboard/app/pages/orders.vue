@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
 import type { DashboardOrder, DashboardOrdersApiResponse } from '~/types/tourify'
+import { createAsciiReveal } from 'ascii-reveal/core'
+import type { AsciiRevealController } from 'ascii-reveal/core'
 
 const api = useTourifyApi()
 const route = useRoute()
@@ -15,14 +17,19 @@ const date = ref('')
 const page = ref(1)
 const total = ref(0)
 const perPage = ref(20)
+const summaryStats = ref<DashboardOrdersApiResponse['stats'] | null>(null)
 const loading = ref(true)
 const errorMessage = ref('')
 let requestId = 0
 const status = ref('all')
 const selected = ref<DashboardOrder | null>(null)
 const detailOpen = ref(false)
+const reducedMotion = usePreferredReducedMotion()
+const detailSurfaceSelector = '[data-slot="content"][role="dialog"]'
 const table = useTemplateRef('table')
 const columnVisibility = ref()
+let detailReveal: AsciiRevealController | null = null
+let closingDetail = false
 const statusItems = [
   { label: 'Semua status', value: 'all' },
   { label: 'Aktif', value: 'Active' },
@@ -35,6 +42,69 @@ function showDetail(order: DashboardOrder) {
   selected.value = order
   detailOpen.value = true
 }
+
+// Detail bergerak dengan ASCII saat dibuka dan menyelesaikan efeknya sebelum ditutup.
+async function revealOrderDetail() {
+  if (reducedMotion.value === 'reduce') return
+
+  const surface = document.querySelector<HTMLElement>(detailSurfaceSelector)
+  if (!surface) return
+
+  detailReveal?.destroy()
+  const controller = createAsciiReveal(surface.parentElement ?? surface, {
+    preset: 'decode',
+    surfaces: detailSurfaceSelector,
+    duration: 'cinematic',
+    speed: 1.2,
+    origin: 'pointer',
+    lazy: false
+  })
+  detailReveal = controller
+  try {
+    await controller.reveal({ within: surface })
+  } catch {
+    // Detail tetap terbaca kalau efek ASCII gagal.
+    if (detailReveal === controller) {
+      controller.destroy()
+      detailReveal = null
+    }
+  }
+}
+
+async function closeOrderDetail() {
+  if (closingDetail) return
+  closingDetail = true
+
+  const controller = detailReveal
+  const surface = document.querySelector<HTMLElement>(detailSurfaceSelector)
+  try {
+    if (controller) await controller.hide(surface ? { within: surface } : {})
+  } catch {
+    // Modal tetap ditutup kalau efek ASCII gagal.
+  }
+  if (detailReveal === controller) {
+    controller?.destroy()
+    detailReveal = null
+  }
+
+  detailOpen.value = false
+  closingDetail = false
+}
+
+function handleDetailOpenChange(open: boolean) {
+  if (open) {
+    detailOpen.value = true
+    return
+  }
+
+  void closeOrderDetail()
+}
+
+// Controller dilepas kalau halaman pesanan ditinggalkan saat dialog masih terbuka.
+onBeforeUnmount(() => {
+  detailReveal?.destroy()
+  detailReveal = null
+})
 
 // Reset menghapus semua pembatas, termasuk tiket yang dibuka dari halaman riwayat.
 function resetFilters() {
@@ -58,6 +128,7 @@ async function loadRows(background = false) {
     rows.value = response.orders
     total.value = response.total
     perPage.value = response.per_page
+    summaryStats.value = response.stats
     page.value = response.page
     errorMessage.value = ''
     // Detail terbuka ikut mendapat status check-in terbaru dari pesanan yang sama.
@@ -98,6 +169,28 @@ function formatDate(value: string, withTime = false): string {
 function formatRupiah(value: number): string {
   return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(value)
 }
+
+const numberFormat = new Intl.NumberFormat('id-ID')
+const summaryCards = computed(() => [
+  {
+    label: 'Total pesanan',
+    value: summaryStats.value ? numberFormat.format(summaryStats.value.orders) : '—',
+    hint: 'Semua pesanan',
+    icon: 'i-lucide-receipt'
+  },
+  {
+    label: 'Tiket dipesan',
+    value: summaryStats.value ? numberFormat.format(summaryStats.value.tickets) : '—',
+    hint: 'Akumulasi seluruh tiket',
+    icon: 'i-lucide-ticket'
+  },
+  {
+    label: 'Nilai pemesanan',
+    value: summaryStats.value ? formatRupiah(summaryStats.value.booking_value) : '—',
+    hint: 'Akumulasi transaksi',
+    icon: 'i-lucide-banknote'
+  }
+])
 
 function statusLabel(value: DashboardOrder['status']): string {
   return { Active: 'Aktif', Used: 'Terpakai', Expire: 'Kedaluwarsa' }[value]
@@ -150,6 +243,8 @@ const displayItems = computed(() => table.value?.tableApi?.getAllColumns()
     </template>
     <template #body>
       <div class="flex min-h-0 flex-1 flex-col gap-4">
+        <DashboardSummaryCards :cards="summaryCards" :loading="loading" />
+
         <!-- Label tetap terlihat supaya tanggal kunjungan tidak tertukar dengan tanggal pemesanan. -->
         <div class="flex flex-wrap items-end gap-3">
           <UFormField label="Cari pesanan" class="w-full sm:min-w-64 sm:flex-1">
@@ -223,7 +318,7 @@ const displayItems = computed(() => table.value?.tableApi?.getAllColumns()
           :data="rows"
           :columns="columns"
           :loading="loading"
-          class="shrink-0"
+          class="hidden shrink-0 xl:block"
           :ui="{
             base: 'w-full border-separate border-spacing-0',
             thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
@@ -294,6 +389,90 @@ const displayItems = computed(() => table.value?.tableApi?.getAllColumns()
           </template>
         </UTable>
 
+        <!-- Ringkas tiap tiket supaya data dan aksi utama muat di layar sentuh. -->
+        <div class="space-y-3 xl:hidden">
+          <p v-if="loading && !rows.length" role="status" class="py-6 text-center text-sm text-muted">
+            Memuat pesanan…
+          </p>
+          <p v-else-if="!rows.length" class="py-6 text-center text-sm text-muted">
+            {{ search || date || status !== 'all' ? 'Tidak ada pesanan sesuai filter.' : ticketId ? `Tiket #${ticketId} tidak ditemukan.` : 'Pesanan akan tampil setelah tiket dipesan.' }}
+          </p>
+          <article
+            v-for="order in rows"
+            :key="order.id"
+            class="rounded-xl border border-default bg-default p-4"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <button
+                  type="button"
+                  class="min-h-11 rounded font-semibold text-highlighted underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
+                  :aria-label="`Lihat detail tiket #${order.id} milik ${order.username}`"
+                  @click="showDetail(order)"
+                >
+                  Tiket #{{ order.id }}
+                </button>
+                <p class="break-words text-sm text-muted">
+                  {{ order.username }}
+                </p>
+              </div>
+              <UBadge :color="order.status === 'Active' ? 'success' : order.status === 'Used' ? 'primary' : 'neutral'" variant="subtle">
+                {{ statusLabel(order.status) }}
+              </UBadge>
+            </div>
+
+            <p class="mt-3 break-words font-medium text-highlighted">
+              {{ order.wahana_name }}
+            </p>
+            <dl class="mt-3 grid grid-cols-2 gap-x-3 gap-y-3 border-t border-default pt-3 text-sm">
+              <div>
+                <dt class="text-muted">
+                  Tanggal kunjungan
+                </dt>
+                <dd class="mt-1 text-highlighted">
+                  {{ formatDate(order.visit_date) }}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-muted">
+                  Pengunjung
+                </dt>
+                <dd class="mt-1 text-highlighted">
+                  {{ order.quantity }} orang
+                </dd>
+              </div>
+              <div>
+                <dt class="text-muted">
+                  Check-in
+                </dt>
+                <dd class="mt-1 tabular-nums text-highlighted">
+                  {{ order.checked_in_quantity }} / {{ order.quantity }}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-muted">
+                  Total
+                </dt>
+                <dd class="mt-1 break-words font-medium tabular-nums text-highlighted">
+                  {{ formatRupiah(order.total_price) }}
+                </dd>
+              </div>
+            </dl>
+            <div class="mt-3 flex items-center justify-between gap-3 border-t border-default pt-3">
+              <span class="text-sm text-muted">{{ order.payment_method }}</span>
+              <UButton
+                label="Lihat detail"
+                icon="i-lucide-eye"
+                color="neutral"
+                variant="outline"
+                class="min-h-11"
+                :aria-label="`Lihat detail tiket #${order.id} milik ${order.username}`"
+                @click="showDetail(order)"
+              />
+            </div>
+          </article>
+        </div>
+
         <div class="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-default pt-4">
           <p class="text-sm text-muted">
             {{ total }} pesanan · {{ perPage }} per halaman
@@ -307,12 +486,17 @@ const displayItems = computed(() => table.value?.tableApi?.getAllColumns()
           />
         </div>
       </div>
-      <!-- Identitas, kunjungan, dan pembayaran dipisah agar detail cepat dipindai. -->
+      <!-- Detail punya gradasi tipis dan reveal ASCII saat buka-tutup. -->
       <UModal
-        v-model:open="detailOpen"
+        :open="detailOpen"
         :title="selected ? `Pesanan #${selected.id}` : 'Detail pesanan'"
         description="Rincian tiket dan progres check-in pesanan."
-        :ui="{ footer: 'flex-wrap justify-between' }"
+        :ui="{
+          content: 'bg-default bg-[linear-gradient(135deg,rgba(255,255,255,0.12)_0%,rgba(255,255,255,0.025)_50%,rgba(255,255,255,0)_100%)]',
+          footer: 'flex-wrap justify-between'
+        }"
+        @update:open="handleDetailOpenChange"
+        @after:enter="revealOrderDetail"
       >
         <!-- Nama tombol tutup tetap bahasa Indonesia untuk pembaca layar. -->
         <template #close="{ ui }">
@@ -426,7 +610,7 @@ const displayItems = computed(() => table.value?.tableApi?.getAllColumns()
             label="Tutup"
             color="neutral"
             variant="subtle"
-            @click="detailOpen = false"
+            @click="handleDetailOpenChange(false)"
           />
         </template>
       </UModal>

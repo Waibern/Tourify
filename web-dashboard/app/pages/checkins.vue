@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
 import type { DashboardCheckin, DashboardCheckinsApiResponse } from '~/types/tourify'
+import { wahanaImages } from '~/utils/wahana-images'
 
 const api = useTourifyApi()
 const route = useRoute()
@@ -14,6 +15,7 @@ const date = ref('')
 const page = ref(1)
 const total = ref(0)
 const perPage = ref(20)
+const summaryStats = ref<DashboardCheckinsApiResponse['stats'] | null>(null)
 const loading = ref(true)
 const errorMessage = ref('')
 let requestId = 0
@@ -34,6 +36,7 @@ async function loadRows(background = false) {
     rows.value = response.checkins
     total.value = response.total
     perPage.value = response.per_page
+    summaryStats.value = response.stats
     page.value = response.page
     errorMessage.value = ''
   } catch (error) {
@@ -64,6 +67,35 @@ function formatDate(value: string, withTime = false): string {
   const formatted = (day ?? '').split('-').reverse().join('-')
   return withTime ? `${formatted} ${(time ?? '').slice(0, 8)}` : formatted
 }
+
+const numberFormat = new Intl.NumberFormat('id-ID')
+const summaryCards = computed(() => [
+  {
+    label: 'Total check-in',
+    value: summaryStats.value ? numberFormat.format(summaryStats.value.checkins) : '—',
+    hint: 'Semua catatan masuk',
+    icon: 'i-lucide-scan-line'
+  },
+  {
+    label: 'Tiket dengan check-in',
+    value: summaryStats.value ? numberFormat.format(summaryStats.value.tickets) : '—',
+    hint: 'Tiket berbeda',
+    icon: 'i-lucide-ticket-check'
+  },
+  {
+    label: 'Wahana teratas',
+    value: summaryStats.value?.top_wahana ?? '—',
+    hint: summaryStats.value
+      ? summaryStats.value.top_wahana
+        ? `${numberFormat.format(summaryStats.value.top_wahana_checkins)} check-in`
+        : 'Belum ada check-in'
+      : 'Data belum tersedia',
+    icon: 'i-lucide-map-pin',
+    image: summaryStats.value?.top_wahana_id
+      ? wahanaImages[summaryStats.value.top_wahana_id]
+      : undefined
+  }
+])
 
 // Identitas tiket selalu ada supaya tautan detail tidak hilang dari tampilan petugas.
 const columns: TableColumn<DashboardCheckin>[] = [
@@ -110,6 +142,8 @@ const displayItems = computed(() => table.value?.tableApi?.getAllColumns()
     </template>
     <template #body>
       <div class="flex min-h-0 flex-1 flex-col gap-4">
+        <DashboardSummaryCards :cards="summaryCards" :loading="loading" />
+
         <!-- Arti tiap kejadian dan tanggal dibuat jelas tanpa menambah panel dekoratif. -->
         <p class="text-sm text-muted">
           Satu baris mencatat satu pengunjung masuk. Klik nomor tiket untuk melihat pesanan.
@@ -184,7 +218,7 @@ const displayItems = computed(() => table.value?.tableApi?.getAllColumns()
           :data="rows"
           :columns="columns"
           :loading="loading"
-          class="shrink-0"
+          class="hidden shrink-0 xl:block"
           :ui="{
             base: 'w-full border-separate border-spacing-0',
             thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
@@ -220,6 +254,62 @@ const displayItems = computed(() => table.value?.tableApi?.getAllColumns()
             <span class="break-words text-highlighted">{{ row.original.staff_username }}</span>
           </template>
         </UTable>
+
+        <!-- Setiap kartu mewakili satu orang yang benar-benar tercatat masuk. -->
+        <div class="space-y-3 xl:hidden">
+          <p v-if="loading && !rows.length" role="status" class="py-6 text-center text-sm text-muted">
+            Memuat riwayat check-in…
+          </p>
+          <p v-else-if="!rows.length" class="py-6 text-center text-sm text-muted">
+            {{ search || date ? 'Tidak ada riwayat sesuai filter.' : ticketId ? `Belum ada pengunjung masuk untuk tiket #${ticketId}.` : 'Riwayat check-in akan tampil setelah tiket dipindai.' }}
+          </p>
+          <article
+            v-for="checkin in rows"
+            :key="checkin.id"
+            class="rounded-xl border border-default bg-default p-4"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <NuxtLink
+                  :to="{ path: '/orders', query: { ticket: checkin.ticket_id } }"
+                  class="inline-flex min-h-11 items-center rounded font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
+                  :aria-label="`Lihat pesanan tiket #${checkin.ticket_id} milik ${checkin.username}`"
+                >
+                  Tiket #{{ checkin.ticket_id }}
+                </NuxtLink>
+                <p class="break-words text-sm text-muted">
+                  {{ checkin.username }}
+                </p>
+              </div>
+              <div class="shrink-0 text-right">
+                <p class="font-medium tabular-nums text-highlighted">
+                  {{ checkin.scanned_at.split(' ')[1]?.slice(0, 8) }} WIB
+                </p>
+                <p class="mt-1 text-sm text-muted">
+                  {{ formatDate(checkin.scanned_at) }}
+                </p>
+              </div>
+            </div>
+            <dl class="mt-3 grid grid-cols-2 gap-3 border-t border-default pt-3 text-sm">
+              <div class="min-w-0">
+                <dt class="text-muted">
+                  Wahana
+                </dt>
+                <dd class="mt-1 break-words font-medium text-highlighted">
+                  {{ checkin.wahana_name }}
+                </dd>
+              </div>
+              <div class="min-w-0">
+                <dt class="text-muted">
+                  Petugas
+                </dt>
+                <dd class="mt-1 break-words text-highlighted">
+                  {{ checkin.staff_username }}
+                </dd>
+              </div>
+            </dl>
+          </article>
+        </div>
 
         <div class="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-default pt-4">
           <p class="text-sm text-muted">

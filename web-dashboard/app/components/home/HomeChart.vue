@@ -2,9 +2,11 @@
 import { format, startOfWeek } from 'date-fns'
 import type { DashboardAnalyticsPoint } from '~/types/tourify'
 import type { Period } from '~/types'
+import { analyticsChange } from '~/utils/analytics'
 
 const props = defineProps<{
   series: DashboardAnalyticsPoint[]
+  previousValue: number | null
   period: Period
   loading: boolean
 }>()
@@ -48,6 +50,10 @@ const chartData = computed(() => {
 })
 
 const total = computed(() => props.series.reduce((sum, point) => sum + point.booking_value, 0))
+// Nilai omzet dibandingkan dengan rentang yang sama tepat sebelumnya.
+const totalChange = computed(() => props.previousValue === null
+  ? null
+  : analyticsChange(total.value, props.previousValue))
 </script>
 
 <template>
@@ -75,9 +81,21 @@ const total = computed(() => props.series.reduce((sum, point) => sum + point.boo
           </div>
         </template>
         <div class="px-6 pb-4">
-          <p class="text-3xl text-highlighted font-semibold">
-            {{ currencyFormat(total) }}
-          </p>
+          <div class="flex flex-wrap items-center gap-3">
+            <p class="text-3xl text-highlighted font-semibold">
+              {{ currencyFormat(total) }}
+            </p>
+            <UBadge
+              v-if="totalChange"
+              :color="totalChange.color"
+              variant="subtle"
+              size="sm"
+              class="rounded-full tabular-nums"
+              title="Dibandingkan rentang tanggal sebelumnya"
+            >
+              {{ totalChange.label }}
+            </UBadge>
+          </div>
         </div>
         <!-- Keadaan kosong tetap pendek dan memberi langkah berikutnya. -->
         <div v-if="!hasBookings" class="flex flex-wrap items-center justify-between gap-3 px-6 pb-5 text-sm text-muted">

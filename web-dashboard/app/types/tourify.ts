@@ -75,6 +75,7 @@ export interface WahanaUpdateApiResponse {
 
 // Bentuk data analytics dan pelanggan mengikuti tabel yang benar-benar ada di API.
 export interface DashboardAnalyticsStats {
+  booking_value: number
   new_customers: number
   orders: number
   tickets: number
@@ -154,6 +155,11 @@ export interface DashboardOrdersApiResponse {
   total: number
   page: number
   per_page: number
+  stats: {
+    orders: number
+    tickets: number
+    booking_value: number
+  }
 }
 
 export interface DashboardCheckinsApiResponse {
@@ -162,4 +168,11 @@ export interface DashboardCheckinsApiResponse {
   total: number
   page: number
   per_page: number
+  stats: {
+    checkins: number
+    tickets: number
+    top_wahana_id: number | null
+    top_wahana: string | null
+    top_wahana_checkins: number
+  }
 }

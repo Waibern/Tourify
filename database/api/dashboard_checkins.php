@@ -49,6 +49,24 @@ try {
     $count = $pdo->prepare('SELECT COUNT(*) ' . $from . $filter);
     $count->execute($params);
     $total = (int) $count->fetchColumn();
+
+    // Ringkasan menghitung semua catatan, termasuk yang tidak ada di halaman ini.
+    $summary = $pdo->query(
+        'SELECT COUNT(*) AS checkins, COUNT(DISTINCT ticket_id) AS tickets '
+        . 'FROM ticket_checkins'
+    )->fetch();
+
+    // Wahana teratas dihitung dari jumlah catatan masuk sepanjang waktu.
+    $topWahana = $pdo->query(
+        'SELECT w.id, w.name, COUNT(*) AS checkins '
+        . 'FROM ticket_checkins c '
+        . 'INNER JOIN tickets t ON t.id = c.ticket_id '
+        . 'INNER JOIN wahana w ON w.id = t.wahana_id '
+        . 'GROUP BY w.id, w.name '
+        . 'ORDER BY checkins DESC, w.name ASC '
+        . 'LIMIT 1'
+    )->fetch();
+
     $perPage = 20;
     $page = min($page, max(1, (int) ceil($total / $perPage)));
     // Pagination membatasi jumlah baris yang dibawa browser setiap permintaan.
@@ -57,7 +75,20 @@ try {
     $statement->execute($params);
     $rows = $statement->fetchAll();
 
-    respond(200, ['success' => true, 'checkins' => $rows, 'total' => $total, 'page' => $page, 'per_page' => $perPage]);
+    respond(200, [
+        'success' => true,
+        'checkins' => $rows,
+        'total' => $total,
+        'page' => $page,
+        'per_page' => $perPage,
+        'stats' => [
+            'checkins' => (int) $summary['checkins'],
+            'tickets' => (int) $summary['tickets'],
+            'top_wahana_id' => $topWahana ? (int) $topWahana['id'] : null,
+            'top_wahana' => $topWahana ? $topWahana['name'] : null,
+            'top_wahana_checkins' => $topWahana ? (int) $topWahana['checkins'] : 0,
+        ],
+    ]);
 } catch (Throwable $exception) {
     handleApiError('dashboard checkins', $exception);
 }

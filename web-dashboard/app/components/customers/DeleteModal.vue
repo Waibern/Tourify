@@ -1,41 +1,46 @@
 <script setup lang="ts">
-withDefaults(defineProps<{
-  count?: number
-}>(), {
-  count: 0
-})
+const props = defineProps<{
+  count: number
+  loading?: boolean
+  error?: string
+}>()
 
-const open = ref(false)
-
-async function onSubmit() {
-  await new Promise(resolve => setTimeout(resolve, 1000))
-  open.value = false
-}
+const open = defineModel<boolean>('open', { default: false })
+const emit = defineEmits<{ confirm: [] }>()
 </script>
 
 <template>
   <UModal
     v-model:open="open"
-    :title="`Delete ${count} customer${count > 1 ? 's' : ''}`"
-    :description="`Are you sure, this action cannot be undone.`"
+    title="Hapus pelanggan terpilih?"
+    :description="`${props.count} akun pelanggan akan dihapus. Akun dengan riwayat pesanan tidak bisa dihapus.`"
   >
     <slot />
 
     <template #body>
-      <div class="flex justify-end gap-2">
-        <UButton
-          label="Cancel"
-          color="neutral"
-          variant="subtle"
-          @click="open = false"
-        />
-        <UButton
-          label="Delete"
+      <div class="space-y-4">
+        <UAlert
+          v-if="error"
           color="error"
-          variant="solid"
-          loading-auto
-          @click="onSubmit"
+          variant="subtle"
+          :description="error"
         />
+        <div class="flex justify-end gap-2">
+          <UButton
+            label="Batal"
+            color="neutral"
+            variant="subtle"
+            @click="open = false"
+          />
+          <UButton
+            label="Hapus akun"
+            color="error"
+            variant="solid"
+            :loading="loading"
+            :disabled="loading || count === 0"
+            @click="emit('confirm')"
+          />
+        </div>
       </div>
     </template>
   </UModal>

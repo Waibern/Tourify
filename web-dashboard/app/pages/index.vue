@@ -152,6 +152,7 @@ watch(
         />
         <HomeChart
           :series="analytics?.series ?? []"
+          :previous-value="analytics?.previous_stats.booking_value ?? null"
           :period="period"
           :loading="loading"
         />

@@ -32,7 +32,10 @@ const cards = computed(() => metrics.map((metric) => {
     ...metric,
     value,
     previous,
-    change: value !== null && previous !== null ? analyticsChange(value, previous) : null
+    // Persentase hanya dipakai pada kartu Pengunjung masuk.
+    change: metric.key === 'checkins' && value !== null && previous !== null
+      ? analyticsChange(value, previous)
+      : null
   }
 }))
 const featured = computed(() => cards.value[0]!)
@@ -51,7 +54,7 @@ const hasCheckins = computed(() => checkinData.value.some(point => point.value >
 
 <template>
   <!-- Kartu tetap berdampingan saat jendela separuh layar; baru ditumpuk di lebar HP. -->
-  <section class="grid gap-3 min-[500px]:grid-cols-2" aria-label="Ringkasan aktivitas" :aria-busy="loading">
+  <section class="grid gap-3 min-[900px]:grid-cols-2" aria-label="Ringkasan aktivitas" :aria-busy="loading">
     <p v-if="loading" class="sr-only" role="status">
       Memuat ringkasan Tourify…
     </p>
@@ -150,16 +153,6 @@ const hasCheckins = computed(() => checkinData.value.some(point => point.value >
               </p>
             </div>
             <div class="flex shrink-0 items-center gap-2">
-              <UBadge
-                v-if="card.change"
-                :color="card.change.color"
-                variant="subtle"
-                size="sm"
-                class="rounded-full tabular-nums"
-                :title="`Dibandingkan ${comparisonLabel}`"
-              >
-                {{ card.change.label }}
-              </UBadge>
               <p class="text-xl font-semibold text-highlighted tabular-nums">
                 {{ card.value === null ? '—' : numberFormat.format(card.value) }}
               </p>

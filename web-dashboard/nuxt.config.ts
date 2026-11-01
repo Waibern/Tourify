@@ -14,7 +14,7 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     public: {
-      tourifyApiBaseUrl: 'http://localhost:8888/tourify-api'
+      tourifyApiBaseUrl: '/tourify-api'
     }
   },
 
@@ -25,6 +25,17 @@ export default defineNuxtConfig({
   },
 
   compatibilityDate: '2026-06-30',
+
+  // API PHP diproxy agar URL localhost dan cookie login tetap satu origin di HP.
+  nitro: {
+    devProxy: {
+      '/tourify-api': {
+        target: 'http://127.0.0.1:8888/tourify-api',
+        changeOrigin: true,
+        headers: { origin: 'http://localhost:3000' }
+      }
+    }
+  },
 
   eslint: {
     config: {

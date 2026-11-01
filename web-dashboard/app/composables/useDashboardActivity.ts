@@ -4,8 +4,11 @@ import type { DashboardActivityApiResponse, DashboardActivityCursor } from '~/ty
 export function useDashboardActivity() {
   const api = useTourifyApi()
   const { user } = useDashboardAuth()
+  const route = useRoute()
   const toast = useToast()
   const { notify } = useDashboardNotifications()
+  const newOrderCount = ref(0)
+  const newCustomerCount = ref(0)
   let cursor: DashboardActivityCursor | null = null
   let busy = false
   let generation = 0
@@ -38,6 +41,9 @@ export function useDashboardActivity() {
         const after = event.type === 'order' ? previous.order_id : previous.customer_id
         if (BigInt(event.entity_id) <= BigInt(after) || delivered.has(event.id)) continue
         delivered.add(event.id)
+        // Badge hanya menghitung aktivitas baru pada menu yang belum dibuka.
+        if (event.type === 'order' && route.path !== '/orders') newOrderCount.value++
+        if (event.type === 'customer' && route.path !== '/customers') newCustomerCount.value++
         const id = notify(event)
         // Nuxt memasang toast pada tick berikutnya; batalkan juga antreannya bila akun sudah keluar.
         await nextTick()
@@ -57,8 +63,14 @@ export function useDashboardActivity() {
   watch(adminId, () => {
     generation++
     cursor = null
+    newOrderCount.value = 0
+    newCustomerCount.value = 0
     dismissActivity()
     if (import.meta.client) void poll()
+  }, { immediate: true })
+  watch(() => route.path, (path) => {
+    if (path === '/orders') newOrderCount.value = 0
+    if (path === '/customers') newCustomerCount.value = 0
   }, { immediate: true })
   useDashboardAutoRefresh(poll, () => busy || adminId.value === null)
   onBeforeUnmount(() => {
@@ -66,4 +78,6 @@ export function useDashboardActivity() {
     generation++
     dismissActivity()
   })
+
+  return { newOrderCount, newCustomerCount }
 }

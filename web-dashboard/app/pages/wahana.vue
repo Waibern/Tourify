@@ -2,6 +2,7 @@
 import * as z from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { DashboardApiResponse, TourifyWahana, WahanaUpdateApiResponse } from '~/types/tourify'
+import { wahanaImage } from '~/utils/wahana-images'
 
 const api = useTourifyApi()
 const wahana = ref<TourifyWahana[]>([])
@@ -54,19 +55,6 @@ const filteredWahana = computed(() => {
     return a.name.localeCompare(b.name, 'id-ID')
   })
 })
-
-// Foto memakai aset wahana yang sama dengan aplikasi Tourify.
-const wahanaImages: Record<number, string> = {
-  1: '/wahana/dunia_petualang.jpg',
-  2: '/wahana/samudra_biru.jpg',
-  3: '/wahana/pulau_air.jpg',
-  4: '/wahana/pantai_mentari.jpg',
-  5: '/wahana/taman_satwa_pesisir.jpg'
-}
-
-function wahanaImage(id: number): string {
-  return wahanaImages[id] ?? wahanaImages[1]!
-}
 
 const visibleWahana = computed(() => {
   const start = pagination.value.pageIndex * pagination.value.pageSize

@@ -1,6 +1,9 @@
 package com.example.tourify_v2.screen
 
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,7 +19,11 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Slider
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -30,6 +37,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -69,8 +79,21 @@ fun AccountScreen(
     }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var selectedImageUri by remember {
-        mutableStateOf<Uri?>(null)
+    var selectedImageBitmap by remember {
+        mutableStateOf<Bitmap?>(null)
+    }
+    // Nilai ini jadi titik awal pengaturan crop untuk setiap foto baru.
+    var cropZoom by remember {
+        mutableStateOf(1f)
+    }
+    var cropPositionX by remember {
+        mutableStateOf(0.5f)
+    }
+    var cropPositionY by remember {
+        mutableStateOf(0.5f)
+    }
+    var showImageSourceDialog by remember {
+        mutableStateOf(false)
     }
     var isPreparingImage by remember {
         mutableStateOf(false)
@@ -90,7 +113,7 @@ fun AccountScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
-            selectedImageUri = uri
+            selectedImageBitmap = null
             selectedImageError = ""
             isPreparingImage = true
             scope.launch {
@@ -101,12 +124,15 @@ fun AccountScreen(
                             uri
                         )
                     }
-                    onProfileImageSelected(
-                        selectedImage.bytes,
-                        selectedImage.mimeType
-                    )
+                    val bitmap = withContext(Dispatchers.IO) {
+                        decodeProfileImage(selectedImage.bytes)
+                    }
+                    selectedImageBitmap = bitmap
+                    cropZoom = 1f
+                    cropPositionX = 0.5f
+                    cropPositionY = 0.5f
                 } catch (exception: Exception) {
-                    selectedImageUri = null
+                    selectedImageBitmap = null
                     selectedImageError = exception.message ?: "Foto gagal dibaca."
                 } finally {
                     isPreparingImage = false
@@ -114,9 +140,20 @@ fun AccountScreen(
             }
         }
     }
+    val cameraPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        if (bitmap != null) {
+            selectedImageBitmap = bitmap
+            selectedImageError = ""
+            cropZoom = 1f
+            cropPositionX = 0.5f
+            cropPositionY = 0.5f
+        }
+    }
     LaunchedEffect(profileImageUrl) {
         if (profileImageUrl != null) {
-            selectedImageUri = null
+            selectedImageBitmap = null
         }
     }
     val imageError = selectedImageError.ifBlank {
@@ -169,7 +206,8 @@ fun AccountScreen(
                         Box(
                             contentAlignment = Alignment.Center
                         ) {
-                            val imageModel = selectedImageUri ?: profileImageUrl
+                            val imageModel = selectedImageBitmap
+                                ?: profileImageUrl
                             if (imageModel != null) {
                                 AsyncImage(
                                     model = imageModel,
@@ -203,10 +241,10 @@ fun AccountScreen(
                             fontSize = 14.sp,
                             color = Color(0xFF777D80)
                         )
-                        // Picker Android memberi foto lokal; path server dipakai setelah tersimpan.
+                        // Galeri dan kamera memakai alur upload foto profil yang sama.
                         TextButton(
                             onClick = {
-                                imagePicker.launch("image/*")
+                                showImageSourceDialog = true
                             },
                             enabled = !isImageBusy
                         ) {
@@ -303,7 +341,240 @@ fun AccountScreen(
                 )
             }
         }
+
+        // Pilihan sumber foto tetap lewat pemilih sistem Android.
+        if (showImageSourceDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    showImageSourceDialog = false
+                },
+                title = {
+                    Text("Pilih foto profil")
+                },
+                text = {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TextButton(
+                            onClick = {
+                                showImageSourceDialog = false
+                                imagePicker.launch("image/*")
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PhotoLibrary,
+                                contentDescription = null
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Pilih dari galeri")
+                        }
+                        TextButton(
+                            onClick = {
+                                showImageSourceDialog = false
+                                selectedImageError = ""
+                                try {
+                                    cameraPicker.launch(null)
+                                } catch (exception: ActivityNotFoundException) {
+                                    selectedImageError = "Aplikasi kamera tidak tersedia."
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PhotoCamera,
+                                contentDescription = null
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Ambil foto")
+                        }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showImageSourceDialog = false
+                        }
+                    ) {
+                        Text("Batal")
+                    }
+                }
+            )
+        }
+
+        // Foto baru masuk ke pratinjau dulu, lalu dipotong sesuai posisi dan zoom.
+        selectedImageBitmap?.let { bitmap ->
+            ProfileImageCropDialog(
+                bitmap = bitmap,
+                zoom = cropZoom,
+                positionX = cropPositionX,
+                positionY = cropPositionY,
+                isBusy = isImageBusy,
+                error = imageError,
+                onZoomChange = {
+                    cropZoom = it
+                },
+                onPositionXChange = {
+                    cropPositionX = it
+                },
+                onPositionYChange = {
+                    cropPositionY = it
+                },
+                onDismiss = {
+                    if (!isImageBusy) {
+                        selectedImageBitmap = null
+                    }
+                },
+                onConfirm = {
+                    if (!isImageBusy) {
+                        isPreparingImage = true
+                        selectedImageError = ""
+                        scope.launch {
+                            try {
+                                val imageBytes = withContext(Dispatchers.IO) {
+                                    val croppedBitmap = cropProfileImage(
+                                        bitmap,
+                                        cropZoom,
+                                        cropPositionX,
+                                        cropPositionY
+                                    )
+                                    encodeProfileImage(croppedBitmap)
+                                }
+                                onProfileImageSelected(
+                                    imageBytes,
+                                    "image/jpeg"
+                                )
+                            } catch (exception: Exception) {
+                                selectedImageError = exception.message ?: "Foto gagal disiapkan."
+                            } finally {
+                                isPreparingImage = false
+                            }
+                        }
+                    }
+                }
+            )
+        }
     }
+}
+
+// Dialog ini menampilkan hasil crop dan kontrol posisi yang dipakai saat upload.
+@Composable
+private fun ProfileImageCropDialog(
+    bitmap: Bitmap,
+    zoom: Float,
+    positionX: Float,
+    positionY: Float,
+    isBusy: Boolean,
+    error: String,
+    onZoomChange: (Float) -> Unit,
+    onPositionXChange: (Float) -> Unit,
+    onPositionYChange: (Float) -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Atur foto profil")
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 520.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(220.dp)
+                        .align(Alignment.CenterHorizontally)
+                        .clip(CircleShape)
+                        .background(Color(0xFFE8F3EF)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    androidx.compose.foundation.Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = "Pratinjau foto profil",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                val baseScale = maxOf(
+                                    size.width / bitmap.width,
+                                    size.height / bitmap.height
+                                )
+                                val renderedWidth = bitmap.width * baseScale * zoom
+                                val renderedHeight = bitmap.height * baseScale * zoom
+                                scaleX = zoom
+                                scaleY = zoom
+                                translationX = (0.5f - positionX) * (renderedWidth - size.width)
+                                translationY = (0.5f - positionY) * (renderedHeight - size.height)
+                            },
+                        contentScale = ContentScale.Crop
+                    )
+                }
+                Text(
+                    text = "Geser posisi dan zoom sampai pas.",
+                    fontSize = 13.sp,
+                    color = Color(0xFF646B6E)
+                )
+                Text(
+                    text = "Zoom ${((zoom - 1f) * 100).toInt()}%",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Slider(
+                    value = zoom,
+                    onValueChange = onZoomChange,
+                    valueRange = 1f..3f,
+                    enabled = !isBusy
+                )
+                Text(
+                    text = "Posisi horizontal",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Slider(
+                    value = positionX,
+                    onValueChange = onPositionXChange,
+                    enabled = !isBusy
+                )
+                Text(
+                    text = "Posisi vertikal",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Slider(
+                    value = positionY,
+                    onValueChange = onPositionYChange,
+                    enabled = !isBusy
+                )
+                if (error.isNotBlank()) {
+                    Text(
+                        text = error,
+                        color = TourifyError,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                enabled = !isBusy
+            ) {
+                Text(if (isBusy) "Menyimpan…" else "Pakai foto")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isBusy
+            ) {
+                Text("Batal")
+            }
+        }
+    )
 }
 
 @Composable
@@ -401,6 +672,62 @@ private data class SelectedProfileImage(
     val mimeType: String
 )
 
+// Decode gambar dengan ukuran pratinjau agar foto resolusi tinggi tetap ringan.
+private fun decodeProfileImage(bytes: ByteArray): Bitmap {
+    val bounds = BitmapFactory.Options().apply {
+        inJustDecodeBounds = true
+    }
+    BitmapFactory.decodeByteArray(
+        bytes,
+        0,
+        bytes.size,
+        bounds
+    )
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+        throw IOException("Foto tidak bisa dibaca.")
+    }
+
+    var sampleSize = 1
+    while (maxOf(bounds.outWidth, bounds.outHeight) / sampleSize > MAX_PROFILE_PREVIEW_DIMENSION) {
+        sampleSize *= 2
+    }
+    val options = BitmapFactory.Options().apply {
+        inSampleSize = sampleSize
+    }
+    return BitmapFactory.decodeByteArray(
+        bytes,
+        0,
+        bytes.size,
+        options
+    ) ?: throw IOException("Foto tidak bisa disiapkan.")
+}
+
+// Ambil potongan persegi yang sama dengan pratinjau sebelum dikirim ke server.
+private fun cropProfileImage(
+    bitmap: Bitmap,
+    zoom: Float,
+    positionX: Float,
+    positionY: Float
+): Bitmap {
+    val side = (minOf(bitmap.width, bitmap.height) / zoom)
+        .toInt()
+        .coerceAtLeast(1)
+    val left = ((bitmap.width - side) * positionX)
+        .toInt()
+        .coerceIn(0, bitmap.width - side)
+    val top = ((bitmap.height - side) * positionY)
+        .toInt()
+        .coerceIn(0, bitmap.height - side)
+
+    return Bitmap.createBitmap(
+        bitmap,
+        left,
+        top,
+        side,
+        side
+    )
+}
+
 // Baca foto di background dan batasi ukurannya sebelum upload.
 private fun readProfileImage(
     context: Context,
@@ -443,4 +770,20 @@ private fun readProfileImage(
     )
 }
 
+// Foto kamera dikirim sebagai JPEG lewat endpoint profil yang sama.
+private fun encodeProfileImage(bitmap: Bitmap): ByteArray {
+    val output = ByteArrayOutputStream()
+    if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 92, output)) {
+        throw IOException("Foto kamera gagal disiapkan.")
+    }
+    if (output.size() == 0) {
+        throw IOException("Foto kamera kosong.")
+    }
+    if (output.size() > MAX_PROFILE_IMAGE_BYTES) {
+        throw IOException("Ukuran foto maksimal 5 MB.")
+    }
+    return output.toByteArray()
+}
+
 private const val MAX_PROFILE_IMAGE_BYTES = 5 * 1024 * 1024
+private const val MAX_PROFILE_PREVIEW_DIMENSION = 2048

@@ -80,9 +80,7 @@ import com.example.tourify_v2.ui.theme.*
 import com.example.tourify_v2.viewmodel.TourifyViewModel
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
-import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import java.util.Locale
@@ -503,7 +501,7 @@ private fun TicketTabs(
     }
 }
 
-// Waktu verifikasi dan kegagalan koneksi tetap terlihat di daftar maupun detail.
+// Status hanya muncul saat tiket sedang diperbarui atau permintaan gagal.
 @Composable
 private fun TicketSyncNotice(
     isRefreshing: Boolean,
@@ -511,7 +509,6 @@ private fun TicketSyncNotice(
     updatedAtMillis: Long?,
     onRefresh: () -> Unit
 ) {
-    val timestamp = ticketUpdateTime(updatedAtMillis)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -533,15 +530,13 @@ private fun TicketSyncNotice(
                 color = TourifyMuted
             )
         }
-        Text(
-            text = when {
-                isRefreshing -> "Memperbarui status tiket…"
-                timestamp != null -> "Terakhir diperbarui $timestamp"
-                else -> "Status belum diperbarui"
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = TourifyMuted
-        )
+        if (isRefreshing) {
+            Text(
+                text = "Memperbarui status tiket…",
+                style = MaterialTheme.typography.bodyMedium,
+                color = TourifyMuted
+            )
+        }
         if (refreshError.isNotBlank()) {
             TextButton(
                 onClick = onRefresh,
@@ -950,6 +945,7 @@ internal fun TicketDetailScreen(
     onRefresh: () -> Unit = {}
 ) {
     val available = canShowTicketQr(ticket)
+    val used = isTicketUsed(ticket)
     val isFinished = !available
     val statusLabel = ticketStatusLabel(ticket).uppercase(Locale.forLanguageTag("id-ID"))
     val passengerName = ticket.username.ifBlank {
@@ -1132,8 +1128,20 @@ internal fun TicketDetailScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // Bentuk lama tidak mengaktifkan lagi QR tiket yang sudah selesai.
-                        if (!available) {
+                        // QR tetap terlihat abu-abu pada riwayat tiket yang sudah habis dipakai.
+                        if (used) {
+                            TicketQrCode(
+                                ticket = ticket,
+                                modifier = Modifier.size(144.dp),
+                                isUsed = true
+                            )
+                            Text(
+                                text = ticketEntryMessage(ticket),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TourifyMuted,
+                                textAlign = TextAlign.Center
+                            )
+                        } else if (!available) {
                             Text(
                                 text = ticketEntryMessage(ticket),
                                 style = MaterialTheme.typography.bodyMedium,
@@ -1214,9 +1222,10 @@ internal fun TicketDetailScreen(
             Text(text = "Unduh PDF", fontWeight = FontWeight.SemiBold)
         }
     }
-    if (showLargeQr && available) {
+    if (showLargeQr && (available || used)) {
         LargeTicketQr(
             ticket = ticket,
+            isUsed = used,
             onDismiss = {
                 showLargeQr = false
             },
@@ -1233,6 +1242,7 @@ internal fun TicketDetailScreen(
 @Composable
 private fun LargeTicketQr(
     ticket: Ticket,
+    isUsed: Boolean,
     onDismiss: () -> Unit,
     isRefreshing: Boolean,
     refreshError: String,
@@ -1273,7 +1283,8 @@ private fun LargeTicketQr(
                                 maxWidth,
                                 maxHeight
                             )
-                        )
+                        ),
+                        isUsed = isUsed
                     )
                 }
                 Column(
@@ -1292,24 +1303,23 @@ private fun LargeTicketQr(
                     Text(
                         text = ticketEntryMessage(ticket),
                         style = MaterialTheme.typography.bodyLarge,
-                        color = TourifyForest
+                        color = if (isUsed) TourifyMuted else TourifyForest
                     )
                     // Mode QR besar juga tidak menyembunyikan kegagalan pembaruan status.
-                    Text(
-                        text = when {
-                            refreshError.isNotBlank() -> "Status belum bisa diperbarui. Periksa koneksi."
-                            isRefreshing -> "Memperbarui status tiket…"
-                            else -> ticketUpdateTime(updatedAtMillis)?.let {
-                                "Terakhir diperbarui $it"
-                            }
-                                ?: "Status belum diperbarui"
-                        },
-                        modifier = Modifier.semantics {
-                            liveRegion = LiveRegionMode.Polite
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (refreshError.isNotBlank()) TourifyError else TourifyMuted
-                    )
+                    if (refreshError.isNotBlank() || isRefreshing) {
+                        Text(
+                            text = if (refreshError.isNotBlank()) {
+                                "Status belum bisa diperbarui. Periksa koneksi."
+                            } else {
+                                "Memperbarui status tiket…"
+                            },
+                            modifier = Modifier.semantics {
+                                liveRegion = LiveRegionMode.Polite
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (refreshError.isNotBlank()) TourifyError else TourifyMuted
+                        )
+                    }
                 }
             }
         }
@@ -1542,36 +1552,29 @@ private fun ticketPrice(value: Int): String = rupiah(value).replace(
     '\u00A0'
 )
 
-// Format waktu yang sama dipakai di detail dan mode pindai layar penuh.
-private fun ticketUpdateTime(value: Long?): String? {
-    return value?.let {
-        Instant
-            .ofEpochMilli(it)
-            .atZone(ZoneId.systemDefault())
-            .format(
-                DateTimeFormatter.ofPattern(
-                    "dd MMM, HH.mm",
-                    Locale.forLanguageTag("id-ID")
-                )
-            )
-    }
-}
-
 @Composable
 private fun TicketQrCode(
     ticket: Ticket,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isUsed: Boolean = false
 ) {
-    // Payload dan margin putih QR tetap sama dengan format yang dipakai petugas.
+    // Payload tetap sama; hanya warna modul yang berubah untuk tiket terpakai.
     val qrContent = remember(ticket) {
         ticketQrPayload(ticket)
     }
-    val qrBitmap = remember(qrContent) {
-        generateQrCode(qrContent)
+    val qrBitmap = remember(qrContent, isUsed) {
+        generateQrCode(
+            qrContent,
+            moduleColor = if (isUsed) 0xFF888888.toInt() else android.graphics.Color.BLACK
+        )
     }
     Image(
         bitmap = qrBitmap.asImageBitmap(),
-        contentDescription = "QR code tiket ${ticket.id}",
+        contentDescription = if (isUsed) {
+            "QR code tiket ${ticket.id}, sudah terpakai"
+        } else {
+            "QR code tiket ${ticket.id}"
+        },
         modifier = modifier.aspectRatio(1f),
         contentScale = ContentScale.Fit
     )
@@ -1672,7 +1675,8 @@ private fun BookingSuccessDialog(onDismiss: () -> Unit) {
 
 internal fun generateQrCode(
     content: String,
-    size: Int = 512
+    size: Int = 512,
+    moduleColor: Int = android.graphics.Color.BLACK
 ): Bitmap {
     val matrix = QRCodeWriter().encode(
         content,
@@ -1690,7 +1694,7 @@ internal fun generateQrCode(
                 setPixel(
                     x,
                     y,
-                    if (matrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE
+                    if (matrix[x, y]) moduleColor else android.graphics.Color.WHITE
                 )
             }
         }

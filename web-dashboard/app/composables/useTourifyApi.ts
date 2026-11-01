@@ -15,8 +15,8 @@ export function useTourifyApi() {
     get<T>(path: string) {
       return $fetch<T>(url(path), { credentials: 'include' })
     },
-    post<T>(path: string, body: Record<string, unknown>) {
-      return $fetch<T>(url(path), { method: 'POST', body, credentials: 'include' })
+    post<T>(path: string, body: Record<string, unknown>, options: { timeout?: number } = {}) {
+      return $fetch<T>(url(path), { method: 'POST', body, credentials: 'include', ...options })
     },
     // FormData membiarkan browser mengatur multipart boundary sendiri.
     upload<T>(path: string, file: File) {
@@ -27,8 +27,8 @@ export function useTourifyApi() {
     put<T>(path: string, body: Record<string, unknown>) {
       return $fetch<T>(url(path), { method: 'PUT', body, credentials: 'include' })
     },
-    delete<T>(path: string) {
-      return $fetch<T>(url(path), { method: 'DELETE', credentials: 'include' })
+    delete<T>(path: string, body?: Record<string, unknown>) {
+      return $fetch<T>(url(path), { method: 'DELETE', body, credentials: 'include' })
     }
   }
 }

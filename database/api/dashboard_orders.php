@@ -60,6 +60,13 @@ try {
     $count = $pdo->prepare('SELECT COUNT(*) ' . $from . $filter);
     $count->execute($params);
     $total = (int) $count->fetchColumn();
+
+    // Kartu ringkasan membaca semua pesanan, terpisah dari filter tabel.
+    $summary = $pdo->query(
+        'SELECT COUNT(*) AS orders, COALESCE(SUM(quantity), 0) AS tickets, '
+        . 'COALESCE(SUM(total_price), 0) AS booking_value FROM tickets'
+    )->fetch();
+
     $perPage = 20;
     $page = min($page, max(1, (int) ceil($total / $perPage)));
     // Pagination membatasi jumlah baris yang dibawa browser setiap permintaan.
@@ -73,7 +80,18 @@ try {
         }
     }
     unset($row);
-    respond(200, ['success' => true, 'orders' => $rows, 'total' => $total, 'page' => $page, 'per_page' => $perPage]);
+    respond(200, [
+        'success' => true,
+        'orders' => $rows,
+        'total' => $total,
+        'page' => $page,
+        'per_page' => $perPage,
+        'stats' => [
+            'orders' => (int) $summary['orders'],
+            'tickets' => (int) $summary['tickets'],
+            'booking_value' => (int) $summary['booking_value'],
+        ],
+    ]);
 } catch (Throwable $exception) {
     handleApiError('dashboard orders', $exception);
 }

@@ -59,26 +59,61 @@ const columns: TableColumn<DashboardRecentOrder>[] = [{
       </h2>
     </template>
 
-    <div v-if="loading" class="text-sm text-muted" role="status">
+    <!-- Status loading tetap dibaca screen reader saat skeleton tampil. -->
+    <div v-if="loading" class="sr-only" role="status">
       Memuat pemesanan…
     </div>
-    <!-- Keadaan kosong menjelaskan bahwa rentang tanggal bisa diganti. -->
-    <div v-else-if="!orders.length" class="text-sm text-muted">
-      Belum ada pemesanan pada rentang tanggal ini. Coba pilih tanggal lain di atas.
-    </div>
-    <div v-else class="overflow-x-auto">
-      <UTable
-        :data="orders"
-        :columns="columns"
-        class="min-w-[760px] shrink-0"
-        :ui="{
-          base: 'table-fixed border-separate border-spacing-0',
-          thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
-          tbody: '[&>tr]:last:[&>td]:border-b-0',
-          th: 'border-y border-default first:border-l last:border-r',
-          td: 'border-b border-default'
-        }"
-      />
-    </div>
+    <!-- Reveal mencakup isi kartu saat data selesai dimuat. -->
+    <AsciiReveal :loading="loading" origin="pointer">
+      <template #skeleton>
+        <div class="space-y-3" aria-hidden="true">
+          <div class="h-10 rounded-md bg-elevated/50" />
+          <div v-for="row in 4" :key="row" class="h-10 rounded-md bg-elevated/25" />
+        </div>
+      </template>
+      <!-- Keadaan kosong menjelaskan bahwa rentang tanggal bisa diganti. -->
+      <div v-if="!orders.length" class="text-sm text-muted">
+        Belum ada pemesanan pada rentang tanggal ini. Coba pilih tanggal lain di atas.
+      </div>
+      <div v-else>
+        <div class="hidden overflow-x-auto xl:block">
+          <UTable
+            :data="orders"
+            :columns="columns"
+            class="min-w-[760px] shrink-0"
+            :ui="{
+              base: 'table-fixed border-separate border-spacing-0',
+              thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
+              tbody: '[&>tr]:last:[&>td]:border-b-0',
+              th: 'border-y border-default first:border-l last:border-r',
+              td: 'border-b border-default'
+            }"
+          />
+        </div>
+        <div class="divide-y divide-default xl:hidden">
+          <article v-for="order in orders" :key="order.id" class="space-y-2 py-3 first:pt-0 last:pb-0">
+            <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+              <p class="font-medium tabular-nums text-highlighted">
+                Pesanan #{{ order.id }} · {{ order.username }}
+              </p>
+              <p class="text-sm text-muted">
+                {{ formatDateTime(order.booking_date) }}
+              </p>
+            </div>
+            <p class="break-words text-highlighted">
+              {{ order.wahana_name }}
+            </p>
+            <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm">
+              <p class="text-muted">
+                {{ order.quantity }} tiket · kunjungan {{ formatDateTime(order.visit_date) }}
+              </p>
+              <p class="font-medium tabular-nums text-highlighted">
+                {{ currencyFormat.format(order.total_price) }}
+              </p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </AsciiReveal>
   </UCard>
 </template>

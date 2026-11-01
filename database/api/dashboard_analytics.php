@@ -127,6 +127,7 @@ try {
     // Pembanding adalah rentang tepat sebelum pilihan pengguna, dengan jumlah hari yang sama.
     $previousStats = [];
     foreach ([
+        'booking_value' => 'SELECT COALESCE(SUM(total_price), 0) FROM tickets WHERE DATE(booking_date) BETWEEN :start AND :end',
         'new_customers' => "SELECT COUNT(*) FROM users WHERE role = 'customer' AND DATE(created_at) BETWEEN :start AND :end",
         'orders' => 'SELECT COUNT(*) FROM tickets WHERE DATE(booking_date) BETWEEN :start AND :end',
         'tickets' => 'SELECT COALESCE(SUM(quantity), 0) FROM tickets WHERE DATE(booking_date) BETWEEN :start AND :end',
@@ -166,6 +167,7 @@ try {
         'success' => true,
         'analytics' => [
             'stats' => [
+                'booking_value' => (int) $orderStats['booking_value'],
                 'new_customers' => $newCustomers,
                 'orders' => (int) $orderStats['orders'],
                 'tickets' => (int) $orderStats['tickets'],
