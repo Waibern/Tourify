@@ -1,18 +1,49 @@
-# Panduan untuk agen
+# Panduan kerja agen — Tourify
 
 ## Ringkasan proyek
 
 Tourify adalah aplikasi Android berbahasa Indonesia untuk melihat destinasi/wahana, memesan tiket, dan melihat tiket yang sudah dipesan. Aplikasi memakai Kotlin, Jetpack Compose, Navigation Compose, Retrofit, dan ViewModel.
 
-## Sebelum mengubah kode
+## Cara bekerja
 
-- Baca file pemilik fitur dan alur pemanggilnya terlebih dahulu. `MainActivity.kt` mengatur navigasi dan dependensi layar; jangan menambahkan rute atau state global tanpa memeriksa alur tersebut.
-- Pertahankan perubahan sesempit mungkin dan ikuti pola yang sudah dipakai proyek. Jangan menganggap ada lapisan repository atau sistem sesi persisten; keduanya belum tampak di implementasi saat ini.
+- Periksa status Git sebelum mulai. Hormati perubahan yang sudah ada; jangan menimpa atau mengembalikannya tanpa diminta.
+- Baca file pemilik fitur dan alur pemanggilnya sebelum mengubah kode. `MainActivity.kt` mengatur navigasi dan dependensi layar; periksa alurnya sebelum menambah rute atau state global.
+- Buat perubahan sesempit mungkin dan ikuti pola proyek. Jangan menganggap ada lapisan repository atau sesi persisten jika belum terlihat di kode.
 - Untuk kontrak API, cocokkan model Kotlin, `ApiService`, pemanggil di ViewModel, dan kontrak backend PHP yang tersedia. Jangan menebak nama field atau format tanggal.
 - Pertahankan teks antarmuka dalam bahasa Indonesia dan gaya yang sudah ada: tata letak jelas, mudah dibaca, warna hijau-putih, dan dekorasi secukupnya.
 - Jaga aksesibilitas Compose: label konten yang bermakna, dukungan ukuran teks besar, area klik yang wajar, serta state loading/error/kosong jika relevan.
-- Saat menulis atau mengubah kode, jangan memadatkan blok atau komponen Compose bertingkat ke satu baris. Tulis kondisi dan isi blok ke bawah dengan indentasi yang jelas; pisahkan argumen pemanggilan, rantai `Modifier`, dan lambda panjang ke beberapa baris. Terapkan konsisten ke semua layar di `screen/`.
 - Jangan menaruh kredensial, token, atau konfigurasi mesin pribadi ke source maupun dokumentasi. `local.properties` adalah konfigurasi lokal; jangan menyalin isinya ke commit.
+
+## Gaya kode dan komentar
+
+- Semua file Kotlin di `screen/`, termasuk komponen pendukung dan preview, wajib memakai susunan ke bawah seperti contoh di bawah. Gunakan indentasi 4 spasi untuk setiap tingkat blok.
+- Kalau pemanggilan fungsi atau komponen punya lebih dari satu argumen, tulis setiap argumen di baris sendiri. Letakkan `(` setelah nama fungsi, isi argumen di bawahnya, lalu `)` di baris penutup; untuk komponen yang punya isi, lanjutkan dengan `) {`.
+- Rantai `Modifier` yang punya beberapa operasi harus ditulis ke bawah: mulai dari `Modifier`, lalu satu operasi `.fillMaxSize()`, `.background(...)`, `.padding(...)`, dan seterusnya per baris dengan tambahan satu tingkat indentasi.
+- Isi lambda serta blok berkurung kurawal pada `onClick`, `onValueChange`, `remember`, `LaunchedEffect`, maupun kondisi harus ditulis ke bawah, bukan disisipkan bersama isinya di satu baris. Tulis kondisi panjang ke beberapa baris dengan indentasi yang jelas. Jangan menggabungkan beberapa perintah memakai `;`. Lambda kosong `{}` dan pemanggilan sederhana dengan satu argumen, seperti `Spacer(modifier = Modifier.height(25.dp))`, boleh tetap ringkas.
+- Beri komentar pada setiap bagian kode yang ditambah atau diubah, tepat di dekat bagian yang dijelaskan. Pakai bahasa Indonesia yang santai, singkat, dan jelas, misalnya `// notif berhasil`, `// ambil daftar tiket`, atau `// tampilkan pesan kalau gagal`.
+- Komentar harus menjelaskan maksud atau alur bagian kode tersebut dan tetap sesuai perilaku terbaru. Hindari komentar berulang pada tiap baris sederhana, komentar yang cuma mengulang nama fungsi, dan komentar yang sudah tidak benar.
+- Ikuti sintaks komentar sesuai jenis file (`//` untuk Kotlin, `<!-- ... -->` untuk XML). Jangan menaruh data pribadi atau rahasia di komentar.
+
+Contoh format Compose yang harus diikuti:
+
+```kotlin
+Column(
+    modifier = Modifier
+        .fillMaxSize()
+        .background(Color.White)
+        .padding(24.dp),
+    horizontalAlignment = Alignment.CenterHorizontally,
+    verticalArrangement = Arrangement.Center
+) {
+    // judul di atas isi layar
+    Text(
+        text = "Username",
+        color = Color.Gray,
+        textAlign = TextAlign.Start,
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+```
 
 ## Peta kode
 

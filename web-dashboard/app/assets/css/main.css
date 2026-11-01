@@ -1,0 +1,89 @@
+@import "tailwindcss" theme(static);
+@import "@nuxt/ui";
+
+@theme static {
+  --font-sans: 'Public Sans', sans-serif;
+
+  --color-green-50: #EFFDF5;
+  --color-green-100: #D9FBE8;
+  --color-green-200: #B3F5D1;
+  --color-green-300: #75EDAE;
+  --color-green-400: #00DC82;
+  --color-green-500: #00C16A;
+  --color-green-600: #00A155;
+  --color-green-700: #007F45;
+  --color-green-800: #016538;
+  --color-green-900: #0A5331;
+  --color-green-950: #052E16;
+}
+
+/* Kartu Ringkasan dan Wahana berbagi kilau kaca yang sama saat tema gelap. */
+.dark [data-dashboard-card],
+.dark [data-wahana-card],
+.dark [data-notification-card] {
+  background-image:
+    radial-gradient(ellipse 70% 42% at 0% 0%, rgb(255 255 255 / 10%) 0%, transparent 72%),
+    radial-gradient(ellipse 70% 42% at 100% 100%, rgb(255 255 255 / 10%) 0%, transparent 72%);
+}
+
+/* Sebelum data siap, sembunyikan kartu; sudut dan titik nanti diatur native surface reveal. */
+[data-dashboard-card]:has([data-ascii-phase='outline']) {
+  background-color: transparent;
+  background-image: none;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+[data-dashboard-card]:has([data-ascii-phase='outline']) > * {
+  opacity: 0;
+}
+
+/* SVG Pengunjung bisa diganti saat render ulang; grafik asli menunggu reveal selesai. */
+[data-ascii-phase='revealing'] [data-ascii-chart] svg {
+  visibility: hidden !important;
+}
+
+/* Permukaan menunggu efek sudut; ukurannya tetap sama agar tumpukan tidak melompat. */
+[data-notification-card]:has([data-activity-reveal='waiting']) {
+  background-color: transparent;
+  background-image: none;
+  border-color: transparent;
+}
+
+[data-notification-card]:has([data-activity-reveal='waiting']) > * {
+  opacity: 0;
+}
+
+/* Sesudah sudut terakhir hilang, destroy tidak boleh menampilkan permukaan kartu lagi. */
+[data-notification-card]:has([data-activity-reveal='hidden']) {
+  visibility: hidden;
+}
+
+/* Surface menangani masuk dan keluar di tempat yang sama, termasuk bingkai sudutnya. */
+.dashboard-activity-toast[data-state='open'],
+.dashboard-activity-toast[data-state='closed'] {
+  animation: none;
+}
+
+/* Isi tetap terukur dan tersembunyi saat giliran kartu serta sudut di-unreveal. */
+[data-activity-reveal='waiting'] > *,
+[data-activity-reveal='unrevealing-surface'] > *,
+[data-activity-reveal='hidden'] > * {
+  visibility: hidden;
+}
+
+/* Preferensi gerak ringan memakai fade pendek tanpa slide atau ASCII. */
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-activity-toast[data-state='open'] {
+    animation: dashboard-activity-fade 100ms ease-out both;
+  }
+
+  .dashboard-activity-toast[data-state='closed'] {
+    animation: dashboard-activity-fade 100ms ease-in reverse both;
+  }
+}
+
+@keyframes dashboard-activity-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

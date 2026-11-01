@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -28,6 +29,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -46,14 +50,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.example.tourify_v2.model.ChatBookingProposal
+import com.example.tourify_v2.model.TicketBookingRequest
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
@@ -63,12 +71,15 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.tourify_v2.screen.AccountScreen
 import com.example.tourify_v2.screen.BottomNavBar
+import com.example.tourify_v2.screen.ChatbotAssistantScreen
+import com.example.tourify_v2.screen.chatbotCircleReveal
 import com.example.tourify_v2.screen.DestinationScreen
 import com.example.tourify_v2.screen.DestinationsScreen
 import com.example.tourify_v2.screen.HomeScreen
 import com.example.tourify_v2.screen.LoginScreen
 import com.example.tourify_v2.screen.RegisterScreen
 import com.example.tourify_v2.screen.TicketsScreen
+import com.example.tourify_v2.ui.theme.TourifyForest
 import com.example.tourify_v2.ui.theme.Tourify_v2Theme
 import com.example.tourify_v2.viewmodel.AuthViewModel
 import com.example.tourify_v2.viewmodel.TourifyViewModel
@@ -192,6 +203,40 @@ private fun TourifyMainContent() {
     val currentRoute = backStackEntry?.destination?.route ?: "login"
     var showLoginHomeWipe by remember { mutableStateOf(false) }
     var showBookingSuccess by rememberSaveable { mutableStateOf(false) }
+    var isTicketDetailVisible by rememberSaveable { mutableStateOf(false) }
+    // State ini menjaga layar chat tetap hidup selama animasi buka dan tutup.
+    var isChatbotVisible by remember { mutableStateOf(false) }
+    var isChatbotOpen by remember { mutableStateOf(false) }
+    var chatbotButtonCenter by remember { mutableStateOf(Offset.Zero) }
+    val chatbotReveal = remember { Animatable(0f) }
+
+    // Segarkan foto saat beranda dibuka supaya perubahan profil langsung terlihat.
+    LaunchedEffect(currentRoute, currentUser, authViewModel.currentAccessToken) {
+        if (currentRoute == "home" && currentUser.isNotBlank()) {
+            authViewModel.loadProfileImage()
+        }
+    }
+
+    BackHandler(enabled = isChatbotVisible) {
+        isChatbotOpen = false
+    }
+
+    // Reveal bergerak maju saat chat dibuka dan mundur sebelum layar dilepas.
+    LaunchedEffect(isChatbotVisible, isChatbotOpen) {
+        if (isChatbotOpen) {
+            chatbotReveal.snapTo(0f)
+            chatbotReveal.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(560, easing = FastOutSlowInEasing)
+            )
+        } else if (isChatbotVisible) {
+            chatbotReveal.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(360, easing = FastOutSlowInEasing)
+            )
+            isChatbotVisible = false
+        }
+    }
     // animasi geser antar tab dan ke halaman destinasi
     val tabEnterTransition: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
         val initialRoute = initialState.destination.route
@@ -240,12 +285,19 @@ private fun TourifyMainContent() {
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(if (isTicketDetailVisible) Color.Transparent else Color.White)
+    ) {
         Scaffold(
-            containerColor = Color.White,
+            containerColor = if (isTicketDetailVisible) Color.Transparent else Color.White,
             contentWindowInsets = if (currentRoute == "destination/{destinationId}") WindowInsets(0) else ScaffoldDefaults.contentWindowInsets,
             bottomBar = {
-                if (currentRoute in listOf("home", "destinations", "ticket", "account")) {
+                if (
+                    currentRoute in listOf("home", "destinations", "ticket", "account") &&
+                    !(currentRoute == "ticket" && isTicketDetailVisible)
+                ) {
                     BottomNavBar(
                         currentRoute = currentRoute,
                         onNavigate = { route ->
@@ -253,85 +305,122 @@ private fun TourifyMainContent() {
                                 popUpTo("home")
                                 launchSingleTop = true
                             }
-                        }
+                        },
+                        // Tombol asisten di bar bawah membuka layar chat.
+                        onAssistantClick = {
+                            isChatbotVisible = true
+                            isChatbotOpen = true
+                        },
+                        onAssistantCenterChanged = { chatbotButtonCenter = it }
                     )
                 }
             }
         ) { paddingValues ->
-            // daftar route dan layar utama aplikasi
-            NavHost(
-                navController = navController,
-                startDestination = "login",
-                modifier = Modifier.padding(paddingValues),
-                enterTransition = tabEnterTransition,
-                exitTransition = tabExitTransition,
-                popEnterTransition = tabEnterTransition,
-                popExitTransition = tabExitTransition
-            ) {
-                composable("login") {
-                    LoginScreen(
-                        authViewModel = authViewModel,
-                        onLoginSuccess = { showLoginHomeWipe = true },
-                        onNavigateToRegister = { navController.navigate("register") },
-                        isActive = currentRoute == "login"
-                    )
-                }
-                composable("register") {
-                    RegisterScreen(
-                        authViewModel = authViewModel,
-                        onRegisterSuccess = { navController.popBackStack() },
-                        onBackToLogin = { navController.popBackStack() }
-                    )
-                }
-                // beranda dan halaman detail destinasi
-                composable("home") {
-                    HomeScreen(
-                        viewModel = tourifyViewModel,
-                        currentUser = currentUser,
-                        onDestinationClick = { id -> navController.navigate("destination/$id") }
-                    )
-                }
-                composable("destinations") {
-                    DestinationsScreen(
-                        viewModel = tourifyViewModel,
-                        onDestinationClick = { id -> navController.navigate("destination/$id") }
-                    )
-                }
-                composable("destination/{destinationId}") { entry ->
-                    DestinationScreen(
-                        destinationId = entry.arguments?.getString("destinationId")?.toIntOrNull() ?: -1,
-                        viewModel = tourifyViewModel,
-                        currentUser = currentUser,
-                        onBack = { navController.popBackStack() },
-                        onBookingSuccess = {
-                            showBookingSuccess = true
-                            navController.navigate("ticket") {
-                                popUpTo("home")
-                                launchSingleTop = true
-                            }
-                        }
-                    )
-                }
-                composable("ticket") {
-                    TicketsScreen(
-                        viewModel = tourifyViewModel,
-                        currentUser = currentUser,
-                        showBookingSuccess = showBookingSuccess,
-                        onDismissBookingSuccess = { showBookingSuccess = false }
-                    )
-                }
-                composable("account") {
-                    AccountScreen(
-                        currentUser = currentUser,
-                        onLogout = {
-                            authViewModel.logout {
-                                navController.navigate("login") {
-                                    popUpTo("home") { inclusive = true }
+            Box(modifier = Modifier.fillMaxSize()) {
+                val layoutDirection = LocalLayoutDirection.current
+                val showFloatingNav = currentRoute in listOf("home", "destinations", "ticket", "account") &&
+                    !(currentRoute == "ticket" && isTicketDetailVisible)
+                // Konten tab berjalan sampai belakang navbar yang mengambang.
+                val screenPadding = PaddingValues(
+                    start = paddingValues.calculateStartPadding(layoutDirection),
+                    top = paddingValues.calculateTopPadding(),
+                    end = paddingValues.calculateEndPadding(layoutDirection),
+                    bottom = if (showFloatingNav) 0.dp else paddingValues.calculateBottomPadding()
+                )
+                // daftar route dan layar utama aplikasi
+                NavHost(
+                    navController = navController,
+                    startDestination = "login",
+                    modifier = Modifier.padding(screenPadding),
+                    enterTransition = tabEnterTransition,
+                    exitTransition = tabExitTransition,
+                    popEnterTransition = tabEnterTransition,
+                    popExitTransition = tabExitTransition
+                ) {
+                    composable("login") {
+                        LoginScreen(
+                            authViewModel = authViewModel,
+                            onLoginSuccess = { showLoginHomeWipe = true },
+                            onNavigateToRegister = { navController.navigate("register") },
+                            isActive = currentRoute == "login"
+                        )
+                    }
+                    composable("register") {
+                        RegisterScreen(
+                            authViewModel = authViewModel,
+                            onRegisterSuccess = { navController.popBackStack() },
+                            onBackToLogin = { navController.popBackStack() }
+                        )
+                    }
+                    // beranda dan halaman detail destinasi
+                    composable("home") {
+                        HomeScreen(
+                            viewModel = tourifyViewModel,
+                            currentUser = currentUser,
+                            profileImageUrl = authViewModel.profileImageUrl,
+                            onDestinationClick = { id -> navController.navigate("destination/$id") }
+                        )
+                    }
+                    composable("destinations") {
+                        DestinationsScreen(
+                            viewModel = tourifyViewModel,
+                            onDestinationClick = { id -> navController.navigate("destination/$id") }
+                        )
+                    }
+                    composable("destination/{destinationId}") { entry ->
+                        DestinationScreen(
+                            destinationId = entry.arguments?.getString("destinationId")?.toIntOrNull() ?: -1,
+                            viewModel = tourifyViewModel,
+                            currentUser = currentUser,
+                            onBack = { navController.popBackStack() },
+                            onBookingSuccess = {
+                                showBookingSuccess = true
+                                navController.navigate("ticket") {
+                                    popUpTo("home")
+                                    launchSingleTop = true
                                 }
                             }
+                        )
+                    }
+                    composable("ticket") {
+                        TicketsScreen(
+                            viewModel = tourifyViewModel,
+                            currentUser = currentUser,
+                            showBookingSuccess = showBookingSuccess,
+                            onDismissBookingSuccess = { showBookingSuccess = false },
+                            onTicketDetailVisibilityChanged = { isTicketDetailVisible = it }
+                        )
+                    }
+                    composable("account") {
+                        // Tiket dan foto profil disegarkan saat tab akun dibuka.
+                        LaunchedEffect(currentUser, authViewModel.currentAccessToken) {
+                            if (currentUser.isNotBlank()) {
+                                tourifyViewModel.loadTickets(currentUser)
+                                authViewModel.loadProfileImage()
+                            }
                         }
-                    )
+                        AccountScreen(
+                            currentUser = currentUser,
+                            profileImageUrl = authViewModel.profileImageUrl,
+                            isUploadingProfileImage = authViewModel.isUploadingProfileImage,
+                            profileImageError = authViewModel.profileImageError,
+                            tickets = tourifyViewModel.tickets,
+                            isLoadingTickets = tourifyViewModel.isLoadingTickets,
+                            ticketsError = tourifyViewModel.ticketsError,
+                            onProfileImageSelected = authViewModel::uploadProfileImage,
+                            onTicketsClick = { navController.navigate("ticket") },
+                            onDestinationsClick = { navController.navigate("destinations") },
+                            onLogout = {
+                                authViewModel.logout {
+                                    navController.navigate("login") {
+                                        popUpTo("home") { inclusive = true }
+                                    }
+                                }
+                            }
+                        )
+                    }
                 }
+
             }
         }
 
@@ -344,6 +433,44 @@ private fun TourifyMainContent() {
                     }
                 },
                 onFinished = { showLoginHomeWipe = false }
+            )
+        }
+
+        // Layar chat berada di atas seluruh app dan dibuka dari pusat tombol sparkle.
+        if (isChatbotVisible) {
+            ChatbotAssistantScreen(
+                currentUser = currentUser,
+                isSending = tourifyViewModel.isSendingChat,
+                isBooking = tourifyViewModel.isBooking,
+                // Katalog membantu chatbot mengenali nama wahana yang disebut pengguna.
+                availableWahana = tourifyViewModel.wahana,
+                onSendMessage = { message, history, onComplete ->
+                    tourifyViewModel.sendChatMessage(
+                        message = message,
+                        username = currentUser,
+                        history = history,
+                        onComplete = onComplete
+                    )
+                },
+                onConfirmBooking = { proposal, onComplete ->
+                    val request = TicketBookingRequest(
+                        username = currentUser,
+                        wahanaId = proposal.wahanaId,
+                        visitDate = proposal.visitDate,
+                        quantity = proposal.quantity,
+                        paymentMethod = proposal.paymentMethod
+                    )
+                    tourifyViewModel.bookTicket(currentUser, request) { success ->
+                        onComplete(success, tourifyViewModel.bookingMessage)
+                    }
+                },
+                onClose = { isChatbotOpen = false },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .chatbotCircleReveal(
+                        progress = chatbotReveal.value,
+                        origin = chatbotButtonCenter
+                    )
             )
         }
     }
@@ -398,7 +525,7 @@ private fun LoginHomeWipe(
                 .fillMaxSize()
                 .offset { IntOffset(offsetX.value.roundToInt(), 0) }
                 .clip(RoundedCornerShape(cornerRadius))
-                .background(Color(0xFF259780))
+                .background(TourifyForest)
         )
     }
 }

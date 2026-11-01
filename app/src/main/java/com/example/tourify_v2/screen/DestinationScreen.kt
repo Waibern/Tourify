@@ -1,5 +1,7 @@
 package com.example.tourify_v2.screen
 
+import com.example.tourify_v2.ui.theme.*
+
 import android.app.Activity
 import android.content.Intent
 import androidx.activity.compose.BackHandler
@@ -13,6 +15,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -20,10 +23,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
@@ -41,25 +46,31 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.WindowCompat
 import com.example.tourify_v2.model.TicketBookingRequest
 import com.example.tourify_v2.model.Wahana
 import com.example.tourify_v2.viewmodel.TourifyViewModel
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.LocalDate
+import java.time.YearMonth
+import java.time.format.DateTimeFormatter
 import java.util.Locale
-import java.util.TimeZone
 
-private val DestinationGreen = Color(0xFF145C4B)
-private val DestinationInk = Color(0xFF1B2824)
-private val DestinationMuted = Color(0xFF68756F)
-private val DestinationMint = Color(0xFFE7F1EC)
-private val DestinationCanvas = Color(0xFFF8F9F6)
+private val DestinationGreen = TourifyForest
+private val DestinationInk = TourifyInk
+private val DestinationMuted = TourifyMuted
+private val DestinationMint = TourifyMint
+private val DestinationCanvas = TourifyCanvas
 
 @Composable
 fun DestinationScreen(
@@ -70,17 +81,33 @@ fun DestinationScreen(
     onBookingSuccess: () -> Unit
 ) {
     // ambil destinasi yang dipilih dan atur form pesan tiket
-    val destination = viewModel.wahana.firstOrNull { it.id == destinationId }
-    var showBookingForm by remember(destinationId) { mutableStateOf(false) }
+    val destination = viewModel.wahana.firstOrNull {
+        it.id == destinationId
+    }
+    var showBookingForm by remember(destinationId) {
+        mutableStateOf(false)
+    }
     val context = LocalContext.current
 
-    BackHandler(enabled = showBookingForm) { showBookingForm = false }
+    BackHandler(enabled = showBookingForm) {
+        showBookingForm = false
+    }
 
-    DisposableEffect(context, destination != null) {
+    DisposableEffect(
+        context,
+        destination != null
+    ) {
         val window = (context as? Activity)?.window
-        val insetsController = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
+        val insetsController = window?.let {
+            WindowCompat.getInsetsController(
+                it,
+                it.decorView
+            )
+        }
         insetsController?.isAppearanceLightStatusBars = destination == null
-        onDispose { insetsController?.isAppearanceLightStatusBars = true }
+        onDispose {
+            insetsController?.isAppearanceLightStatusBars = true
+        }
     }
 
     LaunchedEffect(destinationId) {
@@ -90,7 +117,9 @@ fun DestinationScreen(
     // detail destinasi atau state loading/error
     when {
         destination != null -> {
-            Box(Modifier.fillMaxSize()) {
+            Box(
+                Modifier.fillMaxSize()
+            ) {
                 DestinationContent(
                     destination = destination,
                     onBack = onBack,
@@ -100,9 +129,17 @@ fun DestinationScreen(
                         } per orang di Tourify."
                         val intent = Intent(Intent.ACTION_SEND).apply {
                             type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, shareText)
+                            putExtra(
+                                Intent.EXTRA_TEXT,
+                                shareText
+                            )
                         }
-                        context.startActivity(Intent.createChooser(intent, "Bagikan destinasi"))
+                        context.startActivity(
+                            Intent.createChooser(
+                                intent,
+                                "Bagikan destinasi"
+                            )
+                        )
                     },
                     onBook = {
                         viewModel.clearBookingMessage()
@@ -114,7 +151,9 @@ fun DestinationScreen(
                     currentUser = currentUser,
                     viewModel = viewModel,
                     visible = showBookingForm,
-                    onDismiss = { showBookingForm = false },
+                    onDismiss = {
+                        showBookingForm = false
+                    },
                     onBookingSuccess = onBookingSuccess
                 )
             }
@@ -137,11 +176,14 @@ fun DestinationScreen(
                             viewModel.wahanaError.isEmpty()
                     ),
             onBack = onBack,
-            onRetry = { viewModel.loadWahana() }
+            onRetry = {
+                viewModel.loadWahana()
+            }
         )
     }
 }
 
+// Tampilkan foto, rincian, dan aksi pemesanan destinasi.
 @Composable
 internal fun DestinationContent(
     destination: Wahana,
@@ -149,9 +191,11 @@ internal fun DestinationContent(
     onShare: () -> Unit,
     onBook: () -> Unit
 ) {
-    BoxWithConstraints(Modifier
-        .fillMaxSize()
-        .background(Color.Black)) {
+    BoxWithConstraints(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+    ) {
         val destinationPhoto = painterResource(destinationImage(destination.id))
 
         Image(
@@ -164,7 +208,9 @@ internal fun DestinationContent(
         Box(
             Modifier
                 .fillMaxSize()
-                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                .graphicsLayer {
+                    compositingStrategy = CompositingStrategy.Offscreen
+                }
                 .drawWithContent {
                     drawContent()
                     drawRect(
@@ -206,7 +252,11 @@ internal fun DestinationContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(start = 20.dp, top = 12.dp, end = 20.dp),
+                .padding(
+                    start = 20.dp,
+                    top = 12.dp,
+                    end = 20.dp
+                ),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -241,16 +291,30 @@ internal fun DestinationContent(
                 .heightIn(max = maxHeight * 0.67f)
                 .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 24.dp, end = 24.dp, bottom = 20.dp),
+                .padding(
+                    start = 24.dp,
+                    end = 24.dp,
+                    bottom = 20.dp
+                ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Surface(shape = CircleShape, color = Color(0x88000000)) {
+            Surface(
+                shape = CircleShape,
+                color = TourifyGlassSurface,
+                border = BorderStroke(
+                    1.dp,
+                    TourifyGlassHighlight
+                )
+            ) {
                 Text(
                     "${rupiah(destination.ticketPrice)} / orang",
                     color = Color.White,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                    modifier = Modifier.padding(
+                        horizontal = 14.dp,
+                        vertical = 8.dp
+                    )
                 )
             }
             Text(
@@ -269,6 +333,7 @@ internal fun DestinationContent(
                 fontSize = 15.sp,
                 lineHeight = 22.sp
             )
+            // Tombol utama pakai hijau biar aksennya nggak terlalu kuning.
             Button(
                 onClick = onBook,
                 modifier = Modifier
@@ -276,11 +341,11 @@ internal fun DestinationContent(
                     .padding(top = 12.dp)
                     .heightIn(min = 58.dp),
                 shape = CircleShape,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE4F96A))
+                colors = ButtonDefaults.buttonColors(containerColor = DestinationGreen)
             ) {
                 Text(
                     "Pesan tiket",
-                    color = DestinationInk,
+                    color = Color.White,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -289,6 +354,7 @@ internal fun DestinationContent(
     }
 }
 
+// Tombol bulat dipakai untuk kembali atau membagikan destinasi.
 @Composable
 private fun DestinationIconButton(
     onClick: () -> Unit,
@@ -297,13 +363,23 @@ private fun DestinationIconButton(
 ) {
     Surface(
         shape = CircleShape,
-        color = if (onPhoto) Color(0x55000000) else Color(0xEFFFFFFF),
+        color = if (onPhoto) TourifyGlassSurface else Color(0xEFFFFFFF),
+        border = if (onPhoto) BorderStroke(
+            1.dp,
+            TourifyGlassHighlight
+        ) else null,
         shadowElevation = 2.dp
     ) {
-        IconButton(onClick = onClick, modifier = Modifier.size(48.dp)) { icon() }
+        IconButton(
+            onClick = onClick,
+            modifier = Modifier.size(48.dp)
+        ) {
+            icon()
+        }
     }
 }
 
+// Beri jalan kembali saat destinasi belum tersedia.
 @Composable
 private fun DestinationUnavailable(
     message: String,
@@ -330,15 +406,29 @@ private fun DestinationUnavailable(
             }
         )
         Spacer(Modifier.weight(1f))
-        if (isLoading) CircularProgressIndicator(color = DestinationGreen)
-        Text(message, color = DestinationInk, fontSize = 18.sp, lineHeight = 25.sp)
+        if (isLoading) CircularProgressIndicator(
+            color = DestinationGreen
+        )
+        Text(
+            message,
+            color = DestinationInk,
+            fontSize = 18.sp,
+            lineHeight = 25.sp
+        )
         if (!isLoading && message != "Destinasi tidak ditemukan.") {
-            OutlinedButton(onClick = onRetry) { Text("Coba lagi") }
+            OutlinedButton(
+                onClick = onRetry
+            ) {
+                Text(
+                    "Coba lagi"
+                )
+            }
         }
         Spacer(Modifier.weight(1f))
     }
 }
 
+// Form mengumpulkan tanggal, jumlah tiket, dan metode pembayaran.
 @Composable
 private fun DestinationBookingForm(
     destination: Wahana,
@@ -349,43 +439,82 @@ private fun DestinationBookingForm(
     onBookingSuccess: () -> Unit
 ) {
     // data yang dipilih buat pemesanan
-    var quantity by remember(destination.id) { mutableIntStateOf(1) }
-    var paymentMethod by remember(destination.id) { mutableStateOf("Bank") }
-    var showDatePicker by remember { mutableStateOf(false) }
-    var visitDate by remember { mutableStateOf("") }
-    val datePickerState = rememberDatePickerState()
-    val paymentMethods = listOf("Bank", "QRIS", "E-Wallet")
+    var quantity by remember(destination.id) {
+        mutableIntStateOf(1)
+    }
+    var paymentMethod by remember(destination.id) {
+        mutableStateOf("Bank")
+    }
+    var showDatePicker by remember {
+        mutableStateOf(false)
+    }
+    var selectedDate by remember(destination.id) {
+        mutableStateOf<LocalDate?>(null)
+    }
+    val visitDate = selectedDate?.format(
+        DateTimeFormatter.ofPattern(
+            "dd MMM yyyy",
+            Locale.forLanguageTag("id-ID")
+        )
+    ).orEmpty()
+    val paymentMethods = listOf(
+        "Bank",
+        "QRIS",
+        "E-Wallet"
+    )
     val totalPrice = quantity * destination.ticketPrice
 
     LaunchedEffect(visible) {
         if (!visible) showDatePicker = false
     }
 
-    AnimatedVisibility(
-        visible = visible,
-        modifier = Modifier.fillMaxSize(),
-        enter = slideInVertically(
-            initialOffsetY = { fullHeight -> fullHeight },
-            animationSpec = tween(420, easing = FastOutSlowInEasing)
-        ) + fadeIn(tween(240)),
-        exit = slideOutVertically(
-            targetOffsetY = { fullHeight -> fullHeight },
-            animationSpec = tween(320, easing = FastOutSlowInEasing)
-        ) + fadeOut(tween(200))
+    BoxWithConstraints(
+        modifier = Modifier.fillMaxSize()
     ) {
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.54f))
-                .clickable(onClick = onDismiss),
-            contentAlignment = Alignment.Center
+        AnimatedVisibility(
+            visible = visible,
+            modifier = Modifier.matchParentSize(),
+            enter = fadeIn(tween(240)),
+            exit = fadeOut(tween(200))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.54f))
+                    .clickable(onClick = onDismiss)
+            )
+        }
+        AnimatedVisibility(
+            visible = visible,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            enter = slideInVertically(
+                initialOffsetY = { height ->
+                    height
+                },
+                animationSpec = tween(
+                    420,
+                    easing = FastOutSlowInEasing
+                )
+            ),
+            exit = slideOutVertically(
+                targetOffsetY = { height ->
+                    height
+                },
+                animationSpec = tween(
+                    320,
+                    easing = FastOutSlowInEasing
+                )
+            )
         ) {
             Card(
                 onClick = {},
                 modifier = Modifier
-                    .fillMaxWidth(0.96f)
+                    .fillMaxWidth()
                     .heightIn(max = maxHeight * 0.9f),
-                shape = RoundedCornerShape(28.dp),
+                shape = RoundedCornerShape(
+                    topStart = 28.dp,
+                    topEnd = 28.dp
+                ),
                 colors = CardDefaults.cardColors(containerColor = Color.White),
                 elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
             ) {
@@ -393,10 +522,13 @@ private fun DestinationBookingForm(
                     modifier = Modifier
                         .fillMaxWidth()
                         .verticalScroll(rememberScrollState())
+                        .navigationBarsPadding()
                         .padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
                             "Pesan tiket",
                             modifier = Modifier.weight(1f),
@@ -404,7 +536,9 @@ private fun DestinationBookingForm(
                             fontWeight = FontWeight.Bold,
                             color = DestinationInk
                         )
-                        IconButton(onClick = onDismiss) {
+                        IconButton(
+                            onClick = onDismiss
+                        ) {
                             Icon(
                                 Icons.Default.Close,
                                 contentDescription = "Tutup form pemesanan",
@@ -412,8 +546,13 @@ private fun DestinationBookingForm(
                             )
                         }
                     }
-                    Surface(shape = RoundedCornerShape(18.dp), color = DestinationMint) {
-                        Box(modifier = Modifier.fillMaxWidth()) {
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = DestinationMint
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             Image(
                                 painter = painterResource(destinationImage(destination.id)),
                                 contentDescription = null,
@@ -444,7 +583,9 @@ private fun DestinationBookingForm(
                                     shape = RoundedCornerShape(14.dp),
                                     color = Color.Transparent
                                 ) {
-                                    Box(contentAlignment = Alignment.Center) {
+                                    Box(
+                                        contentAlignment = Alignment.Center
+                                    ) {
                                         Icon(
                                             Icons.Default.LocationOn,
                                             contentDescription = null,
@@ -453,7 +594,9 @@ private fun DestinationBookingForm(
                                     }
                                 }
                                 Spacer(Modifier.width(12.dp))
-                                Column(Modifier.weight(1f)) {
+                                Column(
+                                    Modifier.weight(1f)
+                                ) {
                                     Text(
                                         destination.name,
                                         fontSize = 17.sp,
@@ -471,104 +614,133 @@ private fun DestinationBookingForm(
                             }
                         }
                     }
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(
-                            "Tanggal kunjungan",
-                            fontWeight = FontWeight.SemiBold,
-                            color = DestinationInk
-                        )
-                        OutlinedButton(
-                            onClick = { showDatePicker = !showDatePicker },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 52.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            border = BorderStroke(1.dp, Color(0xFFB6CFCA))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1.5f),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Icon(
-                                Icons.Default.CalendarMonth,
-                                contentDescription = null,
-                                tint = DestinationGreen
-                            )
-                            Spacer(Modifier.width(10.dp))
                             Text(
-                                if (visitDate.isEmpty()) "Pilih tanggal" else visitDate,
+                                "Tanggal kunjungan",
+                                fontWeight = FontWeight.SemiBold,
                                 color = DestinationInk,
-                                modifier = Modifier.weight(1f)
+                                fontSize = 14.sp
                             )
+                            OutlinedButton(
+                                onClick = {
+                                    showDatePicker = true
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 52.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                border = BorderStroke(
+                                    1.dp,
+                                    Color(0xFFB6CFCA)
+                                ),
+                                contentPadding = PaddingValues(horizontal = 12.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.CalendarMonth,
+                                    contentDescription = null,
+                                    tint = DestinationGreen,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    if (visitDate.isEmpty()) "Pilih tanggal" else visitDate,
+                                    color = DestinationInk,
+                                    fontSize = 13.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
-                        if (showDatePicker) {
-                            Surface(shape = RoundedCornerShape(20.dp), color = Color(0xFFF7FAF7)) {
-                                Column(
-                                    Modifier.padding(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text(
+                                "Jumlah tiket",
+                                fontWeight = FontWeight.SemiBold,
+                                color = DestinationInk,
+                                fontSize = 14.sp
+                            )
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                color = Color.White,
+                                border = BorderStroke(
+                                    1.dp,
+                                    Color(0xFFB6CFCA)
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier.heightIn(min = 52.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    DatePicker(state = datePickerState, showModeToggle = false)
-                                    Row(
-                                        Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.End
+                                    IconButton(
+                                        onClick = {
+                                            quantity--
+                                        },
+                                        enabled = quantity > 1,
+                                        modifier = Modifier.size(40.dp)
                                     ) {
-                                        TextButton(onClick = {
-                                            showDatePicker = false
-                                        }) { Text("Tutup") }
-                                        Button(
-                                            enabled = datePickerState.selectedDateMillis != null,
-                                            onClick = {
-                                                datePickerState.selectedDateMillis?.let {
-                                                    visitDate = SimpleDateFormat(
-                                                        "dd MMM yyyy",
-                                                        Locale.forLanguageTag("id-ID")
-                                                    ).apply {
-                                                        timeZone = TimeZone.getTimeZone("UTC")
-                                                    }.format(Date(it))
-                                                }
-                                                showDatePicker = false
-                                            },
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = DestinationGreen
-                                            )
-                                        ) { Text("Pilih") }
+                                        Icon(
+                                            Icons.Default.Remove,
+                                            contentDescription = "Kurangi tiket",
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    Text(
+                                        quantity.toString(),
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = DestinationInk
+                                    )
+                                    IconButton(
+                                        onClick = {
+                                            quantity++
+                                        },
+                                        modifier = Modifier.size(40.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Add,
+                                            contentDescription = "Tambah tiket",
+                                            modifier = Modifier.size(18.dp)
+                                        )
                                     }
                                 }
                             }
                         }
                     }
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text(
-                            "Jumlah tiket",
-                            fontWeight = FontWeight.SemiBold,
-                            color = DestinationInk
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = { quantity = (quantity - 1).coerceAtLeast(1) }) {
-                                Icon(Icons.Default.Remove, contentDescription = "Kurangi tiket")
-                            }
-                            Text(
-                                quantity.toString(),
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            IconButton(onClick = { quantity++ }) {
-                                Icon(Icons.Default.Add, contentDescription = "Tambah tiket")
-                            }
-                        }
-                    }
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
                             "Metode pembayaran",
                             fontWeight = FontWeight.SemiBold,
                             color = DestinationInk
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             paymentMethods.forEach { method ->
                                 FilterChip(
                                     selected = paymentMethod == method,
-                                    onClick = { paymentMethod = method },
-                                    label = { Text(method, fontSize = 12.sp) },
+                                    onClick = {
+                                        paymentMethod = method
+                                    },
+                                    label = {
+                                        Text(
+                                            method,
+                                            fontSize = 12.sp
+                                        )
+                                    },
                                     colors = FilterChipDefaults.filterChipColors(
                                         containerColor = Color.White,
                                         labelColor = DestinationInk,
@@ -580,7 +752,10 @@ private fun DestinationBookingForm(
                             }
                         }
                     }
-                    Surface(shape = RoundedCornerShape(16.dp), color = DestinationMint) {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = DestinationMint
+                    ) {
                         Row(
                             Modifier
                                 .fillMaxWidth()
@@ -588,7 +763,11 @@ private fun DestinationBookingForm(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Total", color = DestinationMuted, fontWeight = FontWeight.Medium)
+                            Text(
+                                "Total",
+                                color = DestinationMuted,
+                                fontWeight = FontWeight.Medium
+                            )
                             Text(
                                 rupiah(totalPrice),
                                 color = DestinationGreen,
@@ -597,18 +776,18 @@ private fun DestinationBookingForm(
                             )
                         }
                     }
+                    // Samakan tombol konfirmasi dengan warna hijau di layar tujuan.
                     Button(
                         onClick = {
-                            val selectedMillis = datePickerState.selectedDateMillis ?: return@Button
-                            val isoDate = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
-                                timeZone = TimeZone.getTimeZone("UTC")
-                            }.format(Date(selectedMillis))
+                            val date = selectedDate?.takeUnless {
+                                it.isBefore(LocalDate.now())
+                            } ?: return@Button
                             viewModel.bookTicket(
                                 currentUser,
                                 TicketBookingRequest(
                                     currentUser,
                                     destination.id,
-                                    isoDate,
+                                    date.toString(),
                                     quantity,
                                     paymentMethod
                                 )
@@ -622,13 +801,14 @@ private fun DestinationBookingForm(
                         enabled =
                             !viewModel.isBooking &&
                                 currentUser.isNotBlank() &&
-                                visitDate.isNotEmpty(),
+                                selectedDate?.isBefore(LocalDate.now()) == false,
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 54.dp),
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = DestinationGreen
+                            containerColor = DestinationGreen,
+                            contentColor = Color.White
                         )
                     ) {
                         Text(
@@ -643,13 +823,220 @@ private fun DestinationBookingForm(
                         fontSize = 12.sp
                     )
                     if (viewModel.bookingMessage.isNotEmpty()) {
-                        Text(viewModel.bookingMessage, color = MaterialTheme.colorScheme.error)
+                        Text(
+                            viewModel.bookingMessage,
+                            color = MaterialTheme.colorScheme.error
+                        )
                     }
-                    TextButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                }
+            }
+        }
+    }
+
+    if (showDatePicker) {
+        CompactDatePicker(
+            selectedDate = selectedDate,
+            onSelect = { date ->
+                selectedDate = date
+                showDatePicker = false
+            },
+            onDismiss = {
+                showDatePicker = false
+            }
+        )
+    }
+}
+
+// Kalender memilih tanggal kunjungan mulai hari ini.
+@Composable
+private fun CompactDatePicker(
+    selectedDate: LocalDate?,
+    onSelect: (LocalDate) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val locale = remember {
+        Locale.forLanguageTag("id-ID")
+    }
+    val monthFormatter = remember {
+        DateTimeFormatter.ofPattern(
+            "MMMM yyyy",
+            locale
+        )
+    }
+    val dayFormatter = remember {
+        DateTimeFormatter.ofPattern(
+            "EEEE, d MMMM yyyy",
+            locale
+        )
+    }
+    val today = LocalDate.now()
+    var displayedMonth by remember {
+        mutableStateOf(
+            YearMonth.from(
+                selectedDate?.takeUnless {
+                    it.isBefore(today)
+                } ?: today
+            )
+        )
+    }
+    val firstDayOffset = displayedMonth.atDay(1).dayOfWeek.value - 1
+    val weekCount = (firstDayOffset + displayedMonth.lengthOfMonth() + 6) / 7
+    val weekDays = listOf(
+        "Sen",
+        "Sel",
+        "Rab",
+        "Kam",
+        "Jum",
+        "Sab",
+        "Min"
+    )
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .padding(horizontal = 24.dp)
+                .widthIn(max = 340.dp)
+                .fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            color = Color.White,
+            shadowElevation = 12.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Pilih tanggal",
+                        modifier = Modifier.weight(1f),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = DestinationInk
+                    )
+                    IconButton(
+                        onClick = onDismiss
                     ) {
-                        Text("Batal", color = DestinationMuted)
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Tutup kalender",
+                            tint = DestinationMuted
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    IconButton(
+                        onClick = {
+                            displayedMonth = displayedMonth.minusMonths(1)
+                        },
+                        enabled = displayedMonth > YearMonth.from(today)
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Bulan sebelumnya",
+                            tint = DestinationGreen
+                        )
+                    }
+                    Text(
+                        displayedMonth.atDay(1).format(monthFormatter),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = DestinationInk
+                    )
+                    IconButton(
+                        onClick = {
+                            displayedMonth = displayedMonth.plusMonths(1)
+                        }
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = "Bulan berikutnya",
+                            tint = DestinationGreen
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    weekDays.forEach { day ->
+                        Text(
+                            text = day,
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Center,
+                            fontSize = 11.sp,
+                            color = DestinationMuted
+                        )
+                    }
+                }
+                repeat(weekCount) { week ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        repeat(7) { weekday ->
+                            val day = week * 7 + weekday - firstDayOffset + 1
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .aspectRatio(1f)
+                                    .padding(2.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (day in 1..displayedMonth.lengthOfMonth()) {
+                                    val date = displayedMonth.atDay(day)
+                                    val isPast = date.isBefore(today)
+                                    val isSelected = date == selectedDate && !isPast
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clip(CircleShape)
+                                            .background(
+                                                if (isSelected) DestinationGreen else Color.Transparent
+                                            )
+                                            .border(
+                                                width = 1.dp,
+                                                color = if (date == today && !isSelected) {
+                                                    DestinationGreen
+                                                } else {
+                                                    Color.Transparent
+                                                },
+                                                shape = CircleShape
+                                            )
+                                            .clickable(enabled = !isPast) {
+                                                if (!date.isBefore(LocalDate.now())) {
+                                                    onSelect(date)
+                                                }
+                                            }
+                                            .semantics {
+                                                contentDescription = if (isPast) {
+                                                    "${date.format(dayFormatter)}, sudah lewat"
+                                                } else {
+                                                    date.format(dayFormatter)
+                                                }
+                                                selected = isSelected
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = day.toString(),
+                                            fontSize = 13.sp,
+                                            color = when {
+                                                isSelected -> Color.White
+                                                isPast -> Color(0xFFAAB3AE)
+                                                else -> DestinationInk
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -657,11 +1044,20 @@ private fun DestinationBookingForm(
     }
 }
 
-@Preview(showBackground = true, widthDp = 390, heightDp = 844)
+@Preview(
+    showBackground = true,
+    widthDp = 390,
+    heightDp = 844
+)
 @Composable
 private fun DestinationContentPreview() {
     DestinationContent(
-        destination = Wahana(1, "Ocean Park", "Taman bermain air di BSD City.", 100000),
+        destination = Wahana(
+            1,
+            "Ocean Park",
+            "Taman bermain air di BSD City.",
+            100000
+        ),
         onBack = {},
         onShare = {},
         onBook = {}

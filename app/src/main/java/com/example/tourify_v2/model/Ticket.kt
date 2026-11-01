@@ -11,7 +11,10 @@ data class Ticket(
     @SerializedName("unit_price") val unitPrice: Int,
     @SerializedName("total_price") val totalPrice: Int,
     @SerializedName("payment_method") val paymentMethod: String,
-    @SerializedName("username") val username: String = ""
+    @SerializedName("username") val username: String = "",
+    // Status ikut memuat tiket yang sudah habis check-in.
+    @SerializedName("status") val status: String = "Active",
+    @SerializedName("checked_in_quantity") val checkedInQuantity: Int = 0
 )
 
 data class TicketBookingRequest(

@@ -1,199 +1,264 @@
 package com.example.tourify_v2.screen
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
+import com.example.tourify_v2.ui.theme.*
+
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import com.example.tourify_v2.model.Wahana
 import com.example.tourify_v2.viewmodel.TourifyViewModel
-
-private val DestinationListGreen = Color(0xFF145C4B)
-private val DestinationListMuted = Color(0xFF68756F)
 
 @Composable
 fun DestinationsScreen(
     viewModel: TourifyViewModel,
     onDestinationClick: (Int) -> Unit
 ) {
+    // Simpan pencarian dan kategori pada daftar destinasi.
     val destinations = viewModel.wahana
+    var searchQuery by remember {
+        mutableStateOf("")
+    }
+    var selectedCategory by remember {
+        mutableStateOf(DestinationCategory.ALL)
+    }
 
     LaunchedEffect(viewModel) {
         if (
-            viewModel.wahana.isEmpty() &&
-            !viewModel.isLoadingWahana &&
-            viewModel.wahanaError.isEmpty()
+            destinations.isEmpty() &&
+                !viewModel.isLoadingWahana &&
+                viewModel.wahanaError.isEmpty()
         ) {
             viewModel.loadWahana()
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.White)
-            .padding(horizontal = 20.dp, vertical = 14.dp)
-    ) {
-        Text(
-            text = "Destination",
-            style = MaterialTheme.typography.headlineSmall,
-            color = DestinationListGreen,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = "Semua destinasi yang tersedia",
-            style = MaterialTheme.typography.bodyMedium,
-            color = DestinationListMuted
-        )
-        Spacer(modifier = Modifier.height(18.dp))
-
-        when {
-            destinations.isNotEmpty() -> {
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(destinations, key = { it.id }) { destination ->
-                        DestinationListItem(
-                            destination = destination,
-                            onClick = { onDestinationClick(destination.id) }
-                        )
-                    }
-                }
+    // Cocokkan nama dan deskripsi dengan pencarian serta kategori.
+    val filteredDestinations = destinations.filter { destination ->
+        val query = searchQuery.trim()
+        val matchesSearch = destination.name.contains(
+            query,
+            ignoreCase = true
+        ) ||
+            destination.description.contains(
+                query,
+                ignoreCase = true
+            )
+        val matchesCategory = selectedCategory == DestinationCategory.ALL ||
+            selectedCategory.keywords.any { keyword ->
+                destination.name.contains(
+                    keyword,
+                    ignoreCase = true
+                ) ||
+                    destination.description.contains(
+                        keyword,
+                        ignoreCase = true
+                    )
             }
 
-            viewModel.isLoadingWahana -> {
-                DestinationListMessage(modifier = Modifier.weight(1f)) {
-                    CircularProgressIndicator(color = DestinationListGreen)
+        matchesSearch && matchesCategory
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        // Sisakan ruang gulir agar isi terakhir tidak tertutup navbar.
+        contentPadding = PaddingValues(
+            start = 20.dp,
+            top = 14.dp,
+            end = 20.dp,
+            bottom = 104.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        ),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        item {
+            Column {
+                Text(
+                    text = "Destinasi",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = TourifyForest,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "${filteredDestinations.size} tempat untuk dikunjungi",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TourifyMuted
+                )
+            }
+        }
+
+        item {
+            DestinationFilters(
+                searchQuery = searchQuery,
+                onSearchQueryChange = {
+                    searchQuery = it
+                },
+                selectedCategory = selectedCategory,
+                onCategorySelected = {
+                    selectedCategory = it
+                }
+            )
+        }
+
+        if (viewModel.isLoadingWahana && destinations.isEmpty()) {
+            item {
+                DestinationListMessage {
+                    CircularProgressIndicator(
+                        color = TourifyForest
+                    )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "Memuat destinasi...",
-                        color = DestinationListMuted
+                        "Memuat destinasi...",
+                        color = TourifyMuted
                     )
                 }
             }
-
-            viewModel.wahanaError.isNotEmpty() -> {
-                DestinationListMessage(modifier = Modifier.weight(1f)) {
+        } else if (viewModel.wahanaError.isNotEmpty() && destinations.isEmpty()) {
+            item {
+                DestinationListMessage {
                     Text(
                         text = viewModel.wahanaError,
                         color = MaterialTheme.colorScheme.error
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Button(
-                        onClick = { viewModel.loadWahana() }
+                        onClick = {
+                            viewModel.loadWahana()
+                        }
                     ) {
-                        Text("Coba lagi")
+                        Text(
+                            "Coba lagi"
+                        )
                     }
                 }
             }
-
-            else -> {
-                DestinationListMessage(modifier = Modifier.weight(1f)) {
+        } else if (filteredDestinations.isEmpty()) {
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    color = TourifySoftSurface
+                ) {
                     Text(
-                        text = "Belum ada destinasi tersedia.",
-                        color = DestinationListMuted
+                        text = if (destinations.isEmpty()) {
+                            "Belum ada destinasi tersedia."
+                        } else {
+                            "Tidak ada destinasi yang cocok. Coba kata kunci atau kategori lain."
+                        },
+                        color = TourifyMuted,
+                        modifier = Modifier.padding(18.dp)
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun DestinationListItem(
-    destination: Wahana,
-    onClick: () -> Unit
-) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(1.dp, Color(0xFFE5E9E6))
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Image(
-                painter = painterResource(destinationImage(destination.id)),
-                contentDescription = "Foto ${destination.name}",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(width = 96.dp, height = 104.dp)
-                    .clip(RoundedCornerShape(10.dp))
-            )
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = destination.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color(0xFF1B2824),
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = destination.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = DestinationListMuted,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Tiket ${rupiah(destination.ticketPrice)} / orang",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = DestinationListGreen,
-                    fontWeight = FontWeight.Medium
+        } else {
+            itemsIndexed(
+                filteredDestinations,
+                key = { _, destination ->
+                    destination.id
+                }
+            ) { index, destination ->
+                FadingDestinationCard(
+                    destination = destination,
+                    index = index,
+                    onClick = {
+                        onDestinationClick(destination.id)
+                    }
                 )
             }
         }
     }
 }
 
+// Kartu destinasi muncul bertahap mengikuti urutannya.
 @Composable
-private fun DestinationListMessage(
-    modifier: Modifier = Modifier,
-    content: @Composable ColumnScope.() -> Unit
+private fun FadingDestinationCard(
+    destination: Wahana,
+    index: Int,
+    onClick: () -> Unit
 ) {
+    var visible by remember(destination.id) {
+        mutableStateOf(false)
+    }
+    LaunchedEffect(destination.id) {
+        visible = true
+    }
+
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = 450,
+            delayMillis = index.coerceAtMost(4) * 70
+        ),
+        label = "destinationCardFade"
+    )
+    val offsetY by animateDpAsState(
+        targetValue = if (visible) 0.dp else 20.dp,
+        animationSpec = tween(
+            durationMillis = 450,
+            delayMillis = index.coerceAtMost(4) * 70
+        ),
+        label = "destinationCardSlide"
+    )
+    val density = LocalDensity.current
+
+    DestinationCard(
+        wahana = destination,
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1.8f)
+            .graphicsLayer {
+                this.alpha = alpha
+                translationY = with(density) {
+                    offsetY.toPx()
+                }
+            },
+        isFavorite = false,
+        onClick = onClick
+    )
+}
+
+// Letakkan status daftar di tengah area konten.
+@Composable
+private fun DestinationListMessage(content: @Composable ColumnScope.() -> Unit) {
     Box(
-        modifier = modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 48.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(

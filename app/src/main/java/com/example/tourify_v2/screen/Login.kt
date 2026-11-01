@@ -1,10 +1,14 @@
 package com.example.tourify_v2.screen
 
+import com.example.tourify_v2.ui.theme.*
+
 import com.example.tourify_v2.viewmodel.AuthViewModel
 
 import com.example.tourify_v2.R
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -31,17 +35,21 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
-
 
 // form login dan animasi logo
 @Composable
@@ -51,18 +59,38 @@ fun LoginScreen(
     onNavigateToRegister: () -> Unit,
     isActive: Boolean = true
 ) {
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var passwordVisible by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf("") }
+    // Simpan isian login dan status tampilan password.
+    var username by remember {
+        mutableStateOf("")
+    }
+    var password by remember {
+        mutableStateOf("")
+    }
+    var passwordVisible by remember {
+        mutableStateOf(false)
+    }
+    var errorMessage by remember {
+        mutableStateOf("")
+    }
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val screenHeight = LocalConfiguration.current.screenHeightDp.toFloat()
-    val logoOffsetY = remember(screenHeight) { Animatable(-screenHeight) }
-    LaunchedEffect(isActive, screenHeight) {
+    // Logo masuk dari atas setiap layar login kembali aktif.
+    val logoOffsetY = remember(screenHeight) {
+        Animatable(-screenHeight)
+    }
+    LaunchedEffect(
+        isActive,
+        screenHeight
+    ) {
         if (isActive) {
             logoOffsetY.snapTo(-screenHeight)
             logoOffsetY.animateTo(
                 targetValue = 0f,
-                animationSpec = tween(durationMillis = 900, easing = FastOutSlowInEasing)
+                animationSpec = tween(
+                    durationMillis = 900,
+                    easing = FastOutSlowInEasing
+                )
             )
         } else {
             logoOffsetY.snapTo(-screenHeight)
@@ -99,12 +127,26 @@ fun LoginScreen(
             modifier = Modifier.fillMaxWidth()
         )
 
-
         // input username
         OutlinedTextField(
             value = username,
-            onValueChange = { username = it; errorMessage = ""; authViewModel.clearError() },
-            placeholder = { Text("Username") },
+            onValueChange = {
+                username = it
+                errorMessage = ""
+                authViewModel.clearError()
+            },
+            placeholder = {
+                Text(
+                    "Username"
+                )
+            },
+            // Enter dari username langsung pindah ke password.
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+            keyboardActions = KeyboardActions(
+                onNext = {
+                    focusManager.moveFocus(FocusDirection.Down)
+                }
+            ),
             colors = fieldColors,
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier.fillMaxWidth()
@@ -121,15 +163,47 @@ fun LoginScreen(
         // input password dan tombol lihat/sembunyikan
         OutlinedTextField(
             value = password,
-            onValueChange = { password = it; errorMessage = ""; authViewModel.clearError() },
-            placeholder = { Text("Password") },
+            onValueChange = {
+                password = it
+                errorMessage = ""
+                authViewModel.clearError()
+            },
+            placeholder = {
+                Text(
+                    "Password"
+                )
+            },
             visualTransformation = if (passwordVisible) {
                 VisualTransformation.None
             } else {
                 PasswordVisualTransformation()
             },
+            // Tombol Done di keyboard menjalankan login.
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Done
+            ),
+            keyboardActions = KeyboardActions(
+                onDone = {
+                    keyboardController?.hide()
+                    if (username.isBlank() || password.isBlank()) {
+                        errorMessage = "Username dan password wajib diisi."
+                    } else {
+                        errorMessage = ""
+                        authViewModel.login(
+                            username.trim(),
+                            password,
+                            onLoginSuccess
+                        )
+                    }
+                }
+            ),
             trailingIcon = {
-                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                IconButton(
+                    onClick = {
+                        passwordVisible = !passwordVisible
+                    }
+                ) {
                     Icon(
                         painter = painterResource(
                             if (passwordVisible) android.R.drawable.ic_menu_close_clear_cancel
@@ -152,7 +226,9 @@ fun LoginScreen(
         if (errorMessage.isNotEmpty() || authViewModel.errorMessage.isNotEmpty()) {
             Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = errorMessage.ifEmpty { authViewModel.errorMessage },
+                text = errorMessage.ifEmpty {
+                    authViewModel.errorMessage
+                },
                 color = MaterialTheme.colorScheme.error
             )
         }
@@ -166,7 +242,11 @@ fun LoginScreen(
                     errorMessage = "Username dan password wajib diisi."
                 } else {
                     errorMessage = ""
-                    authViewModel.login(username.trim(), password, onLoginSuccess)
+                    authViewModel.login(
+                        username.trim(),
+                        password,
+                        onLoginSuccess
+                    )
                 }
             },
             enabled = !authViewModel.isLoading,
@@ -174,7 +254,7 @@ fun LoginScreen(
                 .fillMaxWidth()
                 .height(53.dp),
             shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF259780))
+            colors = ButtonDefaults.buttonColors(containerColor = TourifyForest)
         ) {
             Text(
                 text = if (authViewModel.isLoading) "Memproses..." else "Login",
@@ -194,7 +274,10 @@ fun LoginScreen(
                 .height(53.dp),
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFFFFF)),
-            border = BorderStroke(2.dp, Color(0xFFE5E5E5))
+            border = BorderStroke(
+                2.dp,
+                Color(0xFFE5E5E5)
+            )
 
         ) {
             Text(
@@ -205,12 +288,16 @@ fun LoginScreen(
 
         }
 
-
     }
 }
 
+// Contoh form login untuk preview Compose.
 @Preview(showBackground = true)
 @Composable
 fun LoginScreenPreview() {
-    LoginScreen(authViewModel = AuthViewModel(), onLoginSuccess = {}, onNavigateToRegister = {})
+    LoginScreen(
+        authViewModel = AuthViewModel(),
+        onLoginSuccess = {},
+        onNavigateToRegister = {}
+    )
 }

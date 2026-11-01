@@ -5,9 +5,17 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.util.concurrent.TimeUnit
 
 object ApiClient {
     private val baseUrl = BuildConfig.TOURIFY_API_BASE_URL
+
+    // Endpoint profil mengembalikan path supaya URL gambar ikut alamat API perangkat.
+    fun profileImageUrl(path: String?): String? {
+        if (path.isNullOrBlank()) return null
+        if (path.startsWith("https://") || path.startsWith("http://")) return path
+        return "${baseUrl.trimEnd('/')}/${path.trimStart('/')}"
+    }
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BASIC
@@ -15,6 +23,8 @@ object ApiClient {
 
     private val httpClient = OkHttpClient.Builder()
         .addInterceptor(loggingInterceptor)
+        // Jawaban AI boleh lebih lama dari request katalog atau tiket.
+        .readTimeout(55, TimeUnit.SECONDS)
         .build()
 
     val service: ApiService by lazy {

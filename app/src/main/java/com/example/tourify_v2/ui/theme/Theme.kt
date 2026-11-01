@@ -8,11 +8,17 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 
 private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40,
-    background = Color.White,
-    surface = Color.White
+    primary = TourifyForest,
+    secondary = TourifySage,
+    tertiary = TourifyAccent,
+    background = TourifyCanvas,
+    surface = TourifySurface,
+    onPrimary = TourifySurface,
+    onSecondary = TourifySurface,
+    onTertiary = TourifyInk,
+    onBackground = TourifyInk,
+    onSurface = TourifyInk,
+    error = TourifyError
 )
 
 @Composable

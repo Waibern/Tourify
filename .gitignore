@@ -11,7 +11,9 @@
 /.idea/
 **/build/
 .kotlin/
-/.impeccable/review/
+/.impeccable/
+/.codebase-memory/
+/.codex/
 /captures
 .externalNativeBuild
 .cxx
