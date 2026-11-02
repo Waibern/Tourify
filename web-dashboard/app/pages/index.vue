@@ -143,6 +143,13 @@ watch(
           />
         </div>
 
+        <!-- Peringkat wahana mengikuti rentang tanggal analytics yang sedang dipilih. -->
+        <HomeTopWahana
+          v-if="analytics || loading"
+          :wahana="analytics?.top_wahana ?? null"
+          :loading="loading"
+        />
+
         <HomeStats
           :stats="analytics?.stats ?? null"
           :previous="analytics?.previous_stats ?? null"

@@ -70,12 +70,12 @@ try {
     $perPage = 20;
     $page = min($page, max(1, (int) ceil($total / $perPage)));
     // Pagination membatasi jumlah baris yang dibawa browser setiap permintaan.
-    $statement = $pdo->prepare('SELECT CAST(t.id AS CHAR) AS id, u.username, w.name AS wahana_name, t.booking_date, t.visit_date, t.quantity, t.checked_in_quantity, t.unit_price, t.total_price, t.payment_method, CASE WHEN t.checked_in_quantity >= t.quantity THEN \'Used\' WHEN t.visit_date < :today THEN \'Expire\' ELSE \'Active\' END AS status ' . $from . $filter . ' ORDER BY t.booking_date DESC, t.id DESC LIMIT 20 OFFSET ' . (($page - 1) * $perPage));
+    $statement = $pdo->prepare('SELECT CAST(t.id AS CHAR) AS id, u.username, w.id AS wahana_id, w.name AS wahana_name, t.booking_date, t.visit_date, t.quantity, t.checked_in_quantity, t.unit_price, t.total_price, t.payment_method, CASE WHEN t.checked_in_quantity >= t.quantity THEN \'Used\' WHEN t.visit_date < :today THEN \'Expire\' ELSE \'Active\' END AS status ' . $from . $filter . ' ORDER BY t.booking_date DESC, t.id DESC LIMIT 20 OFFSET ' . (($page - 1) * $perPage));
     $params['today'] = $today;
     $statement->execute($params);
     $rows = $statement->fetchAll();
     foreach ($rows as &$row) {
-        foreach (['quantity', 'checked_in_quantity', 'unit_price', 'total_price'] as $field) {
+        foreach (['wahana_id', 'quantity', 'checked_in_quantity', 'unit_price', 'total_price'] as $field) {
             $row[$field] = (int) $row[$field];
         }
     }

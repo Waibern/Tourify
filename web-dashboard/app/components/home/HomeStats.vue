@@ -16,11 +16,11 @@ function dateLabel(value: string): string {
   return dateFormat.format(new Date(value + 'T12:00:00'))
 }
 
-// Kunjungan jadi fokus utama; metrik lain tetap menuju daftar terkait.
+// Jumlah tiket dan pesanan dipisah supaya kedua angka tidak tertukar.
 const metrics = [
   { key: 'checkins', title: 'Pengunjung masuk', to: '/checkins' },
+  { key: 'tickets', title: 'Tiket', to: '/orders' },
   { key: 'orders', title: 'Pesanan', to: '/orders' },
-  { key: 'tickets', title: 'Tiket dipesan', to: '/orders' },
   { key: 'new_customers', title: 'Pelanggan baru', to: '/customers' }
 ] as const
 
@@ -128,7 +128,7 @@ const hasCheckins = computed(() => checkinData.value.some(point => point.value >
       </AsciiReveal>
     </NuxtLink>
 
-    <!-- Teks dan angka boleh turun baris saat area kartu menyempit di samping sidebar. -->
+    <!-- Tiga metrik memenuhi sisi ringkasan tanpa mengubah kartu utama. -->
     <div class="grid gap-2">
       <NuxtLink
         v-for="card in secondary"

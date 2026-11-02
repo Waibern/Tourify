@@ -101,12 +101,21 @@ export interface DashboardRecentOrder {
   total_price: number
 }
 
+export interface DashboardTopWahana {
+  id: number
+  name: string
+  order_count: number
+  ticket_count: number
+  booking_value: number
+}
+
 export interface DashboardAnalytics {
   stats: DashboardAnalyticsStats
   previous_stats: DashboardAnalyticsStats
   comparison: { start: string, end: string, days: number }
   series: DashboardAnalyticsPoint[]
   recent_orders: DashboardRecentOrder[]
+  top_wahana: DashboardTopWahana | null
 }
 
 export interface DashboardAnalyticsApiResponse {
@@ -134,6 +143,7 @@ export interface DashboardCustomersApiResponse {
 
 // Daftar admin dibatasi per halaman oleh server.
 export interface DashboardOrder extends DashboardRecentOrder {
+  wahana_id: number
   checked_in_quantity: number
   unit_price: number
   payment_method: string

@@ -163,6 +163,29 @@ try {
         ];
     }, $statement->fetchAll());
 
+    // Wahana terlaris mengikuti jumlah tiket yang dipesan pada rentang pilihan.
+    $statement = $pdo->prepare(
+        'SELECT w.id, w.name, COUNT(*) AS order_count, '
+        . 'COALESCE(SUM(t.quantity), 0) AS ticket_count, '
+        . 'COALESCE(SUM(t.total_price), 0) AS booking_value '
+        . 'FROM tickets t INNER JOIN wahana w ON w.id = t.wahana_id '
+        . 'WHERE DATE(t.booking_date) BETWEEN :start_date AND :end_date '
+        . 'GROUP BY w.id, w.name '
+        . 'ORDER BY ticket_count DESC, order_count DESC, w.id ASC LIMIT 1'
+    );
+    $statement->execute([
+        'start_date' => $startDate,
+        'end_date' => $endDate,
+    ]);
+    $topWahanaRow = $statement->fetch();
+    $topWahana = $topWahanaRow ? [
+        'id' => (int) $topWahanaRow['id'],
+        'name' => $topWahanaRow['name'],
+        'order_count' => (int) $topWahanaRow['order_count'],
+        'ticket_count' => (int) $topWahanaRow['ticket_count'],
+        'booking_value' => (int) $topWahanaRow['booking_value'],
+    ] : null;
+
     respond(200, [
         'success' => true,
         'analytics' => [
@@ -177,6 +200,7 @@ try {
             'comparison' => ['start' => $previousStart, 'end' => $previousEnd, 'days' => $days],
             'series' => array_values($seriesByDate),
             'recent_orders' => $recentOrders,
+            'top_wahana' => $topWahana,
         ],
     ]);
 } catch (Throwable $exception) {

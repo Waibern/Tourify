@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
 import type { DashboardOrder, DashboardOrdersApiResponse } from '~/types/tourify'
+import { wahanaImage } from '~/utils/wahana-images'
 import { createAsciiReveal } from 'ascii-reveal/core'
 import type { AsciiRevealController } from 'ascii-reveal/core'
 
@@ -402,6 +403,18 @@ const displayItems = computed(() => table.value?.tableApi?.getAllColumns()
             :key="order.id"
             class="rounded-xl border border-default bg-default p-4"
           >
+            <div class="relative -mx-4 -mt-4 mb-4 h-32 overflow-hidden rounded-t-xl">
+              <img
+                :src="wahanaImage(order.wahana_id)"
+                alt=""
+                aria-hidden="true"
+                class="absolute inset-0 h-full w-full object-cover"
+              >
+              <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-transparent" />
+              <p class="absolute inset-x-4 bottom-3 break-words font-semibold text-white drop-shadow-sm">
+                {{ order.wahana_name }}
+              </p>
+            </div>
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0">
                 <button
@@ -421,9 +434,6 @@ const displayItems = computed(() => table.value?.tableApi?.getAllColumns()
               </UBadge>
             </div>
 
-            <p class="mt-3 break-words font-medium text-highlighted">
-              {{ order.wahana_name }}
-            </p>
             <dl class="mt-3 grid grid-cols-2 gap-x-3 gap-y-3 border-t border-default pt-3 text-sm">
               <div>
                 <dt class="text-muted">
