@@ -2,8 +2,9 @@
 import type { DashboardTopWahana } from '~/types/tourify'
 import { wahanaImage } from '~/utils/wahana-images'
 
-defineProps<{
+const props = defineProps<{
   wahana: DashboardTopWahana | null
+  totalTickets: number | null
   loading: boolean
 }>()
 
@@ -13,6 +14,19 @@ const currencyFormat = new Intl.NumberFormat('id-ID', {
   currency: 'IDR',
   maximumFractionDigits: 0
 })
+
+// Donut membandingkan tiket wahana terlaris dengan tiket wahana lain.
+const totalTicketCount = computed(() => Math.max(props.totalTickets ?? 0, props.wahana?.ticket_count ?? 0))
+const otherTicketCount = computed(() => Math.max(totalTicketCount.value - (props.wahana?.ticket_count ?? 0), 0))
+const ticketShare = computed(() => props.wahana
+  ? [
+      { label: props.wahana.name, value: props.wahana.ticket_count },
+      { label: 'Wahana lain', value: otherTicketCount.value }
+    ]
+  : [])
+const ticketSharePercent = computed(() => totalTicketCount.value > 0 && props.wahana
+  ? Math.round(props.wahana.ticket_count / totalTicketCount.value * 100)
+  : 0)
 </script>
 
 <template>
@@ -23,11 +37,19 @@ const currencyFormat = new Intl.NumberFormat('id-ID', {
   >
     <AsciiReveal :loading="loading" origin="pointer">
       <template #skeleton>
-        <div class="flex min-h-64 flex-col justify-between gap-8 p-5 sm:p-6 md:min-h-56 md:p-8" role="status">
+        <div class="relative flex min-h-64 flex-col justify-between gap-8 p-5 sm:p-6 md:min-h-56 md:p-8" role="status">
           <div class="space-y-3">
             <!-- Skeleton mengikuti hierarki judul yang baru. -->
             <USkeleton class="h-9 w-52 sm:h-10" aria-hidden="true" />
             <USkeleton class="h-6 w-3/5" aria-hidden="true" />
+          </div>
+          <!-- Sisakan tempat chart agar isi kartu tidak bergeser setelah data siap. -->
+          <div class="absolute right-7 top-1/2 hidden -translate-y-1/2 items-center gap-3 xl:flex" aria-hidden="true">
+            <USkeleton class="size-32 shrink-0 rounded-full" />
+            <div class="grid gap-3">
+              <USkeleton class="h-4 w-28" />
+              <USkeleton class="h-4 w-24" />
+            </div>
           </div>
           <!-- Kerangka memakai susunan rapat yang sama saat data dimuat. -->
           <dl class="grid grid-cols-2 gap-4 sm:w-fit sm:grid-cols-[max-content_max-content_max-content] sm:gap-x-12">
@@ -65,6 +87,53 @@ const currencyFormat = new Intl.NumberFormat('id-ID', {
           <p class="mt-2 break-words text-lg font-medium text-white/85 sm:text-xl">
             {{ wahana.name }}
           </p>
+        </div>
+
+        <!-- Donut merangkum porsi tiket wahana ini dari seluruh tiket periode terpilih. -->
+        <div
+          v-if="totalTicketCount > 0"
+          class="absolute right-7 top-1/2 hidden -translate-y-1/2 items-center gap-3 xl:flex"
+          :style="{ '--ts-chart-1': '#a3e635', '--ts-chart-2': 'rgba(255, 255, 255, 0.24)' }"
+          role="group"
+          :aria-label="`Porsi tiket ${wahana.name} dari seluruh tiket`"
+        >
+          <div class="relative size-32 shrink-0">
+            <UChart
+              type="donut"
+              :data="ticketShare"
+              index="label"
+              :categories="[{ key: 'value', label: 'Jumlah tiket' }]"
+              :legend="false"
+              :tooltip="false"
+              :thickness="14"
+              :height="128"
+              :initial-width="128"
+              :format="(value: number) => numberFormat.format(value)"
+              :aria-label="`Diagram porsi tiket ${wahana.name}`"
+              :aria-description="`${numberFormat.format(wahana.ticket_count)} dari ${numberFormat.format(totalTicketCount)} tiket berasal dari ${wahana.name}.`"
+              class="size-32"
+            />
+            <div class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+              <span class="text-2xl font-semibold tabular-nums text-white">
+                {{ ticketSharePercent }}%
+              </span>
+              <span class="text-[11px] text-white/70">
+                dari tiket
+              </span>
+            </div>
+          </div>
+          <div class="grid min-w-0 gap-3 text-xs">
+            <div class="flex min-w-0 items-center gap-2">
+              <span class="size-2 shrink-0 rounded-full bg-lime-400" aria-hidden="true" />
+              <span class="min-w-0 flex-1 truncate text-white/80">{{ wahana.name }}</span>
+              <span class="shrink-0 font-semibold tabular-nums text-white">{{ numberFormat.format(wahana.ticket_count) }}</span>
+            </div>
+            <div class="flex min-w-0 items-center gap-2">
+              <span class="size-2 shrink-0 rounded-full bg-white/25" aria-hidden="true" />
+              <span class="min-w-0 flex-1 truncate text-white/80">Wahana lain</span>
+              <span class="shrink-0 font-semibold tabular-nums text-white">{{ numberFormat.format(otherTicketCount) }}</span>
+            </div>
+          </div>
         </div>
 
         <!-- Angka dikelompokkan rapat agar mudah dibandingkan. -->

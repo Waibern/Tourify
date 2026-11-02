@@ -147,6 +147,7 @@ watch(
         <HomeTopWahana
           v-if="analytics || loading"
           :wahana="analytics?.top_wahana ?? null"
+          :total-tickets="analytics?.stats.tickets ?? null"
           :loading="loading"
         />
 
