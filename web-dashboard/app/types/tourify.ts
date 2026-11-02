@@ -116,6 +116,8 @@ export interface DashboardAnalytics {
   series: DashboardAnalyticsPoint[]
   recent_orders: DashboardRecentOrder[]
   top_wahana: DashboardTopWahana | null
+  // Tiga wahana teratas untuk rincian chart di banner.
+  top_wahana_distribution: DashboardTopWahana[]
 }
 
 export interface DashboardAnalyticsApiResponse {

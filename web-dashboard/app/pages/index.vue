@@ -143,10 +143,11 @@ watch(
           />
         </div>
 
-        <!-- Peringkat wahana mengikuti rentang tanggal analytics yang sedang dipilih. -->
+        <!-- Peringkat dan rincian chart mengikuti rentang tanggal yang dipilih. -->
         <HomeTopWahana
           v-if="analytics || loading"
           :wahana="analytics?.top_wahana ?? null"
+          :top-wahana-distribution="analytics?.top_wahana_distribution ?? []"
           :total-tickets="analytics?.stats.tickets ?? null"
           :loading="loading"
         />
