@@ -7,10 +7,16 @@ interface SummaryCard {
   image?: string
 }
 
-defineProps<{
+const props = defineProps<{
   cards: SummaryCard[]
   loading: boolean
 }>()
+
+// Reveal awal cukup sekali; filter dan refresh tidak perlu memutar ulang skeleton.
+const initialLoading = ref(props.loading)
+watch(() => props.loading, (loading) => {
+  if (!loading) initialLoading.value = false
+})
 </script>
 
 <template>
@@ -24,7 +30,7 @@ defineProps<{
       data-dashboard-card
       class="group block min-w-0 overflow-hidden rounded-xl border border-default bg-default transition-colors hover:border-white/35 hover:bg-elevated/40"
     >
-      <AsciiReveal :loading="loading" origin="pointer">
+      <AsciiReveal :loading="initialLoading" origin="pointer">
         <template #skeleton>
           <div class="h-44" aria-hidden="true" />
         </template>
@@ -59,7 +65,7 @@ defineProps<{
         class="group relative flex min-w-0 items-center overflow-hidden rounded-xl border border-default bg-default transition-colors hover:border-white/35 hover:bg-elevated/40"
         :class="card.image ? 'min-h-24 p-0' : 'px-4 py-3'"
       >
-        <AsciiReveal :loading="loading" origin="pointer" class="relative min-w-0 flex-1">
+        <AsciiReveal :loading="initialLoading" origin="pointer" class="relative min-w-0 flex-1">
           <template #skeleton>
             <div class="h-10" aria-hidden="true" />
           </template>
