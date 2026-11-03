@@ -180,10 +180,9 @@ fun AccountScreen(
                 ),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            Text(
-                text = "Profil",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold
+            // Judul profil ikut gaya layar lain.
+            TourifyScreenTitle(
+                text = "Profil"
             )
 
             // Foto dari server dipakai di sini; inisial tetap jadi cadangan.

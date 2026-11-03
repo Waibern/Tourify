@@ -60,7 +60,6 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -382,7 +381,7 @@ private fun TicketSearchBar(
     )
 }
 
-// Header yang sama menjaga tombol kembali dan refresh punya area sentuh yang cukup.
+// Judul tiket tetap sejajar dengan judul layar lain.
 @Composable
 private fun TicketTopBar(
     title: String,
@@ -415,16 +414,10 @@ private fun TicketTopBar(
             } else {
                 Spacer(Modifier.size(48.dp))
             }
-            Text(
+            TourifyScreenTitle(
                 text = title,
                 modifier = Modifier
-                    .weight(1f)
-                    .semantics {
-                        heading()
-                    },
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = TourifyInk,
+                    .weight(1f),
                 textAlign = TextAlign.Center
             )
             IconButton(

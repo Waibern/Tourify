@@ -107,11 +107,9 @@ fun DestinationsScreen(
     ) {
         item {
             Column {
-                Text(
+                // Judul destinasi ikut gaya layar lain.
+                TourifyScreenTitle(
                     text = "Destinasi",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = TourifyForest,
-                    fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(

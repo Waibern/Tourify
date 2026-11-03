@@ -319,22 +319,8 @@ fun HomeScreen(
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        "Mau ke mana",
-                        color = Ink,
-                        fontSize = 40.sp,
-                        lineHeight = 34.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = (-0.4).sp
-                    )
-                    Spacer(modifier = Modifier.height(0.dp))
-                    Text(
-                        "hari ini?",
-                        color = Ink,
-                        fontSize = 40.sp,
-                        lineHeight = 34.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = (-0.4).sp
+                    TourifyScreenTitle(
+                        text = "Mau ke mana hari ini?"
                     )
                 }
                 // Avatar ikut state profil yang sama dengan halaman akun.
