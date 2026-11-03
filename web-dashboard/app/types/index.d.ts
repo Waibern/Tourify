@@ -21,13 +21,6 @@ export interface Mail {
   date: string
 }
 
-export interface Member {
-  name: string
-  username: string
-  role: 'member' | 'owner'
-  avatar: AvatarProps
-}
-
 export interface Stat {
   title: string
   icon: string
@@ -42,14 +35,6 @@ export interface Sale {
   status: SaleStatus
   email: string
   amount: number
-}
-
-export interface Notification {
-  id: number
-  unread?: boolean
-  sender: User
-  body: string
-  date: string
 }
 
 export type Period = 'daily' | 'weekly' | 'monthly'

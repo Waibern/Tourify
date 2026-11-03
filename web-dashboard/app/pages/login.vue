@@ -13,18 +13,28 @@ const showPassword = ref(false)
 const errorMessage = ref('')
 const loginRevealRoot = ref<HTMLElement | null>(null)
 const reducedMotion = usePreferredReducedMotion()
+const { asciiAnimations } = useDashboardPreferences()
 const lastUsernameKey = 'tourify-last-login-username'
 let revealController: AsciiRevealController | undefined
 let revealPromise: Promise<void> | undefined
+
+// Sesi lama dicek setelah halaman login selesai dihidrasi.
+async function redirectSavedSession() {
+  const user = await auth.loadSession()
+  if (user) {
+    await navigateTo(user.role === 'gate' ? '/scanner' : '/')
+  }
+}
 
 // Form dibuka dengan efek ASCII, kecuali pengguna memilih kurangi animasi.
 onMounted(() => {
   // Isi username terakhir dari browser tanpa menyimpan password.
   state.username = localStorage.getItem(lastUsernameKey) ?? ''
+  void redirectSavedSession()
 
   const root = loginRevealRoot.value
   const surface = root?.querySelector<HTMLElement>('[data-ascii="surface"]')
-  if (!root || !surface || reducedMotion.value === 'reduce') return
+  if (!root || !surface || reducedMotion.value === 'reduce' || !asciiAnimations.value) return
 
   revealController = createAsciiReveal(root, {
     preset: 'decode',
@@ -38,6 +48,14 @@ onMounted(() => {
       revealController = undefined
     }
   })
+})
+
+watch(asciiAnimations, (enabled) => {
+  if (enabled) return
+
+  revealController?.destroy()
+  revealController = undefined
+  revealPromise = undefined
 })
 
 // Bersihkan kanvas animasi saat form login ditinggalkan.
@@ -65,7 +83,7 @@ async function onSubmit(event: FormSubmitEvent<LoginForm>) {
     // Simpan username setelah login berhasil supaya siap saat kembali.
     localStorage.setItem(lastUsernameKey, event.data.username.trim())
 
-    if (revealController && reducedMotion.value !== 'reduce') {
+    if (revealController && reducedMotion.value !== 'reduce' && asciiAnimations.value) {
       try {
         await revealPromise
         const surface = loginRevealRoot.value?.querySelector<HTMLElement>('[data-ascii="surface"]')
@@ -118,6 +136,7 @@ async function onSubmit(event: FormSubmitEvent<LoginForm>) {
         :description="errorMessage"
       />
 
+      <!-- Ring putih menjaga fokus keyboard tetap terlihat di latar gelap. -->
       <UForm
         :schema="schema"
         :state="state"
@@ -142,7 +161,7 @@ async function onSubmit(event: FormSubmitEvent<LoginForm>) {
               placeholder="Masukkan username"
               size="lg"
               class="w-full"
-              :ui="{ base: 'h-12 rounded-2xl border border-transparent bg-[#242426] pl-12 pr-4 text-base text-white placeholder:text-white/50 focus-visible:border-white/15 focus-visible:ring-2 focus-visible:ring-white/10' }"
+              :ui="{ base: 'h-12 rounded-2xl border border-transparent bg-[#242426] pl-12 pr-4 text-base text-white placeholder:text-white/50 focus-visible:border-white focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0b0d]' }"
             />
           </div>
         </UFormField>
@@ -166,7 +185,7 @@ async function onSubmit(event: FormSubmitEvent<LoginForm>) {
               placeholder="Masukkan password"
               size="lg"
               class="w-full"
-              :ui="{ base: 'h-12 rounded-2xl border border-transparent bg-[#242426] pl-12 pr-14 text-base text-white placeholder:text-white/50 focus-visible:border-white/15 focus-visible:ring-2 focus-visible:ring-white/10' }"
+              :ui="{ base: 'h-12 rounded-2xl border border-transparent bg-[#242426] pl-12 pr-14 text-base text-white placeholder:text-white/50 focus-visible:border-white focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0b0d]' }"
             />
             <button
               type="button"

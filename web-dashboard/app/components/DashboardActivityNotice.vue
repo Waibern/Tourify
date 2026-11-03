@@ -3,16 +3,36 @@ import { createAsciiReveal } from 'ascii-reveal/core'
 import type { AsciiRevealController } from 'ascii-reveal/core'
 import type { DashboardActivityEvent } from '~/types/tourify'
 
-const props = withDefaults(defineProps<{ activity: DashboardActivityEvent, paused?: boolean, test?: boolean }>(), { paused: false, test: false })
+const props = withDefaults(defineProps<{
+  activity?: DashboardActivityEvent
+  title?: string
+  description?: string
+  icon?: string
+  paused?: boolean
+  test?: boolean
+}>(), { paused: false, test: false })
 const emit = defineEmits<{ dismiss: [] }>()
 const root = ref<HTMLElement | null>(null)
 const surface = ref<HTMLElement | null>(null)
 const phase = ref<'waiting' | 'revealing' | 'idle' | 'unrevealing' | 'unrevealing-surface' | 'hidden'>('waiting')
 const closing = ref(false)
 const reducedMotion = usePreferredReducedMotion()
-const isOrder = computed(() => props.activity.type === 'order')
+const { asciiAnimations } = useDashboardPreferences()
+// Kartu ini menampilkan aktivitas dashboard atau pesan sukses dengan reveal yang sama.
+const isOrder = computed(() => props.activity?.type === 'order')
+const title = computed(() => props.title ?? (props.test ? (isOrder.value ? 'Notifikasi uji' : 'Uji akun baru') : isOrder.value ? 'Pesanan baru' : 'Akun baru'))
+const description = computed(() => {
+  if (props.description !== undefined) return props.description
+  if (!props.activity) return ''
+  if (props.activity.type === 'order') return `${props.activity.username} memesan ${props.activity.quantity} tiket di ${props.activity.wahana_name}.`
+  return props.test ? `Akun contoh: ${props.activity.username}` : `${props.activity.username} baru saja mendaftar.`
+})
+const icon = computed(() => props.icon ?? (isOrder.value ? 'i-lucide-receipt-text' : props.activity ? 'i-lucide-user-round-plus' : 'i-lucide-circle-check'))
 // Akun baru membuka pelanggan yang sama, bukan daftar umum tanpa konteks.
-const target = computed(() => isOrder.value ? `/orders?ticket=${props.activity.entity_id}` : `/customers?customer=${encodeURIComponent(props.activity.entity_id)}`)
+const target = computed(() => {
+  if (!props.activity) return undefined
+  return isOrder.value ? `/orders?ticket=${props.activity.entity_id}` : `/customers?customer=${encodeURIComponent(props.activity.entity_id)}`
+})
 const rupiah = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })
 let controller: AsciiRevealController | undefined
 let disposed = false
@@ -60,7 +80,7 @@ watch(() => props.paused, paused => paused ? pauseLifetime() : resumeLifetime())
 // Sudut dan permukaan memakai surface reveal yang sama dengan kartu Pengunjung masuk.
 const { start: startEntrance, stop: stopEntrance } = useTimeoutFn(async () => {
   if (!root.value || !surface.value || disposed || closing.value) return
-  if (reducedMotion.value === 'reduce') {
+  if (reducedMotion.value === 'reduce' || !asciiAnimations.value) {
     // Preferensi bisa berubah sebelum entrance dimulai; waktu baca tetap harus berjalan.
     phase.value = 'idle'
     resumeLifetime()
@@ -99,6 +119,22 @@ const { start: startEntrance, stop: stopEntrance } = useTimeoutFn(async () => {
   }
 }, 0, { immediate: false })
 
+// Hentikan reveal yang sedang jalan dan biarkan kartu langsung terbaca saat dimatikan.
+watch([asciiAnimations, reducedMotion], ([animations, motion]) => {
+  if (animations && motion !== 'reduce') {
+    if (phase.value === 'waiting') startEntrance()
+    return
+  }
+
+  stopEntrance()
+  controller?.destroy()
+  controller = undefined
+  if (!closing.value) {
+    phase.value = 'idle'
+    resumeLifetime()
+  }
+})
+
 // Balikkan surface reveal: isi dan kartu menghilang dulu, lalu bingkai sudut paling akhir.
 async function dismiss() {
   if (closing.value || disposed) return
@@ -114,7 +150,7 @@ async function dismiss() {
     const content = root.value
     const card = surface.value
     const overlayHost = host ?? card?.parentElement
-    if (content && card && overlayHost && phase.value !== 'waiting' && reducedMotion.value !== 'reduce') {
+    if (content && card && overlayHost && phase.value !== 'waiting' && reducedMotion.value !== 'reduce' && asciiAnimations.value) {
       phase.value = 'unrevealing'
       const effect = createAsciiReveal(overlayHost, {
         preset: 'decode',
@@ -139,7 +175,7 @@ async function dismiss() {
   } finally {
     if (!disposed) {
       // Tahan seluruh kartu tetap tersembunyi setelah sudut selesai; reduce motion memakai fade biasa.
-      phase.value = reducedMotion.value === 'reduce' ? 'idle' : 'hidden'
+      phase.value = reducedMotion.value === 'reduce' || !asciiAnimations.value ? 'idle' : 'hidden'
       await nextTick()
       controller?.destroy()
       controller = undefined
@@ -154,7 +190,7 @@ defineExpose({ dismiss })
 
 onMounted(() => {
   rememberFocus(document.activeElement)
-  if (reducedMotion.value === 'reduce') phase.value = 'idle'
+  if (reducedMotion.value === 'reduce' || !asciiAnimations.value) phase.value = 'idle'
   else startEntrance()
   resumeLifetime()
 })
@@ -189,22 +225,19 @@ onBeforeUnmount(() => {
         @click="dismiss"
       />
       <div class="mb-1 flex items-center gap-2 text-base font-medium text-highlighted">
-        <UIcon :name="isOrder ? 'i-lucide-receipt-text' : 'i-lucide-user-round-plus'" data-ascii="fade" class="size-5 shrink-0 text-primary" />
-        <span>{{ test ? (isOrder ? 'Notifikasi uji' : 'Uji akun baru') : isOrder ? 'Pesanan baru' : 'Akun baru' }}</span>
+        <UIcon :name="icon" data-ascii="fade" class="size-5 shrink-0 text-primary" />
+        <span>{{ title }}</span>
       </div>
       <p class="text-sm leading-5 break-words text-muted">
-        <!-- Uji akun memakai data yang sudah ada, jadi jangan mengumumkannya sebagai pendaftaran sungguhan. -->
-        <span v-if="test && !isOrder">Akun contoh: </span>
-        <span class="text-highlighted">{{ activity.username }}</span>
-        {{ activity.type === 'order' ? ` memesan ${activity.quantity} tiket di ${activity.wahana_name}.` : test ? '' : ' baru saja mendaftar.' }}
+        {{ description }}
       </p>
       <div class="mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm">
-        <span v-if="activity.type === 'order'" class="font-medium text-highlighted tabular-nums">
+        <span v-if="activity?.type === 'order'" class="font-medium text-highlighted tabular-nums">
           {{ rupiah.format(activity.total_price) }}
         </span>
         <!-- Area sentuh 44px memakai margin negatif agar tinggi kartu tetap ringkas. -->
         <UButton
-          v-if="test && isOrder"
+          v-if="activity && test && isOrder"
           label="Tutup uji"
           color="primary"
           variant="link"
@@ -213,7 +246,7 @@ onBeforeUnmount(() => {
           @click="dismiss"
         />
         <NuxtLink
-          v-else
+          v-else-if="activity"
           :to="target"
           class="-my-2 -mr-1 inline-flex min-h-11 items-center gap-1 rounded px-1 text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
           @click="dismiss"

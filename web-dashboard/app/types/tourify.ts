@@ -34,6 +34,8 @@ export interface DashboardUser {
   profile_image?: string | null
 }
 
+export type DashboardMember = DashboardUser
+
 export interface DashboardProfile {
   username: string
   profile_image: string | null
@@ -63,6 +65,11 @@ export interface DashboardApiResponse {
   wahana?: TourifyWahana[]
 }
 
+export interface DashboardMembersApiResponse extends DashboardApiResponse {
+  members?: DashboardMember[]
+  member?: DashboardMember
+}
+
 export interface CheckinApiResponse extends DashboardApiResponse {
   ticket?: CheckinTicket
 }
@@ -80,6 +87,8 @@ export interface DashboardAnalyticsStats {
   orders: number
   tickets: number
   checkins: number
+  // Jumlah wahana katalog tidak terikat ke rentang tanggal.
+  wahana: number
 }
 
 export interface DashboardAnalyticsPoint {
@@ -140,6 +149,7 @@ export interface DashboardCustomer {
 export interface DashboardCustomersApiResponse {
   success: boolean
   message?: string
+  online_count: number
   customers?: DashboardCustomer[]
 }
 
@@ -150,6 +160,12 @@ export interface DashboardOrder extends DashboardRecentOrder {
   unit_price: number
   payment_method: string
   status: 'Active' | 'Expire' | 'Used'
+}
+
+// Titik grafik pesanan memakai jumlah harian selama 14 hari terakhir.
+export interface DashboardOrderTrendPoint {
+  date: string
+  order_count: number
 }
 
 export interface DashboardCheckin {
@@ -164,6 +180,7 @@ export interface DashboardCheckin {
 export interface DashboardOrdersApiResponse {
   success: boolean
   orders: DashboardOrder[]
+  order_trend: DashboardOrderTrendPoint[]
   total: number
   page: number
   per_page: number

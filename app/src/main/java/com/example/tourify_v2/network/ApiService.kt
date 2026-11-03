@@ -25,6 +25,10 @@ interface ApiService {
     @POST("login.php")
     suspend fun login(@Body credentials: CredentialsRequest): Response<ApiResponse>
 
+    // Catat pelanggan yang lagi aktif di aplikasi.
+    @POST("customer_presence.php")
+    suspend fun updateCustomerPresence(@Header("Authorization") authorization: String): Response<ApiResponse>
+
     // Foto profil dimuat dan disimpan untuk akun dari token login.
     @GET("profile.php")
     suspend fun getProfile(@Header("Authorization") authorization: String): Response<ProfileResponse>

@@ -4,14 +4,15 @@ import { animateSkeletons, asciiSkeletonHTML, SKELETON_CSS } from 'ascii-reveal/
 const props = withDefaults(defineProps<{ rows?: number }>(), { rows: 3 })
 const element = ref<HTMLElement | null>(null)
 const reducedMotion = usePreferredReducedMotion()
+const { asciiAnimations } = useDashboardPreferences()
 
 // Markup hanya dari pola bawaan paket; tidak pernah memasukkan data API ke v-html.
 const markup = computed(() => asciiSkeletonHTML({ variant: 'dither', rows: props.rows, css: false }))
 useHead({ style: [{ key: 'ascii-skeleton', innerHTML: SKELETON_CSS }] })
 
 // Canvas baru aktif di browser, lalu dibersihkan saat data siap atau animasi dikurangi.
-watch([element, markup, reducedMotion], ([root, , motion], _previous, onCleanup) => {
-  if (root && motion !== 'reduce') {
+watch([element, markup, reducedMotion, asciiAnimations], ([root, , motion, animations], _previous, onCleanup) => {
+  if (root && motion !== 'reduce' && animations) {
     onCleanup(animateSkeletons(root))
   }
 }, { flush: 'post' })

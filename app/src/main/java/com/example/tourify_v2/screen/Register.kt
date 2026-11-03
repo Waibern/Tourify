@@ -92,7 +92,7 @@ fun RegisterScreen(
         )
         Spacer(modifier = Modifier.height(30.dp))
 
-        // username baru
+        // Label input di form daftar.
         OutlinedTextField(
             value = username,
             onValueChange = {
@@ -102,7 +102,7 @@ fun RegisterScreen(
             },
             label = {
                 Text(
-                    "Username Baru"
+                    "Nama pengguna"
                 )
             },
             // Enter pindah ke kolom password berikutnya.
@@ -128,7 +128,7 @@ fun RegisterScreen(
             },
             label = {
                 Text(
-                    "Password"
+                    "Kata sandi"
                 )
             },
             visualTransformation = if (passwordVisible) {
@@ -158,9 +158,9 @@ fun RegisterScreen(
                             else android.R.drawable.ic_menu_view
                         ),
                         contentDescription = if (passwordVisible) {
-                            "Sembunyikan password"
+                            "Sembunyikan kata sandi"
                         } else {
-                            "Tampilkan password"
+                            "Tampilkan kata sandi"
                         }
                     )
                 }
@@ -180,7 +180,7 @@ fun RegisterScreen(
             },
             label = {
                 Text(
-                    "Konfirmasi Password"
+                    "Konfirmasi kata sandi"
                 )
             },
             visualTransformation = if (confirmVisible) {
@@ -210,9 +210,9 @@ fun RegisterScreen(
                             else android.R.drawable.ic_menu_view
                         ),
                         contentDescription = if (confirmVisible) {
-                            "Sembunyikan password"
+                            "Sembunyikan kata sandi"
                         } else {
-                            "Tampilkan password"
+                            "Tampilkan kata sandi"
                         }
                     )
                 }
@@ -227,11 +227,11 @@ fun RegisterScreen(
         Button(
             onClick = {
                 if (username.isEmpty() || password.isEmpty()) {
-                    errorMessage = "Semua bidang harus diisi!"
+                    errorMessage = "Semua kolom wajib diisi."
                 } else if (password != confirmPassword) {
-                    errorMessage = "Konfirmasi password tidak cocok!"
+                    errorMessage = "Konfirmasi kata sandi tidak cocok."
                 } else if (password.length < 3) {
-                    errorMessage = "Password minimal 3 karakter."
+                    errorMessage = "Kata sandi minimal 3 karakter."
                 } else {
                     errorMessage = ""
                     authViewModel.clearError()
@@ -243,23 +243,25 @@ fun RegisterScreen(
                 }
             },
             enabled = !authViewModel.isLoading,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(53.dp),
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = TourifyForest)
         ) {
             Text(
-                if (authViewModel.isLoading) "MEMBUAT AKUN..." else "DAFTAR AKUN"
+                if (authViewModel.isLoading) "Membuat akun..." else "Daftar akun"
             )
         }
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // balik ke layar login
+        // Kembali ke layar masuk.
         TextButton(
             onClick = onBackToLogin
         ) {
             Text(
-                "Sudah punya akun? Login di sini"
+                "Sudah punya akun? Masuk di sini"
             )
         }
 

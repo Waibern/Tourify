@@ -5,6 +5,8 @@ interface SummaryCard {
   hint: string
   icon: string
   image?: string
+  trend?: { date: string, value: number }[]
+  trendLabel?: string
 }
 
 const props = defineProps<{
@@ -14,6 +16,8 @@ const props = defineProps<{
 
 // Reveal awal cukup sekali; filter dan refresh tidak perlu memutar ulang skeleton.
 const initialLoading = ref(props.loading)
+const numberFormat = new Intl.NumberFormat('id-ID')
+const hasPrimaryTrend = computed(() => props.cards[0]?.trend?.some(point => point.value > 0) ?? false)
 watch(() => props.loading, (loading) => {
   if (!loading) initialLoading.value = false
 })
@@ -32,7 +36,8 @@ watch(() => props.loading, (loading) => {
     >
       <AsciiReveal :loading="initialLoading" origin="pointer">
         <template #skeleton>
-          <div class="h-44" aria-hidden="true" />
+          <!-- Ruang grafik disediakan sejak awal agar tinggi kartu tetap stabil. -->
+          <div :class="cards[0]?.trendLabel ? 'h-56' : 'h-44'" aria-hidden="true" />
         </template>
         <div class="flex min-h-44 flex-col justify-between gap-3 p-4 sm:p-5">
           <div class="flex items-start justify-between gap-3">
@@ -45,13 +50,41 @@ watch(() => props.loading, (loading) => {
               aria-hidden="true"
             />
           </div>
-          <div>
-            <p class="text-4xl font-semibold tracking-tight text-highlighted tabular-nums">
-              {{ cards[0]?.value }}
-            </p>
-            <p class="mt-1 text-sm text-muted">
-              {{ cards[0]?.hint }}
-            </p>
+          <div class="space-y-3">
+            <div>
+              <p class="text-4xl font-semibold tracking-tight text-highlighted tabular-nums">
+                {{ cards[0]?.value }}
+              </p>
+              <p class="mt-1 text-sm text-muted">
+                {{ cards[0]?.hint }}
+              </p>
+            </div>
+            <!-- Grafik hanya muncul pada kartu yang menerima data tren. -->
+            <div v-if="cards[0]?.trend?.length" class="space-y-1">
+              <p class="text-sm text-muted">
+                {{ cards[0].trendLabel }}
+              </p>
+              <div v-if="hasPrimaryTrend" class="h-12" data-ascii-chart>
+                <UChart
+                  type="area"
+                  curve="monotone"
+                  :data="cards[0].trend"
+                  index="date"
+                  :categories="[{ key: 'value', label: cards[0].trendLabel ?? 'Pesanan', color: 'primary' }]"
+                  :x-axis="false"
+                  :y-axis="false"
+                  :grid="false"
+                  :legend="false"
+                  :height="48"
+                  :initial-width="520"
+                  :format="(value: number) => numberFormat.format(value)"
+                  :aria-label="cards[0].trendLabel ?? 'Tren pesanan'"
+                />
+              </div>
+              <p v-else class="text-sm text-muted">
+                Belum ada pesanan dalam 14 hari terakhir.
+              </p>
+            </div>
           </div>
         </div>
       </AsciiReveal>

@@ -21,7 +21,7 @@
 
       <!-- Logo dan judul di atas; subjudul menjadi footer desktop. -->
       <div class="relative z-10 flex h-full flex-col px-6 py-6 sm:px-8 sm:py-8 lg:px-12 lg:py-12 xl:px-16 xl:py-14">
-        <div class="flex items-center gap-4">
+        <div data-login-copy="brand" class="flex items-center gap-4">
           <img
             src="/logo-putih.svg"
             alt=""
@@ -32,10 +32,10 @@
         </div>
 
         <div class="mt-[4vh] max-w-xl max-[380px]:mt-[3vh] lg:mt-[10vh] lg:flex lg:flex-1 lg:flex-col">
-          <h2 class="max-w-[16ch] text-4xl font-semibold leading-[1.06] tracking-[-0.03em] text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.55)] max-[380px]:text-3xl sm:text-5xl xl:text-6xl">
+          <h2 data-login-copy="title" class="max-w-[16ch] text-4xl font-semibold leading-[1.06] tracking-[-0.03em] text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.55)] max-[380px]:text-3xl sm:text-5xl xl:text-6xl">
             Kelola tiket dan kunjungan dalam satu tempat.
           </h2>
-          <p class="mt-5 text-base text-white/85 drop-shadow-[0_2px_6px_rgba(0,0,0,0.55)] sm:text-lg lg:mt-auto">
+          <p data-login-copy="description" class="mt-5 text-base text-white/85 drop-shadow-[0_2px_6px_rgba(0,0,0,0.55)] sm:text-lg lg:mt-auto">
             Dashboard admin &amp; gate
           </p>
         </div>
@@ -43,3 +43,37 @@
     </aside>
   </main>
 </template>
+
+<style scoped>
+@media (prefers-reduced-motion: no-preference) {
+  [data-login-copy] {
+    animation: login-copy-reveal 650ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  [data-login-copy='brand'] {
+    animation-delay: 80ms;
+  }
+
+  [data-login-copy='title'] {
+    animation-delay: 220ms;
+  }
+
+  [data-login-copy='description'] {
+    animation-delay: 360ms;
+  }
+}
+
+@keyframes login-copy-reveal {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+    filter: blur(3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    filter: blur(0);
+  }
+}
+</style>

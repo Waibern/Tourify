@@ -50,6 +50,10 @@ const chartData = computed(() => {
 })
 
 const total = computed(() => props.series.reduce((sum, point) => sum + point.booking_value, 0))
+// Nominal selisih memakai rupiah dan arah perubahan tetap ditunjukkan persentase.
+const totalDifference = computed(() => props.previousValue === null
+  ? null
+  : Math.abs(total.value - props.previousValue))
 // Nilai omzet dibandingkan dengan rentang yang sama tepat sebelumnya.
 const totalChange = computed(() => props.previousValue === null
   ? null
@@ -85,16 +89,23 @@ const totalChange = computed(() => props.previousValue === null
             <p class="text-3xl text-highlighted font-semibold">
               {{ currencyFormat(total) }}
             </p>
-            <UBadge
-              v-if="totalChange"
-              :color="totalChange.color"
-              variant="subtle"
-              size="sm"
-              class="rounded-full tabular-nums"
+            <p
+              v-if="totalChange && totalDifference !== null"
+              class="text-sm tabular-nums"
               title="Dibandingkan rentang tanggal sebelumnya"
             >
-              {{ totalChange.label }}
-            </UBadge>
+              <span
+                class="font-medium"
+                :class="{
+                  'text-primary': totalChange.color === 'success',
+                  'text-error': totalChange.color === 'error',
+                  'text-muted': totalChange.color === 'neutral'
+                }"
+              >
+                {{ totalChange.label }} ({{ currencyFormat(totalDifference) }})
+              </span>
+              <span class="ms-1 text-muted">· vs periode sebelumnya</span>
+            </p>
           </div>
         </div>
         <!-- Keadaan kosong tetap pendek dan memberi langkah berikutnya. -->

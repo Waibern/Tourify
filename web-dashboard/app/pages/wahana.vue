@@ -5,11 +5,12 @@ import type { DashboardApiResponse, TourifyWahana, WahanaUpdateApiResponse } fro
 import { wahanaImage } from '~/utils/wahana-images'
 
 const api = useTourifyApi()
+const { notifySuccess } = useDashboardNotifications()
 const wahana = ref<TourifyWahana[]>([])
 const search = ref('')
 const sort = ref('name')
-// Kartu tetap jadi tampilan awal; daftar memudahkan membandingkan harga saat kerja admin.
-const view = ref<'cards' | 'list'>('cards')
+// Daftar ringkas tampil pertama; kartu foto tetap tersedia dari pilihan tampilan.
+const view = ref<'cards' | 'list'>('list')
 const loading = ref(true)
 const saving = ref(false)
 const editorOpen = ref(false)
@@ -25,8 +26,6 @@ const wahanaGridStyle = {
 watch([search, sort], () => {
   pagination.value.pageIndex = 0
 })
-const toast = useToast()
-
 const editorState = reactive({
   name: '',
   description: '',
@@ -124,11 +123,7 @@ async function saveWahana(event: FormSubmitEvent<WahanaForm>) {
       item.id === response.wahana?.id ? response.wahana : item
     )
     editorOpen.value = false
-    toast.add({
-      title: 'Perubahan tersimpan',
-      description: response.message || response.wahana.name,
-      color: 'success'
-    })
+    notifySuccess('Perubahan tersimpan', response.message || response.wahana.name)
   } catch (error) {
     editorErrorMessage.value = getTourifyErrorMessage(error, 'Perubahan wahana gagal disimpan.')
   } finally {
@@ -202,7 +197,7 @@ useDashboardAutoRefresh(() => loadWahana(true), () => loading.value || saving.va
               @click="view = 'cards'"
             />
             <UButton
-              label="Daftar"
+              label="Daftar ringkas"
               icon="i-lucide-list"
               color="neutral"
               :variant="view === 'list' ? 'subtle' : 'outline'"

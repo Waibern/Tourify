@@ -293,7 +293,7 @@ fun HomeScreen(
         ),
         verticalArrangement = Arrangement.spacedBy(22.dp)
     ) {
-        // sapaan & judul
+        // Sapaan dan judul beranda.
         item {
             Row(
                 verticalAlignment = Alignment.CenterVertically
@@ -313,8 +313,9 @@ fun HomeScreen(
                                 it.toString()
                             }
                         }
+                    // Sapaan di halaman beranda.
                     Text(
-                        "Hello, $displayName",
+                        "Halo, $displayName",
                         color = Forest,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
@@ -378,7 +379,7 @@ fun HomeScreen(
             (viewModel.isLoadingWahana || featured != null)
         ) item {
             Text(
-                text = "Recommended Destination",
+                text = "Destinasi pilihan",
                 color = Ink,
                 fontSize = 21.sp,
                 fontWeight = FontWeight.Bold

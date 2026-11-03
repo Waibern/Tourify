@@ -1,5 +1,15 @@
 import type { DashboardActivityApiResponse, DashboardActivityCursor } from '~/types/tourify'
 
+export interface DashboardActivityNotification {
+  activity: DashboardActivityApiResponse['events'][number]
+  unread: boolean
+}
+
+// Panel lonceng memakai feed yang sama dengan notifikasi aktivitas langsung.
+export function useDashboardActivityFeed() {
+  return useState<DashboardActivityNotification[]>('tourify-dashboard-activity-feed', () => [])
+}
+
 // Monitor tinggal di layout agar berpindah halaman tidak mengulang patokan atau notifikasi.
 export function useDashboardActivity() {
   const api = useTourifyApi()
@@ -7,6 +17,7 @@ export function useDashboardActivity() {
   const route = useRoute()
   const toast = useToast()
   const { notify } = useDashboardNotifications()
+  const notificationFeed = useDashboardActivityFeed()
   const newOrderCount = ref(0)
   const newCustomerCount = ref(0)
   let cursor: DashboardActivityCursor | null = null
@@ -45,6 +56,9 @@ export function useDashboardActivity() {
         if (event.type === 'order' && route.path !== '/orders') newOrderCount.value++
         if (event.type === 'customer' && route.path !== '/customers') newCustomerCount.value++
         const id = notify(event)
+        if (!id) continue
+        notificationFeed.value.unshift({ activity: event, unread: true })
+        if (notificationFeed.value.length > 30) notificationFeed.value.length = 30
         // Nuxt memasang toast pada tick berikutnya; batalkan juga antreannya bila akun sudah keluar.
         await nextTick()
         if (disposed || requestGeneration !== generation) {
@@ -65,6 +79,7 @@ export function useDashboardActivity() {
     cursor = null
     newOrderCount.value = 0
     newCustomerCount.value = 0
+    notificationFeed.value = []
     dismissActivity()
     if (import.meta.client) void poll()
   }, { immediate: true })

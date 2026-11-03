@@ -34,6 +34,17 @@ class AuthViewModel : ViewModel() {
         errorMessage = ""
     }
 
+    // Gagal kirim presensi jangan sampai mengganggu login.
+    suspend fun updateCustomerPresence() {
+        val token = currentAccessToken
+        if (token.isBlank()) return
+
+        try {
+            ApiClient.service.updateCustomerPresence("Bearer $token")
+        } catch (_: Exception) {
+        }
+    }
+
     fun register(username: String, password: String, onSuccess: () -> Unit) {
         viewModelScope.launch {
             isLoading = true

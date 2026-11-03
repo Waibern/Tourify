@@ -7,13 +7,16 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
@@ -21,12 +24,17 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -43,14 +51,21 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tourify_v2.model.Ticket
+import com.example.tourify_v2.ui.theme.TourifyBorder
 import com.example.tourify_v2.ui.theme.TourifyError
 import com.example.tourify_v2.ui.theme.TourifyForest
+import com.example.tourify_v2.ui.theme.TourifyInk
+import com.example.tourify_v2.ui.theme.TourifyMuted
+import com.example.tourify_v2.ui.theme.TourifySoftSurface
 import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -68,6 +83,7 @@ fun AccountScreen(
     tickets: List<Ticket>,
     isLoadingTickets: Boolean,
     ticketsError: String,
+    onRetryTickets: () -> Unit,
     onProfileImageSelected: (ByteArray, String) -> Unit,
     onTicketsClick: () -> Unit,
     onDestinationsClick: () -> Unit,
@@ -101,13 +117,9 @@ fun AccountScreen(
     var selectedImageError by remember {
         mutableStateOf("")
     }
-    val statsReady = !isLoadingTickets && ticketsError.isBlank()
     // Abaikan tiket dari sesi akun sebelumnya saat pengguna berganti.
     val accountTickets = tickets.filter {
         it.username == currentUser
-    }
-    val countText: (Int) -> String = {
-        if (statsReady) it.toString() else "—"
     }
     val imagePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -164,99 +176,105 @@ fun AccountScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF6FAF8))
+            .background(Color.White)
     ) {
-        // Latar polos biar bayangan kartu kelihatan.
+        // Latar putih bikin profil lebih bersih.
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .navigationBarsPadding()
                 .padding(
-                    start = 24.dp,
-                    top = 28.dp,
-                    end = 24.dp,
-                    bottom = 116.dp
+                    start = 20.dp,
+                    top = 24.dp,
+                    end = 20.dp,
+                    bottom = 64.dp
                 ),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            verticalArrangement = Arrangement.spacedBy(22.dp)
         ) {
             // Judul profil ikut gaya layar lain.
             TourifyScreenTitle(
-                text = "Profil"
+                text = "Profil",
             )
 
-            // Foto dari server dipakai di sini; inisial tetap jadi cadangan.
-            // Kartu utama bikin identitas akun lebih rapi.
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                color = Color.White,
-                shadowElevation = 5.dp
+            // Inisial muncul kalau foto belum bisa dimuat.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.padding(20.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .clip(CircleShape)
+                        .background(Color.White)
+                        .border(
+                            width = 1.dp,
+                            color = TourifyBorder,
+                            shape = CircleShape
+                        )
+                        .semantics {
+                            contentDescription = "Foto profil $accountName"
+                        },
+                    contentAlignment = Alignment.Center
                 ) {
-                    Surface(
-                        modifier = Modifier.size(76.dp),
-                        shape = CircleShape,
-                        color = Color(0xFFD9F5EF)
-                    ) {
-                        Box(
-                            contentAlignment = Alignment.Center
-                        ) {
-                            val imageModel = selectedImageBitmap
-                                ?: profileImageUrl
-                            if (imageModel != null) {
-                                AsyncImage(
-                                    model = imageModel,
-                                    contentDescription = "Foto profil $accountName",
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop
-                                )
-                            } else {
-                                Text(
-                                    accountName.firstOrNull()?.uppercase() ?: "?",
-                                    color = TourifyForest,
-                                    fontSize = 32.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+                    Text(
+                        text = accountName.firstOrNull()?.uppercase() ?: "?",
+                        color = TourifyForest,
+                        style = MaterialTheme.typography.headlineMedium,
+                        modifier = Modifier.semantics {
+                            hideFromAccessibility()
                         }
+                    )
+                    val imageModel = selectedImageBitmap
+                        ?: profileImageUrl
+                    if (imageModel != null) {
+                        AsyncImage(
+                            model = imageModel,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
                     }
-                    Spacer(modifier = Modifier.width(18.dp))
-                    Column(
-                        modifier = Modifier.weight(1f)
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = accountName,
+                        color = TourifyInk,
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    // Tombol untuk ganti foto profil.
+                    OutlinedButton(
+                        onClick = {
+                            showImageSourceDialog = true
+                        },
+                        enabled = !isImageBusy,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = TourifyBorder
+                        ),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = TourifyForest
+                        )
                     ) {
-                        Text(
-                            accountName,
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            "Akun Tourify",
-                            fontSize = 14.sp,
-                            color = Color(0xFF777D80)
+                            if (isImageBusy) "Menyimpan foto…" else "Ubah foto"
                         )
-                        // Galeri dan kamera memakai alur upload foto profil yang sama.
-                        TextButton(
-                            onClick = {
-                                showImageSourceDialog = true
-                            },
-                            enabled = !isImageBusy
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                if (isImageBusy) "Menyimpan foto…" else "Ubah foto"
-                            )
-                        }
                     }
                 }
             }
@@ -264,81 +282,141 @@ fun AccountScreen(
                 Text(
                     imageError,
                     color = TourifyError,
-                    fontSize = 13.sp
+                    fontSize = 14.sp
                 )
             }
 
-            // Angka ringkasan dihitung dari tiket akun yang dimuat server.
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                ProfileStat(
-                    countText(accountTickets.size),
-                    "Pesanan",
-                    Modifier.weight(1f)
-                )
-                ProfileStat(
-                    countText(
-                        accountTickets.sumOf {
-                            it.quantity
-                        }
-                    ),
-                    "Tiket",
-                    Modifier.weight(1f)
-                )
-                ProfileStat(
-                    countText(
-                        accountTickets.sumOf {
-                            it.checkedInQuantity
-                        }
-                    ),
-                    "Check-in",
-                    Modifier.weight(1f)
-                )
-            }
-            if (ticketsError.isNotBlank()) {
-                Text(
-                    ticketsError,
-                    color = TourifyError,
-                    fontSize = 13.sp
-                )
-            }
-
-            // Baris menu membuka fitur Tourify yang sudah ada.
+            // Tampilkan ringkasan aktivitas akun.
             Column(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    "Umum",
-                    color = Color(0xFF777D80),
-                    fontSize = 14.sp
+                    text = "Aktivitas perjalanan",
+                    color = TourifyInk,
+                    style = MaterialTheme.typography.titleMedium
                 )
-                ProfileMenuRow(
-                    "Tiket Saya",
-                    Icons.AutoMirrored.Filled.ReceiptLong,
-                    onTicketsClick
-                )
-                ProfileMenuRow(
-                    "Jelajahi Destinasi",
-                    Icons.Default.Explore,
-                    onDestinationsClick
-                )
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color.White,
+                    shadowElevation = 5.dp
+                ) {
+                    when {
+                        isLoadingTickets -> {
+                            Row(
+                                modifier = Modifier.padding(18.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Text(
+                                    text = "Memuat ringkasan perjalanan…",
+                                    color = TourifyMuted,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
+
+                        ticketsError.isNotBlank() -> {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "Ringkasan belum tersedia",
+                                    color = TourifyError,
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                                Text(
+                                    text = ticketsError,
+                                    color = TourifyMuted,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                TextButton(
+                                    onClick = onRetryTickets,
+                                    modifier = Modifier.heightIn(min = 48.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = null
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Coba lagi")
+                                }
+                            }
+                        }
+
+                        else -> {
+                            Column {
+                                ProfileActivityRow(
+                                    label = "Pesanan",
+                                    value = accountTickets.size.toString()
+                                )
+                                ProfileActivityDivider()
+                                ProfileActivityRow(
+                                    label = "Tiket",
+                                    value = accountTickets.sumOf {
+                                        it.quantity
+                                    }.toString()
+                                )
+                                ProfileActivityDivider()
+                                ProfileActivityRow(
+                                    label = "Check-in",
+                                    value = accountTickets.sumOf {
+                                        it.checkedInQuantity
+                                    }.toString()
+                                )
+                            }
+                        }
+                    }
+                }
             }
+
+            // Pintasan akun.
             Column(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    "Akun",
-                    color = Color(0xFF777D80),
-                    fontSize = 14.sp
+                    text = "Akses cepat",
+                    color = TourifyInk,
+                    style = MaterialTheme.typography.titleMedium
                 )
-                ProfileMenuRow(
-                    "Keluar dari akun",
-                    Icons.AutoMirrored.Filled.Logout,
-                    onLogout,
-                    TourifyError
-                )
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color.White,
+                    shadowElevation = 5.dp
+                ) {
+                    Column {
+                        ProfileMenuRow(
+                            label = "Tiket saya",
+                            supportingText = "Pesanan dan kode QR",
+                            icon = Icons.AutoMirrored.Filled.ReceiptLong,
+                            onClick = onTicketsClick
+                        )
+                        ProfileMenuDivider()
+                        ProfileMenuRow(
+                            label = "Jelajahi destinasi",
+                            supportingText = "Temukan wahana berikutnya",
+                            icon = Icons.Default.Explore,
+                            onClick = onDestinationsClick
+                        )
+                    }
+                }
             }
+
+            // Tombol keluar dipisah dari menu lain.
+            ProfileMenuRow(
+                label = "Keluar dari akun",
+                icon = Icons.AutoMirrored.Filled.Logout,
+                onClick = onLogout,
+                tint = TourifyError,
+                iconBackground = Color(0xFFFDECEA),
+                showArrow = false
+            )
         }
 
         // Pilihan sumber foto tetap lewat pemilih sistem Android.
@@ -475,7 +553,10 @@ private fun ProfileImageCropDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text("Atur foto profil")
+            Text(
+                text = "Atur foto profil",
+                style = MaterialTheme.typography.titleLarge
+            )
         },
         text = {
             Column(
@@ -513,13 +594,13 @@ private fun ProfileImageCropDialog(
                     )
                 }
                 Text(
-                    text = "Geser posisi dan zoom sampai pas.",
-                    fontSize = 13.sp,
-                    color = Color(0xFF646B6E)
+                    text = "Atur pembesaran dan posisi foto dengan penggeser di bawah.",
+                    fontSize = 14.sp,
+                    color = TourifyMuted
                 )
                 Text(
                     text = "Zoom ${((zoom - 1f) * 100).toInt()}%",
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Medium
                 )
                 Slider(
@@ -530,7 +611,7 @@ private fun ProfileImageCropDialog(
                 )
                 Text(
                     text = "Posisi horizontal",
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Medium
                 )
                 Slider(
@@ -540,7 +621,7 @@ private fun ProfileImageCropDialog(
                 )
                 Text(
                     text = "Posisi vertikal",
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Medium
                 )
                 Slider(
@@ -552,7 +633,7 @@ private fun ProfileImageCropDialog(
                     Text(
                         text = error,
                         color = TourifyError,
-                        fontSize = 13.sp
+                        fontSize = 14.sp
                     )
                 }
             }
@@ -576,73 +657,124 @@ private fun ProfileImageCropDialog(
     )
 }
 
+// Angka dan label aktivitas ditaruh dalam satu baris.
 @Composable
-private fun ProfileStat(
-    value: String,
+private fun ProfileActivityRow(
     label: String,
-    modifier: Modifier = Modifier
+    value: String
 ) {
-    // Kartu kecil dengan bayangan tipis buat ringkasan.
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(20.dp),
-        color = Color.White,
-        shadowElevation = 3.dp
-    ) {
-        Column(
-            modifier = Modifier.padding(
-                vertical = 18.dp,
-                horizontal = 4.dp
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                horizontal = 16.dp,
+                vertical = 14.dp
             ),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                value,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                label,
-                fontSize = 13.sp,
-                color = Color(0xFF646B6E)
-            )
-        }
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f),
+            color = TourifyMuted,
+            style = MaterialTheme.typography.bodyLarge
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = value,
+            color = TourifyInk,
+            style = MaterialTheme.typography.titleMedium
+        )
     }
+}
+
+// Garis pemisah antaraktivitas.
+@Composable
+private fun ProfileActivityDivider() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(1.dp)
+            .background(TourifyBorder)
+    )
+}
+
+@Composable
+private fun ProfileMenuDivider() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                start = 74.dp,
+                end = 16.dp
+            )
+            .height(1.dp)
+            .background(TourifyBorder)
+    )
 }
 
 @Composable
 private fun ProfileMenuRow(
     label: String,
+    supportingText: String? = null,
     icon: ImageVector,
     onClick: () -> Unit,
-    tint: Color = Color(0xFF202729)
+    tint: Color = TourifyInk,
+    iconBackground: Color = TourifySoftSurface,
+    showArrow: Boolean = true
 ) {
-    // Bayangan halus bantu bedakan baris menu dari latar.
-    Surface(
-        shape = RoundedCornerShape(18.dp),
-        color = Color.White,
-        shadowElevation = 3.dp
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .heightIn(min = 68.dp)
+            .padding(
+                horizontal = 16.dp,
+                vertical = 12.dp
+            ),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(72.dp)
-                .clickable(onClick = onClick)
-                .padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Surface(
+            modifier = Modifier.size(44.dp),
+            shape = RoundedCornerShape(12.dp),
+            color = iconBackground
         ) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = tint,
-                modifier = Modifier.size(23.dp)
-            )
-            Spacer(Modifier.width(16.dp))
+            Box(
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
             Text(
-                label,
+                text = label,
                 color = tint,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+            supportingText?.let {
+                Text(
+                    text = it,
+                    color = TourifyMuted,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+        if (showArrow) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                tint = TourifyMuted,
+                modifier = Modifier.size(20.dp)
             )
         }
     }
@@ -659,6 +791,7 @@ fun AccountScreenPreview() {
         tickets = emptyList(),
         isLoadingTickets = false,
         ticketsError = "",
+        onRetryTickets = {},
         onProfileImageSelected = { _, _ -> },
         onTicketsClick = {},
         onDestinationsClick = {},

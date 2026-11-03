@@ -12,12 +12,15 @@ const customerId = computed(() => typeof route.query.customer === 'string' && /^
 const UAvatar = resolveComponent('UAvatar')
 const UCheckbox = resolveComponent('UCheckbox')
 const customers = ref<DashboardCustomer[]>([])
+const onlineCount = ref<number | null>(null)
 const search = ref('')
 const sort = ref('newest')
 const loading = ref(true)
 const errorMessage = ref('')
 const table = useTemplateRef('table')
 const columnVisibility = ref()
+// Daftar datar jadi pilihan awal; kartu ringkas tetap bisa dipilih dari menu Tampilan.
+const viewMode = ref<'compact' | 'list'>('list')
 const pagination = ref({ pageIndex: 0, pageSize: 10 })
 // Seleksi memakai ID akun supaya tetap akurat saat urutan atau filter berubah.
 const rowSelection = ref<RowSelectionState>({})
@@ -54,6 +57,7 @@ async function loadCustomers(background = false) {
     if (JSON.stringify(customers.value) !== JSON.stringify(response.customers ?? [])) {
       customers.value = response.customers ?? []
     }
+    onlineCount.value = response.online_count
     errorMessage.value = ''
   } catch (error) {
     if (request === requestId) errorMessage.value = getTourifyErrorMessage(error, 'Daftar pelanggan gagal dimuat.')
@@ -87,7 +91,6 @@ const numberFormat = new Intl.NumberFormat('id-ID')
 const summaryCards = computed(() => {
   const allCustomers = customers.value
   const newThisMonth = allCustomers.filter(customer => customer.created_at.slice(0, 7) === currentMonth.value).length
-  const customersWithOrders = allCustomers.filter(customer => customer.order_count > 0).length
 
   return [
     {
@@ -103,10 +106,10 @@ const summaryCards = computed(() => {
       icon: 'i-lucide-user-round-plus'
     },
     {
-      label: 'Sudah memesan',
-      value: numberFormat.format(customersWithOrders),
-      hint: 'Pernah membuat pesanan',
-      icon: 'i-lucide-ticket-check'
+      label: 'Pelanggan online',
+      value: onlineCount.value === null ? '—' : numberFormat.format(onlineCount.value),
+      hint: 'Aktif dalam 5 menit terakhir',
+      icon: 'i-lucide-wifi'
     }
   ]
 })
@@ -180,6 +183,8 @@ watch([search, sort, customerId], () => {
 
 const columns: TableColumn<DashboardCustomer>[] = [{
   id: 'select',
+  // Kotak seleksi tetap ada dan bukan kolom data yang bisa disembunyikan.
+  enableHiding: false,
   header: ({ table: tableInstance }) => h(UCheckbox, {
     'aria-label': 'Pilih semua pelanggan di halaman ini',
     'modelValue': tableInstance.getIsAllPageRowsSelected(),
@@ -224,20 +229,55 @@ const columns: TableColumn<DashboardCustomer>[] = [{
   cell: ({ row }) => formatRupiah(row.original.booking_value)
 }]
 
-// Menu ini memakai kolom tabel yang betul-betul tersedia di data Tourify.
-const displayItems = computed(() => table.value?.tableApi?.getAllColumns()
-  .filter(column => column.getCanHide())
-  .map(column => ({
-    label: String(column.columnDef.header ?? column.id),
-    type: 'checkbox' as const,
-    checked: column.getIsVisible(),
-    onUpdateChecked(checked: boolean) {
-      table.value?.tableApi?.getColumn(column.id)?.toggleVisibility(checked)
+// Daftar di layar kecil mengikuti kolom data yang dipilih petugas.
+function isCustomerColumnVisible(id: string): boolean {
+  return columnVisibility.value?.[id] !== false
+}
+
+// Item menu tabel mengabaikan header fungsi supaya kode checkbox tidak tampil sebagai label.
+const displayItems = computed(() => {
+  const items = [
+    { label: 'Tampilan pelanggan', type: 'label' as const },
+    {
+      label: 'Ringkas',
+      icon: viewMode.value === 'compact' ? 'i-lucide-check' : 'i-lucide-panels-top-left',
+      onSelect() {
+        viewMode.value = 'compact'
+      }
     },
-    onSelect(event?: Event) {
-      event?.preventDefault()
+    {
+      label: 'Daftar',
+      icon: viewMode.value === 'list' ? 'i-lucide-check' : 'i-lucide-list',
+      onSelect() {
+        viewMode.value = 'list'
+      }
     }
-  })))
+  ]
+  const columns = table.value?.tableApi?.getAllColumns().filter(column =>
+    column.getCanHide() && typeof column.columnDef.header !== 'function'
+  )
+
+  if (viewMode.value === 'list' && columns?.length) {
+    return [
+      ...items,
+      { type: 'separator' as const },
+      { label: 'Kolom tabel', type: 'label' as const },
+      ...columns.map(column => ({
+        label: typeof column.columnDef.header === 'string' ? column.columnDef.header : column.id,
+        type: 'checkbox' as const,
+        checked: column.getIsVisible(),
+        onUpdateChecked(checked: boolean) {
+          table.value?.tableApi?.getColumn(column.id)?.toggleVisibility(checked)
+        },
+        onSelect(event?: Event) {
+          event?.preventDefault()
+        }
+      }))
+    ]
+  }
+
+  return items
+})
 
 onMounted(() => loadCustomers())
 useDashboardAutoRefresh(() => loadCustomers(true), () => loading.value)
@@ -345,7 +385,7 @@ useDashboardAutoRefresh(() => loadCustomers(true), () => loading.value)
           :data="filteredCustomers"
           :columns="columns"
           :loading="loading"
-          class="hidden shrink-0 xl:block"
+          :class="viewMode === 'list' ? 'hidden shrink-0 xl:block' : 'hidden'"
           :ui="{
             base: 'table-fixed border-separate border-spacing-0',
             thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
@@ -360,8 +400,8 @@ useDashboardAutoRefresh(() => loadCustomers(true), () => loading.value)
           </template>
         </UTable>
 
-        <!-- Seleksi hapus tetap tersedia di HP dan akun berpesanan tetap terlindungi. -->
-        <div class="space-y-3 xl:hidden">
+        <!-- Kartu ringkas tetap membawa seleksi hapus dan ringkasan tiap pelanggan. -->
+        <div v-if="viewMode === 'compact'" class="space-y-3">
           <p v-if="loading && !customers.length" role="status" class="py-6 text-center text-sm text-muted">
             Memuat pelanggan…
           </p>
@@ -427,6 +467,82 @@ useDashboardAutoRefresh(() => loadCustomers(true), () => loading.value)
             </dl>
           </article>
         </div>
+
+        <!-- Daftar satu baris menjaga seleksi dan kolom pilihan di layar kecil. -->
+        <section
+          v-if="viewMode === 'list'"
+          aria-label="Daftar pelanggan"
+          class="divide-y divide-default border-y border-default xl:hidden"
+        >
+          <p v-if="loading && !customers.length" role="status" class="py-6 text-center text-sm text-muted">
+            Memuat pelanggan…
+          </p>
+          <p v-else-if="!mobileCustomers.length" class="py-6 text-center text-sm text-muted">
+            {{ search || customerId ? 'Pelanggan tidak ditemukan.' : 'Belum ada akun pelanggan.' }}
+          </p>
+          <article
+            v-for="customer in mobileCustomers"
+            :key="customer.id"
+            class="flex flex-wrap items-center gap-x-5 gap-y-3 px-1 py-3 sm:px-3"
+          >
+            <div class="flex min-w-48 flex-1 items-center gap-3">
+              <UCheckbox
+                :model-value="Boolean(rowSelection[String(customer.id)])"
+                :disabled="customer.order_count > 0"
+                :aria-label="`Pilih pelanggan ${customer.username} untuk dihapus`"
+                class="min-h-11 min-w-11 justify-center"
+                @update:model-value="(value: boolean) => updateCustomerSelection(customer, value)"
+              />
+              <UAvatar
+                :src="api.assetUrl(customer.profile_image)"
+                :text="avatarText(customer.username)"
+                :alt="`Foto profil ${customer.username}`"
+                color="primary"
+                size="md"
+              />
+              <div class="min-w-0">
+                <p class="truncate font-medium text-highlighted">
+                  {{ customer.username }}
+                </p>
+                <p v-if="isCustomerColumnVisible('id') || isCustomerColumnVisible('created_at')" class="mt-1 text-sm text-muted">
+                  <span v-if="isCustomerColumnVisible('id')">ID {{ customer.id }}</span>
+                  <span v-if="isCustomerColumnVisible('id') && isCustomerColumnVisible('created_at')"> · </span>
+                  <span v-if="isCustomerColumnVisible('created_at')">{{ formatDate(customer.created_at) }}</span>
+                </p>
+              </div>
+            </div>
+
+            <dl
+              v-if="isCustomerColumnVisible('order_count') || isCustomerColumnVisible('ticket_count') || isCustomerColumnVisible('booking_value')"
+              class="grid w-full grid-cols-2 gap-x-4 gap-y-2 text-sm sm:w-auto sm:flex sm:flex-wrap sm:gap-x-5"
+            >
+              <div v-if="isCustomerColumnVisible('order_count')">
+                <dt class="text-muted">
+                  Pesanan
+                </dt>
+                <dd class="mt-1 tabular-nums text-highlighted">
+                  {{ customer.order_count }}
+                </dd>
+              </div>
+              <div v-if="isCustomerColumnVisible('ticket_count')">
+                <dt class="text-muted">
+                  Tiket dipesan
+                </dt>
+                <dd class="mt-1 tabular-nums text-highlighted">
+                  {{ customer.ticket_count }}
+                </dd>
+              </div>
+              <div v-if="isCustomerColumnVisible('booking_value')">
+                <dt class="text-muted">
+                  Nilai pemesanan
+                </dt>
+                <dd class="mt-1 font-medium tabular-nums text-highlighted">
+                  {{ formatRupiah(customer.booking_value) }}
+                </dd>
+              </div>
+            </dl>
+          </article>
+        </section>
 
         <p class="text-sm text-muted">
           Akun yang punya riwayat pesanan tidak bisa dipilih agar data transaksi tetap tersimpan.

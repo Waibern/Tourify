@@ -21,6 +21,8 @@ const errorMessage = ref('')
 let requestId = 0
 const table = useTemplateRef('table')
 const columnVisibility = ref()
+// Daftar jadi tampilan awal; kartu ringkas tetap bisa dipilih dari menu.
+const viewMode = ref<'compact' | 'list'>('list')
 
 // Polling memperbarui riwayat tanpa mengosongkan tabel atau mengubah filter petugas.
 async function loadRows(background = false) {
@@ -105,20 +107,53 @@ const columns: TableColumn<DashboardCheckin>[] = [
   { accessorKey: 'staff_username', header: 'Petugas' }
 ]
 
-// Menu tampilan hanya menampilkan kolom yang tersedia di riwayat check-in.
-const displayItems = computed(() => table.value?.tableApi?.getAllColumns()
-  .filter(column => column.getCanHide())
-  .map(column => ({
-    label: String(column.columnDef.header ?? column.id),
-    type: 'checkbox' as const,
-    checked: column.getIsVisible(),
-    onUpdateChecked(checked: boolean) {
-      table.value?.tableApi?.getColumn(column.id)?.toggleVisibility(checked)
+// Daftar di layar kecil mengikuti kolom yang dipilih petugas.
+function isCheckinColumnVisible(id: string): boolean {
+  return columnVisibility.value?.[id] !== false
+}
+
+// Menu Tampilan mengatur mode riwayat dan kolom tabel saat mode daftar aktif.
+const displayItems = computed(() => {
+  const items = [
+    { label: 'Tampilan riwayat', type: 'label' as const },
+    {
+      label: 'Ringkas',
+      icon: viewMode.value === 'compact' ? 'i-lucide-check' : 'i-lucide-panels-top-left',
+      onSelect() {
+        viewMode.value = 'compact'
+      }
     },
-    onSelect(event?: Event) {
-      event?.preventDefault()
+    {
+      label: 'Daftar',
+      icon: viewMode.value === 'list' ? 'i-lucide-check' : 'i-lucide-list',
+      onSelect() {
+        viewMode.value = 'list'
+      }
     }
-  })))
+  ]
+  const columns = table.value?.tableApi?.getAllColumns().filter(column => column.getCanHide())
+
+  if (viewMode.value === 'list' && columns?.length) {
+    return [
+      ...items,
+      { type: 'separator' as const },
+      { label: 'Kolom tabel', type: 'label' as const },
+      ...columns.map(column => ({
+        label: String(column.columnDef.header ?? column.id),
+        type: 'checkbox' as const,
+        checked: column.getIsVisible(),
+        onUpdateChecked(checked: boolean) {
+          table.value?.tableApi?.getColumn(column.id)?.toggleVisibility(checked)
+        },
+        onSelect(event?: Event) {
+          event?.preventDefault()
+        }
+      }))
+    ]
+  }
+
+  return items
+})
 </script>
 
 <template>
@@ -218,7 +253,7 @@ const displayItems = computed(() => table.value?.tableApi?.getAllColumns()
           :data="rows"
           :columns="columns"
           :loading="loading"
-          class="hidden shrink-0 xl:block"
+          :class="viewMode === 'list' ? 'hidden shrink-0 xl:block' : 'hidden'"
           :ui="{
             base: 'w-full border-separate border-spacing-0',
             thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
@@ -255,8 +290,8 @@ const displayItems = computed(() => table.value?.tableApi?.getAllColumns()
           </template>
         </UTable>
 
-        <!-- Setiap kartu mewakili satu orang yang benar-benar tercatat masuk. -->
-        <div class="space-y-3 xl:hidden">
+        <!-- Kartu ringkas tetap memperlihatkan waktu, wahana, dan petugas. -->
+        <div v-if="viewMode === 'compact'" class="space-y-3">
           <p v-if="loading && !rows.length" role="status" class="py-6 text-center text-sm text-muted">
             Memuat riwayat check-in…
           </p>
@@ -310,6 +345,66 @@ const displayItems = computed(() => table.value?.tableApi?.getAllColumns()
             </dl>
           </article>
         </div>
+
+        <!-- Daftar satu baris memadatkan riwayat pada layar kecil. -->
+        <section
+          v-if="viewMode === 'list'"
+          aria-label="Daftar riwayat check-in"
+          class="divide-y divide-default border-y border-default xl:hidden"
+        >
+          <p v-if="loading && !rows.length" role="status" class="py-6 text-center text-sm text-muted">
+            Memuat riwayat check-in…
+          </p>
+          <p v-else-if="!rows.length" class="py-6 text-center text-sm text-muted">
+            {{ search || date ? 'Tidak ada riwayat sesuai filter.' : ticketId ? `Belum ada pengunjung masuk untuk tiket #${ticketId}.` : 'Riwayat check-in akan tampil setelah tiket dipindai.' }}
+          </p>
+          <article
+            v-for="checkin in rows"
+            :key="checkin.id"
+            class="flex flex-wrap items-center gap-x-5 gap-y-3 px-1 py-3 sm:px-3"
+          >
+            <div class="min-w-36 flex-1">
+              <NuxtLink
+                :to="{ path: '/orders', query: { ticket: checkin.ticket_id } }"
+                class="inline-flex min-h-11 items-center rounded font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
+                :aria-label="`Lihat pesanan tiket #${checkin.ticket_id} milik ${checkin.username}`"
+              >
+                Tiket #{{ checkin.ticket_id }}
+              </NuxtLink>
+              <p class="break-words text-sm text-muted">
+                {{ checkin.username }}
+              </p>
+            </div>
+
+            <dl class="grid w-full grid-cols-2 gap-x-4 gap-y-2 text-sm sm:w-auto sm:flex sm:flex-wrap sm:gap-x-5">
+              <div v-if="isCheckinColumnVisible('scanned_at')">
+                <dt class="text-muted">
+                  Waktu masuk
+                </dt>
+                <dd class="mt-1 tabular-nums text-highlighted">
+                  {{ checkin.scanned_at.split(' ')[1]?.slice(0, 8) }} WIB
+                  <span class="ml-2 text-muted">{{ formatDate(checkin.scanned_at) }}</span>
+                </dd>
+              </div>
+              <div v-if="isCheckinColumnVisible('wahana_name')">
+                <dt class="text-muted">
+                  Wahana
+                </dt>
+                <dd class="mt-1 break-words text-highlighted">
+                  {{ checkin.wahana_name }}
+                </dd>
+              </div>
+              <div v-if="isCheckinColumnVisible('staff_username')">
+                <dt class="text-muted">
+                  Petugas
+                </dt>
+                <dd class="mt-1 break-words text-highlighted">
+                  {{ checkin.staff_username }}
+                </dd>
+              </div>
+            </dl>
+          </article>
+        </section>
 
         <div class="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-default pt-4">
           <p class="text-sm text-muted">

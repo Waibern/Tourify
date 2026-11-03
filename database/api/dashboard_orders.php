@@ -67,6 +67,31 @@ try {
         . 'COALESCE(SUM(total_price), 0) AS booking_value FROM tickets'
     )->fetch();
 
+    // Grafik kartu merangkum jumlah pesanan per hari selama 14 hari terakhir.
+    $todayDate = new DateTimeImmutable($today, new DateTimeZone('Asia/Jakarta'));
+    $trendStart = $todayDate->modify('-13 days');
+    $orderTrend = [];
+    for ($day = $trendStart; $day <= $todayDate; $day = $day->modify('+1 day')) {
+        $key = $day->format('Y-m-d');
+        $orderTrend[$key] = ['date' => $key, 'order_count' => 0];
+    }
+
+    $trendStatement = $pdo->prepare(
+        'SELECT DATE(booking_date) AS order_day, COUNT(*) AS order_count '
+        . 'FROM tickets WHERE booking_date >= :trend_start AND booking_date < :trend_end '
+        . 'GROUP BY DATE(booking_date) ORDER BY order_day'
+    );
+    $trendStatement->execute([
+        'trend_start' => $trendStart->format('Y-m-d'),
+        'trend_end' => $todayDate->modify('+1 day')->format('Y-m-d'),
+    ]);
+    foreach ($trendStatement->fetchAll() as $trendRow) {
+        $key = (string) $trendRow['order_day'];
+        if (isset($orderTrend[$key])) {
+            $orderTrend[$key]['order_count'] = (int) $trendRow['order_count'];
+        }
+    }
+
     $perPage = 20;
     $page = min($page, max(1, (int) ceil($total / $perPage)));
     // Pagination membatasi jumlah baris yang dibawa browser setiap permintaan.
@@ -91,6 +116,7 @@ try {
             'tickets' => (int) $summary['tickets'],
             'booking_value' => (int) $summary['booking_value'],
         ],
+        'order_trend' => array_values($orderTrend),
     ]);
 } catch (Throwable $exception) {
     handleApiError('dashboard orders', $exception);

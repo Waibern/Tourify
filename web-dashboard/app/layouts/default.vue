@@ -9,13 +9,13 @@ const route = useRoute()
 const { newOrderCount, newCustomerCount } = useDashboardActivity()
 
 const open = ref(false)
-const navigationSearch = ref('')
 const ghostHost = ref<HTMLElement | null>(null)
 const reducedMotion = usePreferredReducedMotion()
+const { asciiAnimations } = useDashboardPreferences()
 
 // Hantu tampil sebentar setiap kali sidebar dibuka, lalu canvas-nya dibersihkan.
-watch(ghostHost, (host, _previous, onCleanup) => {
-  if (!host || reducedMotion.value === 'reduce') return
+watch([ghostHost, reducedMotion, asciiAnimations], ([host, motion, animations], _previous, onCleanup) => {
+  if (!host || motion === 'reduce' || !animations) return
 
   const reveal = createAsciiReveal(host, { mascot: '/logo-putih.svg' })
   let destroyed = false
@@ -39,20 +39,9 @@ watch(ghostHost, (host, _previous, onCleanup) => {
   })
 }, { flush: 'post' })
 
-// Pencarian ini menyaring nama menu yang bisa dibuka role saat ini.
-const visibleLinks = computed(() => {
-  const query = navigationSearch.value.trim().toLocaleLowerCase('id-ID')
-  if (!query) return links.value
-
-  return links.value.filter(item =>
-    (item.label ?? '').toLocaleLowerCase('id-ID').includes(query)
-  )
-})
-
-// Pencarian dikosongkan setelah pindah halaman supaya semua menu muncul lagi.
+// Menu samping ditutup setelah halaman dipilih.
 function closeSidebar() {
   open.value = false
-  navigationSearch.value = ''
 }
 
 // Tutup menu HP saat sidebar menetap agar overlay tidak menyisakan kunci fokus.
@@ -61,6 +50,40 @@ watch(sidebarVisible, (visible) => {
   if (visible) {
     open.value = false
   }
+})
+
+// Tiap halaman pengaturan punya tautan sendiri seperti di template dashboard.
+const settingsLinks = computed<NavigationMenuItem[]>(() => {
+  const items: NavigationMenuItem[] = [{
+    label: 'Umum',
+    icon: 'i-lucide-user-round',
+    to: '/settings',
+    exact: true,
+    onSelect: closeSidebar
+  }]
+
+  if (auth.user.value?.role === 'admin') {
+    items.push({
+      label: 'Anggota',
+      icon: 'i-lucide-users-round',
+      to: '/settings/members',
+      onSelect: closeSidebar
+    })
+  }
+
+  items.push({
+    label: 'Tampilan',
+    icon: 'i-lucide-palette',
+    to: '/settings/appearance',
+    onSelect: closeSidebar
+  }, {
+    label: 'Keamanan',
+    icon: 'i-lucide-shield-check',
+    to: '/settings/security',
+    onSelect: closeSidebar
+  })
+
+  return items
 })
 
 // Menu utama hanya menampilkan halaman yang bisa dibuka role saat ini.
@@ -130,8 +153,38 @@ const links = computed<NavigationMenuItem[]>(() => {
     })
   }
 
-  return primary
+  // Ikon gear mengikuti template; pengaturan dibuka sebagai daftar halaman.
+  primary.push({
+    label: 'Pengaturan',
+    icon: 'i-lucide-settings',
+    to: '/settings',
+    type: 'trigger',
+    defaultOpen: true,
+    children: settingsLinks.value
+  })
+
+  // Nama tautan tetap terbaca saat sidebar hanya menampilkan ikon.
+  return primary.map(item => ({
+    ...item,
+    ...{ 'aria-label': item.label },
+    children: item.children?.map(child => ({
+      ...child,
+      ...{ 'aria-label': child.label }
+    }))
+  }))
 })
+
+// Palette memakai menu yang tersedia untuk role saat ini.
+const searchGroups = computed(() => [{
+  id: 'navigation',
+  label: 'Menu dashboard',
+  items: [...links.value, ...settingsLinks.value].map(item => ({
+    label: item.label,
+    icon: item.icon,
+    to: item.to,
+    onSelect: item.onSelect
+  }))
+}])
 </script>
 
 <template>
@@ -149,36 +202,24 @@ const links = computed<NavigationMenuItem[]>(() => {
       </template>
 
       <template #default="{ collapsed }">
-        <UInput
-          v-if="!collapsed"
-          v-model="navigationSearch"
-          icon="i-lucide-search"
-          placeholder="Cari menu"
-          aria-label="Cari menu navigasi"
-          size="sm"
-          class="mb-3 mx-1"
+        <UDashboardSearchButton
+          label="Cari menu"
+          :collapsed="collapsed"
+          class="bg-transparent ring-default"
         />
-
-        <p
-          v-if="!collapsed && navigationSearch.trim() && !visibleLinks.length"
-          role="status"
-          class="px-3 py-2 text-sm text-muted"
-        >
-          Menu tidak ditemukan.
-        </p>
 
         <!-- Jarak antar tautan dibuat lega supaya navigasi mudah dipindai. -->
         <UNavigationMenu
           :collapsed="collapsed"
-          :items="collapsed ? links : visibleLinks"
+          :items="links"
           orientation="vertical"
-          :ui="{ list: 'space-y-1' }"
+          :ui="{ list: 'space-y-1', linkLabel: 'whitespace-normal break-words' }"
           tooltip
           popover
         />
 
         <div
-          v-if="!collapsed"
+          v-if="!collapsed && asciiAnimations"
           ref="ghostHost"
           aria-hidden="true"
           class="relative mt-8 h-36 shrink-0 overflow-hidden text-primary min-[768px]:h-80"
@@ -190,6 +231,13 @@ const links = computed<NavigationMenuItem[]>(() => {
       </template>
     </UDashboardSidebar>
 
+    <UDashboardSearch
+      :groups="searchGroups"
+      placeholder="Cari menu atau halaman..."
+    />
+
     <slot />
+
+    <NotificationsSlideover />
   </UDashboardGroup>
 </template>

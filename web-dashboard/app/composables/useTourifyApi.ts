@@ -18,10 +18,11 @@ export function useTourifyApi() {
     post<T>(path: string, body: Record<string, unknown>, options: { timeout?: number } = {}) {
       return $fetch<T>(url(path), { method: 'POST', body, credentials: 'include', ...options })
     },
-    // FormData membiarkan browser mengatur multipart boundary sendiri.
-    upload<T>(path: string, file: File) {
+    // FormData mengirim foto dan field tambahan tanpa menebak multipart boundary.
+    upload<T>(path: string, file: File, fields: Record<string, string> = {}) {
       const body = new FormData()
       body.append('image', file)
+      for (const [name, value] of Object.entries(fields)) body.append(name, value)
       return $fetch<T>(url(path), { method: 'POST', body, credentials: 'include' })
     },
     put<T>(path: string, body: Record<string, unknown>) {

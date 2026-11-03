@@ -62,6 +62,7 @@ function notice({ motion = 'no-preference', holdEntrance = false, failHide = fal
     defineEmits: () => event => events.push(event),
     defineExpose: () => {},
     usePreferredReducedMotion: () => motionPreference,
+    useDashboardPreferences: () => ({ asciiAnimations: ref(true) }),
     useEventListener: (_name, listener) => focusListeners.push(listener),
     onMounted: callback => mounted = callback,
     onBeforeUnmount: callback => unmount = callback,

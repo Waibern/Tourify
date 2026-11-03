@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
-import type { DashboardOrder, DashboardOrdersApiResponse } from '~/types/tourify'
+import type { DashboardOrder, DashboardOrdersApiResponse, DashboardOrderTrendPoint } from '~/types/tourify'
 import { wahanaImage } from '~/utils/wahana-images'
 import { createAsciiReveal } from 'ascii-reveal/core'
 import type { AsciiRevealController } from 'ascii-reveal/core'
@@ -19,13 +19,17 @@ const page = ref(1)
 const total = ref(0)
 const perPage = ref(20)
 const summaryStats = ref<DashboardOrdersApiResponse['stats'] | null>(null)
+const orderTrend = ref<DashboardOrderTrendPoint[]>([])
 const loading = ref(true)
 const errorMessage = ref('')
+// Daftar ringkas tampil pertama; kartu bergambar tetap bisa dipilih dari Tampilan.
+const viewMode = ref<'cards' | 'list'>('list')
 let requestId = 0
 const status = ref('all')
 const selected = ref<DashboardOrder | null>(null)
 const detailOpen = ref(false)
 const reducedMotion = usePreferredReducedMotion()
+const { asciiAnimations } = useDashboardPreferences()
 const detailSurfaceSelector = '[data-slot="content"][role="dialog"]'
 const table = useTemplateRef('table')
 const columnVisibility = ref()
@@ -46,7 +50,7 @@ function showDetail(order: DashboardOrder) {
 
 // Detail bergerak dengan ASCII saat dibuka dan menyelesaikan efeknya sebelum ditutup.
 async function revealOrderDetail() {
-  if (reducedMotion.value === 'reduce') return
+  if (reducedMotion.value === 'reduce' || !asciiAnimations.value) return
 
   const surface = document.querySelector<HTMLElement>(detailSurfaceSelector)
   if (!surface) return
@@ -79,7 +83,7 @@ async function closeOrderDetail() {
   const controller = detailReveal
   const surface = document.querySelector<HTMLElement>(detailSurfaceSelector)
   try {
-    if (controller) await controller.hide(surface ? { within: surface } : {})
+    if (controller && asciiAnimations.value) await controller.hide(surface ? { within: surface } : {})
   } catch {
     // Modal tetap ditutup kalau efek ASCII gagal.
   }
@@ -107,6 +111,13 @@ onBeforeUnmount(() => {
   detailReveal = null
 })
 
+// Hentikan detail yang sedang bergerak kalau efek ASCII dimatikan dari tab lain.
+watch(asciiAnimations, (enabled) => {
+  if (enabled) return
+  detailReveal?.destroy()
+  detailReveal = null
+})
+
 // Reset menghapus semua pembatas, termasuk tiket yang dibuka dari halaman riwayat.
 function resetFilters() {
   search.value = ''
@@ -130,6 +141,7 @@ async function loadRows(background = false) {
     total.value = response.total
     perPage.value = response.per_page
     summaryStats.value = response.stats
+    orderTrend.value = response.order_trend ?? []
     page.value = response.page
     errorMessage.value = ''
     // Detail terbuka ikut mendapat status check-in terbaru dari pesanan yang sama.
@@ -177,7 +189,10 @@ const summaryCards = computed(() => [
     label: 'Total pesanan',
     value: summaryStats.value ? numberFormat.format(summaryStats.value.orders) : '—',
     hint: 'Semua pesanan',
-    icon: 'i-lucide-receipt'
+    icon: 'i-lucide-receipt',
+    // Nilai total tetap sepanjang waktu; grafik menunjukkan aktivitas 14 hari terakhir.
+    trend: orderTrend.value.map(point => ({ date: point.date, value: point.order_count })),
+    trendLabel: 'Pesanan per hari · 14 hari terakhir'
   },
   {
     label: 'Tiket dipesan',
@@ -197,6 +212,11 @@ function statusLabel(value: DashboardOrder['status']): string {
   return { Active: 'Aktif', Used: 'Terpakai', Expire: 'Kedaluwarsa' }[value]
 }
 
+// Daftar ringkas mengikuti kolom yang dipilih lewat menu Tampilan.
+function isOrderColumnVisible(id: string): boolean {
+  return columnVisibility.value?.[id] !== false
+}
+
 const columns: TableColumn<DashboardOrder>[] = [
   { accessorKey: 'id', header: 'Tiket / pelanggan', enableHiding: false, cell: ({ row }) => `#${row.original.id}` },
   { accessorKey: 'wahana_name', header: 'Wahana' },
@@ -207,20 +227,48 @@ const columns: TableColumn<DashboardOrder>[] = [
   { id: 'actions', header: 'Detail', enableHiding: false }
 ]
 
-// Menu tampilan memakai kolom yang tersedia di tabel pesanan.
-const displayItems = computed(() => table.value?.tableApi?.getAllColumns()
-  .filter(column => column.getCanHide())
-  .map(column => ({
-    label: String(column.columnDef.header ?? column.id),
-    type: 'checkbox' as const,
-    checked: column.getIsVisible(),
-    onUpdateChecked(checked: boolean) {
-      table.value?.tableApi?.getColumn(column.id)?.toggleVisibility(checked)
+// Pilihan kartu dan daftar tinggal di menu yang sama dengan pengaturan kolom.
+const displayItems = computed(() => {
+  const items = [
+    { label: 'Tampilan pesanan', type: 'label' as const },
+    {
+      label: 'Kartu bergambar',
+      icon: viewMode.value === 'cards' ? 'i-lucide-check' : 'i-lucide-panels-top-left',
+      onSelect() {
+        viewMode.value = 'cards'
+      }
     },
-    onSelect(event?: Event) {
-      event?.preventDefault()
+    {
+      label: 'Daftar ringkas',
+      icon: viewMode.value === 'list' ? 'i-lucide-check' : 'i-lucide-list',
+      onSelect() {
+        viewMode.value = 'list'
+      }
     }
-  })))
+  ]
+  const columns = table.value?.tableApi?.getAllColumns().filter(column => column.getCanHide())
+
+  if (viewMode.value === 'list' && columns?.length) {
+    return [
+      ...items,
+      { type: 'separator' as const },
+      { label: 'Kolom tabel', type: 'label' as const },
+      ...columns.map(column => ({
+        label: String(column.columnDef.header ?? column.id),
+        type: 'checkbox' as const,
+        checked: column.getIsVisible(),
+        onUpdateChecked(checked: boolean) {
+          table.value?.tableApi?.getColumn(column.id)?.toggleVisibility(checked)
+        },
+        onSelect(event?: Event) {
+          event?.preventDefault()
+        }
+      }))
+    ]
+  }
+
+  return items
+})
 </script>
 
 <template>
@@ -319,7 +367,7 @@ const displayItems = computed(() => table.value?.tableApi?.getAllColumns()
           :data="rows"
           :columns="columns"
           :loading="loading"
-          class="hidden shrink-0 xl:block"
+          :class="viewMode === 'list' ? 'hidden shrink-0 xl:block' : 'hidden'"
           :ui="{
             base: 'w-full border-separate border-spacing-0',
             thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
@@ -391,7 +439,7 @@ const displayItems = computed(() => table.value?.tableApi?.getAllColumns()
         </UTable>
 
         <!-- Ringkas tiap tiket supaya data dan aksi utama muat di layar sentuh. -->
-        <div class="space-y-3 xl:hidden">
+        <div v-if="viewMode === 'cards'" class="space-y-3">
           <p v-if="loading && !rows.length" role="status" class="py-6 text-center text-sm text-muted">
             Memuat pesanan…
           </p>
@@ -483,6 +531,96 @@ const displayItems = computed(() => table.value?.tableApi?.getAllColumns()
           </article>
         </div>
 
+        <!-- Daftar ringkas tetap satu kolom dan tidak memakai banner foto. -->
+        <section
+          v-if="viewMode === 'list'"
+          aria-label="Daftar pesanan"
+          class="divide-y divide-default border-y border-default xl:hidden"
+        >
+          <p v-if="loading && !rows.length" role="status" class="py-6 text-center text-sm text-muted">
+            Memuat pesanan…
+          </p>
+          <p v-else-if="!rows.length" class="py-6 text-center text-sm text-muted">
+            {{ search || date || status !== 'all' ? 'Tidak ada pesanan sesuai filter.' : ticketId ? `Tiket #${ticketId} tidak ditemukan.` : 'Pesanan akan tampil setelah tiket dipesan.' }}
+          </p>
+          <article
+            v-for="order in rows"
+            :key="order.id"
+            class="flex flex-wrap items-center gap-x-5 gap-y-3 px-1 py-3 sm:px-3"
+          >
+            <div class="min-w-36 flex-1">
+              <button
+                type="button"
+                class="min-h-11 rounded font-semibold text-highlighted underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
+                :aria-label="`Lihat detail tiket #${order.id} milik ${order.username}`"
+                @click="showDetail(order)"
+              >
+                Tiket #{{ order.id }}
+              </button>
+              <p class="break-words text-sm text-muted">
+                {{ order.username }}
+                <template v-if="isOrderColumnVisible('wahana_name')">
+                  · {{ order.wahana_name }}
+                </template>
+              </p>
+            </div>
+
+            <dl class="grid w-full grid-cols-2 gap-x-4 gap-y-2 text-sm sm:w-auto sm:flex sm:flex-wrap sm:gap-x-5">
+              <div v-if="isOrderColumnVisible('visit_date')">
+                <dt class="text-muted">
+                  Kunjungan
+                </dt>
+                <dd class="mt-1 text-highlighted">
+                  {{ formatDate(order.visit_date) }}
+                </dd>
+              </div>
+              <div v-if="isOrderColumnVisible('wahana_name')">
+                <dt class="text-muted">
+                  Pengunjung
+                </dt>
+                <dd class="mt-1 text-highlighted">
+                  {{ order.quantity }} orang
+                </dd>
+              </div>
+              <div v-if="isOrderColumnVisible('checked_in_quantity')">
+                <dt class="text-muted">
+                  Check-in
+                </dt>
+                <dd class="mt-1 tabular-nums text-highlighted">
+                  {{ order.checked_in_quantity }} / {{ order.quantity }}
+                </dd>
+              </div>
+              <div v-if="isOrderColumnVisible('total_price')">
+                <dt class="text-muted">
+                  Total
+                </dt>
+                <dd class="mt-1 font-medium tabular-nums text-highlighted">
+                  {{ formatRupiah(order.total_price) }}
+                </dd>
+              </div>
+            </dl>
+
+            <div class="ml-auto flex items-center gap-3">
+              <UBadge
+                v-if="isOrderColumnVisible('status')"
+                :color="order.status === 'Active' ? 'success' : order.status === 'Used' ? 'primary' : 'neutral'"
+                variant="subtle"
+              >
+                {{ statusLabel(order.status) }}
+              </UBadge>
+              <UButton
+                label="Detail"
+                icon="i-lucide-eye"
+                color="neutral"
+                variant="ghost"
+                class="min-h-11"
+                :aria-label="`Lihat detail tiket #${order.id} milik ${order.username}`"
+                @click="showDetail(order)"
+              />
+            </div>
+          </article>
+        </section>
+
         <div class="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-default pt-4">
           <p class="text-sm text-muted">
             {{ total }} pesanan · {{ perPage }} per halaman
@@ -520,6 +658,15 @@ const displayItems = computed(() => table.value?.tableApi?.getAllColumns()
         </template>
         <template #body>
           <div v-if="selected" class="space-y-5 text-sm">
+            <!-- Foto wahana ikut tampil di detail tiket. -->
+            <div class="relative h-40 overflow-hidden rounded-xl sm:h-48">
+              <img
+                :src="wahanaImage(selected.wahana_id)"
+                :alt="`Foto ${selected.wahana_name}`"
+                class="size-full object-cover"
+              >
+            </div>
+
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div class="min-w-0">
                 <h3 class="break-words text-base font-semibold text-highlighted">

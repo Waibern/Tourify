@@ -1,23 +1,26 @@
 <script setup lang="ts">
 import { sub } from 'date-fns'
+import type { DropdownMenuItem } from '@nuxt/ui'
 import type { DashboardAnalytics, DashboardAnalyticsApiResponse } from '~/types/tourify'
 import type { Period, Range } from '~/types'
 
 const api = useTourifyApi()
-// Tombol uji memakai notifikasi lokal agar animasi bisa diulang tanpa transaksi baru.
+const { isNotificationsSlideoverOpen } = useDashboard()
+const notificationFeed = useDashboardActivityFeed()
+const hasUnreadNotifications = computed(() => notificationFeed.value.some(item => item.unread))
 const { showTestNotification, showCustomerTestNotification, testActive, testLoading } = useDashboardNotifications()
-// Dua jenis contoh berbagi satu menu dan tidak bisa ditumpuk saat tes masih berjalan.
-const testNotificationItems = computed(() => [{
-  label: 'Pesanan baru',
+// Tes pesanan dan pelanggan tetap tersedia dari menu tambah seperti di template.
+const testNotificationItems = computed<DropdownMenuItem[][]>(() => [[{
+  label: 'Tes pesanan baru',
   icon: 'i-lucide-receipt-text',
   disabled: testActive.value || testLoading.value,
   onSelect: showTestNotification
 }, {
-  label: 'Akun baru',
+  label: 'Tes pelanggan baru',
   icon: 'i-lucide-user-round-plus',
   disabled: testActive.value || testLoading.value,
   onSelect: showCustomerTestNotification
-}])
+}]])
 const range = shallowRef<Range>({
   start: sub(new Date(), { days: 13 }),
   end: new Date()
@@ -90,19 +93,27 @@ watch(
           <UDashboardSidebarCollapse />
         </template>
         <template #right>
-          <!-- Pemicu tetap bisa menerima fokus balik; hanya pilihan yang sedang sibuk dinonaktifkan. -->
-          <UDropdownMenu :items="testNotificationItems" :content="{ align: 'end' }" :ui="{ item: 'min-h-11' }">
+          <UTooltip text="Notifikasi" :kbds="['n']">
             <UButton
-              label="Tes notifikasi"
-              :icon="testLoading ? 'i-lucide-loader-circle' : 'i-lucide-bell-ring'"
-              trailing-icon="i-lucide-chevron-down"
               color="neutral"
               variant="ghost"
+              square
+              aria-label="Buka notifikasi"
+              :aria-expanded="isNotificationsSlideoverOpen"
+              @click="isNotificationsSlideoverOpen = true"
+            >
+              <UChip color="error" inset :show="hasUnreadNotifications">
+                <UIcon name="i-lucide-bell" class="size-5 shrink-0" />
+              </UChip>
+            </UButton>
+          </UTooltip>
+          <UDropdownMenu :items="testNotificationItems" :content="{ align: 'end' }" :ui="{ item: 'min-h-11' }">
+            <UButton
+              icon="i-lucide-plus"
+              size="md"
               aria-label="Tes notifikasi"
               title="Tes notifikasi"
-              :aria-busy="testLoading"
-              :ui="{ label: 'hidden min-[500px]:inline', leadingIcon: testLoading ? 'animate-spin' : '', trailingIcon: 'hidden min-[500px]:block' }"
-              class="min-h-10 min-w-10"
+              class="rounded-full"
             />
           </UDropdownMenu>
           <UButton

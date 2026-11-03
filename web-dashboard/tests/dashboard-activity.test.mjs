@@ -22,6 +22,7 @@ const flush = () => new Promise(resolve => setImmediate(resolve))
 
 function monitor(get, role = 'admin', enqueue) {
   const user = ref({ id: 1, role })
+  const notificationFeed = ref([])
   const toasts = ref([{ id: 'ordinary-toast' }])
   const calls = []
   let tick
@@ -32,11 +33,21 @@ function monitor(get, role = 'admin', enqueue) {
     computed, watch, nextTick, ref, shallowRef, URLSearchParams, BigInt, Set,
     h: (component, props) => ({ component, props }),
     DashboardActivityNotice: {},
+    prepareNotificationSound: () => {},
+    playNotificationSound: () => {},
     useTourifyApi: () => ({ get: (path) => {
       calls.push(path)
       return get(path)
     } }),
     useDashboardAuth: () => ({ user }),
+    useDashboardPreferences: () => ({
+      notificationSound: ref(false),
+      desktopNotifications: ref(false),
+      newOrderNotifications: ref(true),
+      newCustomerNotifications: ref(true)
+    }),
+    useRoute: () => ({ path: '/' }),
+    useDashboardActivityFeed: () => notificationFeed,
     getTourifyErrorMessage: (_error, fallback) => fallback,
     useToast: () => ({
       toasts,
@@ -53,6 +64,7 @@ function monitor(get, role = 'admin', enqueue) {
   scope.run(() => vm.runInNewContext(code, context)())
   return {
     user,
+    notificationFeed,
     toasts,
     calls,
     notifications,
@@ -77,6 +89,8 @@ test('patokan pertama diam; aktivitas berikutnya muncul sekali dengan tautan yan
   await state.tick()
   assert.equal(state.calls[1], 'dashboard_activity.php?after_order=10&after_customer=5')
   assert.deepEqual(state.toasts.value.map(toast => toast.id), ['ordinary-toast', 'dashboard-activity:order:11', 'dashboard-activity:customer:6'])
+  assert.equal(state.notificationFeed.value.map(item => item.activity.id).join(','), 'customer:6,order:11')
+  assert.ok(state.notificationFeed.value.every(item => item.unread))
   assert.equal(state.toasts.value[1].duration, 0)
   assert.equal(state.toasts.value[1].close, false)
   const content = state.toasts.value[1].title()

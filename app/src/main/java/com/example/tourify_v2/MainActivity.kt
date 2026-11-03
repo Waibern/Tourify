@@ -63,6 +63,9 @@ import androidx.compose.ui.unit.dp
 import com.example.tourify_v2.model.ChatBookingProposal
 import com.example.tourify_v2.model.TicketBookingRequest
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.compose.NavHost
@@ -197,6 +200,7 @@ private fun TourifyMainContent() {
     val navController = rememberNavController()
     val authViewModel: AuthViewModel = viewModel()
     val tourifyViewModel: TourifyViewModel = viewModel()
+    val lifecycleOwner = LocalLifecycleOwner.current
     val currentUser = authViewModel.currentUsername
 
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -209,6 +213,18 @@ private fun TourifyMainContent() {
     var isChatbotOpen by remember { mutableStateOf(false) }
     var chatbotButtonCenter by remember { mutableStateOf(Offset.Zero) }
     val chatbotReveal = remember { Animatable(0f) }
+
+    // Kirim presensi selama aplikasi dibuka.
+    LaunchedEffect(lifecycleOwner, authViewModel.currentAccessToken) {
+        if (authViewModel.currentAccessToken.isBlank()) return@LaunchedEffect
+
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                authViewModel.updateCustomerPresence()
+                delay(60_000L)
+            }
+        }
+    }
 
     // Segarkan foto saat beranda dibuka supaya perubahan profil langsung terlihat.
     LaunchedEffect(currentRoute, currentUser, authViewModel.currentAccessToken) {
@@ -407,6 +423,13 @@ private fun TourifyMainContent() {
                             tickets = tourifyViewModel.tickets,
                             isLoadingTickets = tourifyViewModel.isLoadingTickets,
                             ticketsError = tourifyViewModel.ticketsError,
+                            onRetryTickets = {
+                                // Coba muat ulang ringkasan di profil.
+                                tourifyViewModel.loadTickets(
+                                    currentUser,
+                                    forceRefresh = true
+                                )
+                            },
                             onProfileImageSelected = authViewModel::uploadProfileImage,
                             onTicketsClick = { navController.navigate("ticket") },
                             onDestinationsClick = { navController.navigate("destinations") },

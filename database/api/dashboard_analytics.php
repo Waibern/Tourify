@@ -69,6 +69,9 @@ try {
     ]);
     $orderStats = $statement->fetch();
 
+    // Jumlah wahana berasal dari katalog, bukan rentang analytics.
+    $wahanaCount = (int) $pdo->query('SELECT COUNT(*) FROM wahana')->fetchColumn();
+
     // Riwayat scan dipakai agar hitungan check-in mengikuti waktu scan sebenarnya.
     $statement = $pdo->prepare(
         'SELECT COUNT(*) FROM ticket_checkins '
@@ -137,6 +140,7 @@ try {
         $statement->execute(['start' => $previousStart, 'end' => $previousEnd]);
         $previousStats[$metric] = (int) $statement->fetchColumn();
     }
+    $previousStats['wahana'] = $wahanaCount;
 
     // Tabel ringkas mengambil pemesanan terbaru pada rentang yang dipilih.
     $statement = $pdo->prepare(
@@ -197,6 +201,7 @@ try {
                 'orders' => (int) $orderStats['orders'],
                 'tickets' => (int) $orderStats['tickets'],
                 'checkins' => $checkins,
+                'wahana' => $wahanaCount,
             ],
             'previous_stats' => $previousStats,
             'comparison' => ['start' => $previousStart, 'end' => $previousEnd, 'days' => $days],

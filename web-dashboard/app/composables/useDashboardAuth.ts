@@ -15,10 +15,18 @@ export function useDashboardAuth() {
     }
   }
 
+  // Role dibaca ulang agar perubahan izin langsung memperbarui menu dashboard.
   async function loadSession(): Promise<DashboardUser | null> {
+    const cachedUser = user.value
     try {
       const response = await api.get<DashboardApiResponse>('dashboard_auth.php')
-      user.value = response.user ? await attachProfileImage(response.user) : null
+      if (!response.user) {
+        user.value = null
+      } else if (cachedUser?.id === response.user.id && cachedUser.profile_image !== undefined) {
+        user.value = { ...response.user, profile_image: cachedUser.profile_image }
+      } else {
+        user.value = await attachProfileImage(response.user)
+      }
     } catch {
       user.value = null
     }

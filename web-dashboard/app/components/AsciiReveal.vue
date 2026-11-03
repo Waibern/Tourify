@@ -17,11 +17,12 @@ const root = ref<HTMLElement | null>(null)
 // Kartu tetap kosong saat menunggu data; frame sudut digambar oleh efek surface.
 const phase = ref(props.loading ? 'outline' : 'idle')
 const reducedMotion = usePreferredReducedMotion()
+const { asciiAnimations } = useDashboardPreferences()
 let hasSkeleton = props.loading
 useHead({ style: [{ key: 'ascii-skeleton', innerHTML: SKELETON_CSS }] })
 
 // Teks, foto, dan grafik masuk bareng lewat satu efek ASCII.
-watch([() => props.loading, reducedMotion, root], async ([loading, motion, element], _previous, onCleanup) => {
+watch([() => props.loading, reducedMotion, asciiAnimations, root], async ([loading, motion, animations, element], _previous, onCleanup) => {
   let cancelled = false
   const effect: { controller?: AsciiRevealController } = {}
   const snapshots: { remove: () => void }[] = []
@@ -42,12 +43,14 @@ watch([() => props.loading, reducedMotion, root], async ([loading, motion, eleme
     phase.value = 'outline'
     return
   }
-  if (!element || !hasSkeleton) return
+  if (!element) return
+  const shouldReveal = hasSkeleton
   hasSkeleton = false
-  if (motion === 'reduce') {
+  if (motion === 'reduce' || !animations) {
     phase.value = 'idle'
     return
   }
+  if (!shouldReveal) return
 
   chartAreas.forEach((chart) => {
     chart.style.visibility = 'hidden'

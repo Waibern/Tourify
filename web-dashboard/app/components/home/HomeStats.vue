@@ -16,25 +16,53 @@ function dateLabel(value: string): string {
   return dateFormat.format(new Date(value + 'T12:00:00'))
 }
 
-// Jumlah tiket dan pesanan dipisah supaya kedua angka tidak tertukar.
+// Tren ringkas hanya muncul saat jumlah pelanggan berubah.
+function customerTrend(current: number, previous: number) {
+  const difference = current - previous
+
+  if (difference === 0) return null
+
+  if (difference > 0) {
+    return {
+      color: 'text-primary',
+      label: `+${numberFormat.format(difference)} pelanggan`,
+      description: `Jumlah pelanggan baru naik ${numberFormat.format(difference)}.`
+    }
+  }
+
+  return {
+    color: 'text-error',
+    label: `-${numberFormat.format(Math.abs(difference))} pelanggan`,
+    description: `Jumlah pelanggan baru turun ${numberFormat.format(Math.abs(difference))}.`
+  }
+}
+
+// Jumlah wahana berasal dari katalog dan tidak mengikuti rentang tanggal.
 const metrics = [
-  { key: 'checkins', title: 'Pengunjung masuk', to: '/checkins' },
-  { key: 'tickets', title: 'Tiket', to: '/orders' },
-  { key: 'orders', title: 'Pesanan', to: '/orders' },
-  { key: 'new_customers', title: 'Pelanggan baru', to: '/customers' }
+  { key: 'checkins', title: 'Pengunjung masuk', icon: 'i-lucide-scan-line', to: '/checkins' },
+  { key: 'tickets', title: 'Tiket', icon: 'i-lucide-ticket', to: '/orders' },
+  { key: 'wahana', title: 'Wahana', icon: 'i-lucide-map-pin', to: '/wahana' },
+  { key: 'new_customers', title: 'Pelanggan baru', icon: 'i-lucide-user-round-plus', to: '/customers' }
 ] as const
 
 const cards = computed(() => metrics.map((metric) => {
   const value = props.stats?.[metric.key] ?? null
-  const previous = props.previous?.[metric.key] ?? null
+  const previous = metric.key === 'wahana' ? null : props.previous?.[metric.key] ?? null
 
   return {
     ...metric,
     value,
     previous,
-    // Persentase hanya dipakai pada kartu Pengunjung masuk.
-    change: metric.key === 'checkins' && value !== null && previous !== null
+    // Perubahan pelanggan memakai selisih jumlah, bukan persentase.
+    customerTrend: metric.key === 'new_customers' && value !== null && previous !== null
+      ? customerTrend(value, previous)
+      : null,
+    // Persentase tersedia untuk check-in dan jumlah tiket.
+    change: (metric.key === 'checkins' || metric.key === 'tickets') && value !== null && previous !== null
       ? analyticsChange(value, previous)
+      : null,
+    ticketDifference: metric.key === 'tickets' && value !== null && previous !== null
+      ? value - previous
       : null
   }
 }))
@@ -73,8 +101,14 @@ const hasCheckins = computed(() => checkinData.value.some(point => point.value >
         <div class="flex min-h-44 flex-col justify-between gap-3 p-4 sm:p-5">
           <div class="flex items-start justify-between gap-3">
             <div>
-              <h2 class="text-base font-semibold text-highlighted">
-                {{ featured.title }}
+              <h2 class="flex items-center gap-2 text-base font-semibold text-highlighted">
+                <UIcon
+                  :name="featured.icon"
+                  data-ascii="fade"
+                  class="size-4 shrink-0 text-primary"
+                  aria-hidden="true"
+                />
+                <span>{{ featured.title }}</span>
               </h2>
               <p class="mt-1 text-sm text-muted">
                 Pada rentang tanggal terpilih
@@ -136,21 +170,50 @@ const hasCheckins = computed(() => checkinData.value.some(point => point.value >
         :to="card.to"
         data-dashboard-card
         class="group flex min-w-0 items-center rounded-xl border border-default bg-default px-4 py-3 transition-colors hover:border-white/35 hover:bg-elevated/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-400"
-        :aria-label="`${card.title}: ${card.value === null ? 'data belum tersedia' : numberFormat.format(card.value)}. Buka detail`"
+        :aria-label="`${card.title}: ${card.value === null ? 'data belum tersedia' : numberFormat.format(card.value)}${card.customerTrend ? `. ${card.customerTrend.description}` : ''}. Buka detail`"
       >
         <AsciiReveal :loading="loading" origin="pointer" class="min-w-0 flex-1">
           <template #skeleton>
             <div class="h-10" aria-hidden="true" />
           </template>
           <div class="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
-            <div class="min-w-0">
-              <h2 class="text-sm font-medium text-highlighted">
-                {{ card.title }}
-              </h2>
-              <!-- Aturan pembanding nol sama untuk semua metrik. -->
-              <p v-if="card.previous !== 0" class="text-sm text-muted">
-                {{ card.previous === null ? 'Belum ada pembanding' : `vs ${numberFormat.format(card.previous)} sebelumnya` }}
-              </p>
+            <div class="flex min-w-0 items-start gap-2">
+              <!-- Ikon ikut reveal dan diberi warna aksen sesuai jenis metrik. -->
+              <UIcon
+                :name="card.icon"
+                data-ascii="fade"
+                class="mt-0.5 size-4 shrink-0 text-primary"
+                aria-hidden="true"
+              />
+              <div class="min-w-0">
+                <h2 class="text-sm font-medium text-highlighted">
+                  {{ card.title }}
+                </h2>
+                <!-- Perubahan pelanggan dibuat tipis; selisih nol tidak ditampilkan. -->
+                <p
+                  v-if="card.customerTrend"
+                  class="text-xs leading-4"
+                  :class="card.customerTrend.color"
+                >
+                  <span>{{ card.customerTrend.label }}</span>
+                </p>
+                <!-- Tiket menampilkan persentase dan selisih dari periode pembanding. -->
+                <p
+                  v-else-if="card.key === 'tickets' && card.ticketDifference !== null"
+                  class="text-sm tabular-nums"
+                >
+                  <span
+                    class="font-medium"
+                    :class="card.change?.color === 'error' ? 'text-error' : card.change?.color === 'neutral' ? 'text-muted' : 'text-primary'"
+                  >
+                    {{ card.change?.label ?? (card.ticketDifference > 0 ? 'Baru' : '0%') }} ({{ numberFormat.format(Math.abs(card.ticketDifference)) }} tiket)
+                  </span>
+                  <span class="ms-1 text-muted">· vs {{ comparisonLabel || 'periode sebelumnya' }}</span>
+                </p>
+                <p v-else-if="card.key !== 'new_customers' && card.key !== 'wahana' && card.previous !== 0" class="text-sm text-muted">
+                  {{ card.previous === null ? 'Belum ada pembanding' : `vs ${numberFormat.format(card.previous)} sebelumnya` }}
+                </p>
+              </div>
             </div>
             <div class="flex shrink-0 items-center gap-2">
               <p class="text-xl font-semibold text-highlighted tabular-nums">

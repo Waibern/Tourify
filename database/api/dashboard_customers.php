@@ -13,6 +13,11 @@ if (!in_array($method, ['GET', 'DELETE'], true)) {
 try {
     $pdo = getDatabaseConnection();
 
+    // Pelanggan online adalah akun customer yang mengirim heartbeat dalam 5 menit terakhir.
+    $onlineCount = (int) $pdo->query(
+        "SELECT COUNT(*) FROM users WHERE role = 'customer' AND last_seen_at >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 5 MINUTE)"
+    )->fetchColumn();
+
     // Hapus dilakukan sekaligus dan ditolak kalau akun punya riwayat transaksi.
     if ($method === 'DELETE') {
         $input = readJsonInput();
@@ -87,7 +92,7 @@ try {
         ];
     }, $statement->fetchAll());
 
-    respond(200, ['success' => true, 'customers' => $customers]);
+    respond(200, ['success' => true, 'online_count' => $onlineCount, 'customers' => $customers]);
 } catch (Throwable $exception) {
     handleApiError('dashboard customers', $exception);
 }
