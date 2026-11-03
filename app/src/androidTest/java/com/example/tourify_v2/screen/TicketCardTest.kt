@@ -257,7 +257,11 @@ class TicketCardTest {
         val viewModel = TourifyViewModel(service)
         compose.setContent {
             TestSurface {
-                TicketsScreen(viewModel = viewModel, currentUser = "pengunjung-tes")
+                TicketsScreen(
+                    viewModel = viewModel,
+                    currentUser = "pengunjung-tes",
+                    accessToken = "test-access-token"
+                )
             }
         }
         compose.waitUntil(5_000) { viewModel.ticketsUpdatedAtMillis != null }

@@ -5,8 +5,7 @@ import com.google.gson.annotations.SerializedName
 // Payload mengikuti kontrak endpoint PHP chat.php.
 data class ChatRequest(
     val message: String,
-    val history: List<ChatHistoryItem>,
-    val username: String
+    val history: List<ChatHistoryItem>
 )
 
 data class ChatHistoryItem(

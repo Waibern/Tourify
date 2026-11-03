@@ -52,10 +52,10 @@ class TourifyViewModel(
         bookingMessage = ""
     }
 
-    // Kirim pertanyaan dan akun aktif agar backend bisa menjawab dengan data tiketnya.
+    // Token mengikat konteks chat ke akun yang sudah login.
     fun sendChatMessage(
+        accessToken: String,
         message: String,
-        username: String,
         history: List<ChatHistoryItem>,
         onComplete: (ChatResponse) -> Unit
     ) {
@@ -65,10 +65,10 @@ class TourifyViewModel(
             isSendingChat = true
             try {
                 val response = apiService.sendChatMessage(
-                    ChatRequest(
+                    authorization = "Bearer $accessToken",
+                    request = ChatRequest(
                         message = message,
-                        history = history,
-                        username = username
+                        history = history
                     )
                 )
                 val result = response.body()
@@ -114,10 +114,15 @@ class TourifyViewModel(
         }
     }
 
-    fun loadTickets(username: String, forceRefresh: Boolean = false) {
+    // Token menentukan akun tiket langsung dari sesi server.
+    fun loadTickets(
+        username: String,
+        accessToken: String,
+        forceRefresh: Boolean = false
+    ) {
         // Jangan tumpuk refresh, dan jangan pakai tiket dari akun sebelumnya.
         val alreadyRefreshing = ticketsOwner == username && ticketsRequest?.isActive == true
-        if (username.isBlank() || (!forceRefresh && alreadyRefreshing)) {
+        if (username.isBlank() || accessToken.isBlank() || (!forceRefresh && alreadyRefreshing)) {
             return
         }
         ticketsRequest?.cancel()
@@ -130,7 +135,7 @@ class TourifyViewModel(
             isLoadingTickets = true
             ticketsError = ""
             try {
-                val response = apiService.getTickets(username)
+                val response = apiService.getTickets("Bearer $accessToken")
                 val result = response.body()
                 if (response.isSuccessful && result?.success == true) {
                     tickets = result.tickets
@@ -154,6 +159,7 @@ class TourifyViewModel(
 
     fun bookTicket(
         username: String,
+        accessToken: String,
         request: TicketBookingRequest,
         onComplete: (Boolean) -> Unit
     ) {
@@ -161,12 +167,16 @@ class TourifyViewModel(
             isBooking = true
             bookingMessage = ""
             try {
-                val response = apiService.bookTicket(request)
+                val response = apiService.bookTicket("Bearer $accessToken", request)
                 val result = response.body()
                 if (response.isSuccessful && result?.success == true) {
                     bookingMessage = result.message
                     // Pesanan baru harus mengambil hasil baru meski refresh sebelumnya belum selesai.
-                    loadTickets(username, forceRefresh = true)
+                    loadTickets(
+                        username = username,
+                        accessToken = accessToken,
+                        forceRefresh = true
+                    )
                     onComplete(true)
                 } else {
                     bookingMessage = result?.message ?: "Pemesanan tiket gagal."

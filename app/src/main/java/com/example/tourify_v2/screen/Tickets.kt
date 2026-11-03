@@ -85,10 +85,12 @@ import java.time.format.DateTimeParseException
 import java.util.Locale
 import kotlinx.coroutines.awaitCancellation
 
+// Token mengikat pemuatan tiket ke sesi akun yang aktif.
 @Composable
 fun TicketsScreen(
     viewModel: TourifyViewModel,
     currentUser: String,
+    accessToken: String,
     showBookingSuccess: Boolean = false,
     onDismissBookingSuccess: () -> Unit = {},
     onTicketDetailVisibilityChanged: (Boolean) -> Unit = {}
@@ -97,11 +99,15 @@ fun TicketsScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(
         currentUser,
+        accessToken,
         lifecycleOwner
     ) {
         if (currentUser.isNotBlank()) {
             lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                viewModel.loadTickets(currentUser)
+                viewModel.loadTickets(
+                    username = currentUser,
+                    accessToken = accessToken
+                )
                 awaitCancellation()
             }
         }
@@ -113,7 +119,10 @@ fun TicketsScreen(
             refreshError = viewModel.ticketsError,
             updatedAtMillis = viewModel.ticketsUpdatedAtMillis,
             onRefresh = {
-                viewModel.loadTickets(currentUser)
+                viewModel.loadTickets(
+                    username = currentUser,
+                    accessToken = accessToken
+                )
             },
             showBookingSuccess = showBookingSuccess,
             onDismissBookingSuccess = onDismissBookingSuccess,

@@ -17,8 +17,8 @@ data class Ticket(
     @SerializedName("checked_in_quantity") val checkedInQuantity: Int = 0
 )
 
+// Identitas akun tidak dikirim di body; server membacanya dari token.
 data class TicketBookingRequest(
-    @SerializedName("username") val username: String,
     @SerializedName("wahana_id") val wahanaId: Int,
     @SerializedName("visit_date") val visitDate: String,
     @SerializedName("quantity") val quantity: Int,

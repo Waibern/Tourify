@@ -20,3 +20,6 @@
 local.properties
 /output/
 /tmp/
+/database/api/uploads/
+/database/api/db.config.php
+/database/backups/

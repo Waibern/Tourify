@@ -72,11 +72,13 @@ private val DestinationMuted = TourifyMuted
 private val DestinationMint = TourifyMint
 private val DestinationCanvas = TourifyCanvas
 
+// Token login diteruskan ke pemesanan tiket.
 @Composable
 fun DestinationScreen(
     destinationId: Int,
     viewModel: TourifyViewModel,
     currentUser: String,
+    accessToken: String,
     onBack: () -> Unit,
     onBookingSuccess: () -> Unit
 ) {
@@ -149,6 +151,7 @@ fun DestinationScreen(
                 DestinationBookingForm(
                     destination = destination,
                     currentUser = currentUser,
+                    accessToken = accessToken,
                     viewModel = viewModel,
                     visible = showBookingForm,
                     onDismiss = {
@@ -433,6 +436,7 @@ private fun DestinationUnavailable(
 private fun DestinationBookingForm(
     destination: Wahana,
     currentUser: String,
+    accessToken: String,
     viewModel: TourifyViewModel,
     visible: Boolean,
     onDismiss: () -> Unit,
@@ -783,13 +787,13 @@ private fun DestinationBookingForm(
                                 it.isBefore(LocalDate.now())
                             } ?: return@Button
                             viewModel.bookTicket(
-                                currentUser,
-                                TicketBookingRequest(
-                                    currentUser,
-                                    destination.id,
-                                    date.toString(),
-                                    quantity,
-                                    paymentMethod
+                                username = currentUser,
+                                accessToken = accessToken,
+                                request = TicketBookingRequest(
+                                    wahanaId = destination.id,
+                                    visitDate = date.toString(),
+                                    quantity = quantity,
+                                    paymentMethod = paymentMethod
                                 )
                             ) { success ->
                                 if (success) {

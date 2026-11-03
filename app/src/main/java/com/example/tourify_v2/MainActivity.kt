@@ -202,6 +202,8 @@ private fun TourifyMainContent() {
     val tourifyViewModel: TourifyViewModel = viewModel()
     val lifecycleOwner = LocalLifecycleOwner.current
     val currentUser = authViewModel.currentUsername
+    // Token ikut dikirim supaya tiket dan chat mengikuti akun yang sudah login.
+    val currentAccessToken = authViewModel.currentAccessToken
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route ?: "login"
@@ -388,6 +390,7 @@ private fun TourifyMainContent() {
                             destinationId = entry.arguments?.getString("destinationId")?.toIntOrNull() ?: -1,
                             viewModel = tourifyViewModel,
                             currentUser = currentUser,
+                            accessToken = currentAccessToken,
                             onBack = { navController.popBackStack() },
                             onBookingSuccess = {
                                 showBookingSuccess = true
@@ -402,6 +405,7 @@ private fun TourifyMainContent() {
                         TicketsScreen(
                             viewModel = tourifyViewModel,
                             currentUser = currentUser,
+                            accessToken = currentAccessToken,
                             showBookingSuccess = showBookingSuccess,
                             onDismissBookingSuccess = { showBookingSuccess = false },
                             onTicketDetailVisibilityChanged = { isTicketDetailVisible = it }
@@ -409,9 +413,12 @@ private fun TourifyMainContent() {
                     }
                     composable("account") {
                         // Tiket dan foto profil disegarkan saat tab akun dibuka.
-                        LaunchedEffect(currentUser, authViewModel.currentAccessToken) {
+                        LaunchedEffect(currentUser, currentAccessToken) {
                             if (currentUser.isNotBlank()) {
-                                tourifyViewModel.loadTickets(currentUser)
+                                tourifyViewModel.loadTickets(
+                                    username = currentUser,
+                                    accessToken = currentAccessToken
+                                )
                                 authViewModel.loadProfileImage()
                             }
                         }
@@ -426,7 +433,8 @@ private fun TourifyMainContent() {
                             onRetryTickets = {
                                 // Coba muat ulang ringkasan di profil.
                                 tourifyViewModel.loadTickets(
-                                    currentUser,
+                                    username = currentUser,
+                                    accessToken = currentAccessToken,
                                     forceRefresh = true
                                 )
                             },
@@ -469,21 +477,24 @@ private fun TourifyMainContent() {
                 availableWahana = tourifyViewModel.wahana,
                 onSendMessage = { message, history, onComplete ->
                     tourifyViewModel.sendChatMessage(
+                        accessToken = currentAccessToken,
                         message = message,
-                        username = currentUser,
                         history = history,
                         onComplete = onComplete
                     )
                 },
                 onConfirmBooking = { proposal, onComplete ->
                     val request = TicketBookingRequest(
-                        username = currentUser,
                         wahanaId = proposal.wahanaId,
                         visitDate = proposal.visitDate,
                         quantity = proposal.quantity,
                         paymentMethod = proposal.paymentMethod
                     )
-                    tourifyViewModel.bookTicket(currentUser, request) { success ->
+                    tourifyViewModel.bookTicket(
+                        username = currentUser,
+                        accessToken = currentAccessToken,
+                        request = request
+                    ) { success ->
                         onComplete(success, tourifyViewModel.bookingMessage)
                     }
                 },

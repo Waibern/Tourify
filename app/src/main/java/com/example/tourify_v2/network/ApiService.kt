@@ -45,13 +45,18 @@ interface ApiService {
 
     // Pesan dan konteks akun dikirim ke PHP agar OpenAI key tetap di server.
     @POST("chat.php")
-    suspend fun sendChatMessage(@Body request: ChatRequest): Response<ChatResponse>
+    suspend fun sendChatMessage(
+        @Header("Authorization") authorization: String,
+        @Body request: ChatRequest
+    ): Response<ChatResponse>
 
+    // Tiket hanya bisa dimuat untuk akun pemilik token.
     @GET("tickets.php")
-    suspend fun getTickets(@Query("username") username: String): Response<TicketsResponse>
+    suspend fun getTickets(@Header("Authorization") authorization: String): Response<TicketsResponse>
 
     @POST("tickets.php")
     suspend fun bookTicket(
+        @Header("Authorization") authorization: String,
         @Body request: TicketBookingRequest
     ): Response<TicketResultResponse>
 }
