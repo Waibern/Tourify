@@ -223,15 +223,15 @@ fun RegisterScreen(
         )
         Spacer(modifier = Modifier.height(20.dp))
 
-        // cek input lalu bikin akun
+        // cek input sesuai aturan API lalu bikin akun
         Button(
             onClick = {
                 if (username.isEmpty() || password.isEmpty()) {
                     errorMessage = "Semua kolom wajib diisi."
                 } else if (password != confirmPassword) {
                     errorMessage = "Konfirmasi kata sandi tidak cocok."
-                } else if (password.length < 3) {
-                    errorMessage = "Kata sandi minimal 3 karakter."
+                } else if (password.length < 8) {
+                    errorMessage = "Kata sandi minimal 8 karakter."
                 } else {
                     errorMessage = ""
                     authViewModel.clearError()
