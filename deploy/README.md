@@ -6,7 +6,7 @@ Panduan ini menyiapkan staging publik dari repo, PHP-FPM, MySQL lokal VPS, dan d
 
 - Pastikan public IPv4 yang dipakai tetap stabil. Verifikasi Elastic IP dan aturan Security Group untuk TCP 80/443 di AWS Console. Jangan membuka 3306; MySQL tetap di `127.0.0.1`.
 - Simpan salinan konfigurasi Nginx lama, lalu nonaktifkan symlink `sites-enabled/default` saat mengaktifkan virtual host Tourify. Jangan hapus `/var/www/html` atau video lamanya.
-- Clone repo ke `/var/www/tourify`. Jika repo privat, VPS perlu akses deploy Git yang hanya bisa membaca repo.
+- Repo GitHub ini privat. Sebelum clone ke `/var/www/tourify`, VPS perlu deploy key khusus dengan akses baca-saja ke repo ini; jangan pakai token pribadi yang punya akses tulis.
 - Gunakan Node.js, pnpm, PHP-FPM 8.3 dengan `pdo_mysql`, `curl`, `mbstring`, `xml`, `gd`, dan `fileinfo`, MySQL, serta Nginx.
 
 ## Database staging baru
