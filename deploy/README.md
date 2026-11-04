@@ -51,6 +51,7 @@ Hanya untuk staging baru tanpa data MAMP: impor `database/schema.sql`, lalu `dat
 - Pasang `deploy/tourify-dashboard.service` sebagai `/etc/systemd/system/tourify-dashboard.service`. Unit memakai Node di `/usr/bin/node` dan Nginx hanya mem-proxy ke `127.0.0.1:3000`.
 - Build pertama dari `web-dashboard` memakai `pnpm install --frozen-lockfile` lalu `pnpm build`. Service Nuxt hanya mendengarkan `127.0.0.1:3000`.
 - Buat `/var/www/certbot`, pasang `deploy/nginx/tourify-issue-cert.conf` sebagai virtual host sementara, lalu terbitkan sertifikat IP. Setelah itu pasang `deploy/nginx/tourify.conf.template`.
+- Pasang `deploy/nginx/tourify-rate-limits.conf` ke `/etc/nginx/conf.d/tourify-rate-limits.conf`; pastikan `nginx.conf` menyertakan `conf.d/*.conf` di dalam blok `http`. Login/daftar dibatasi 10 request per menit per IP, endpoint, dan metode; chat dibatasi 10 per menit per IP. Keduanya punya burst 3 dan membalas HTTP 429 saat terlampaui.
 - Nginx harus meneruskan endpoint PHP yang tercantum di template ke socket PHP-FPM, meneruskan `HTTP_AUTHORIZATION`, dan memberi `HTTPS=on`. Endpoint lain di `/tourify-api/`, termasuk `/cli/`, harus 404.
 - Foto dapat berukuran sampai 5 MB. Template Nginx menetapkan `client_max_body_size 6m`; pasang `deploy/php-fpm/99-tourify.ini` ke `/etc/php/8.3/fpm/conf.d/` agar PHP-FPM memakai `upload_max_filesize=5M` dan `post_max_size=6M`, lalu reload layanan.
 - Buat `/var/lib/tourify/uploads/profile` untuk file foto persisten, lalu jadikan `database/api/uploads/profile` symlink ke folder tersebut. Pastikan `www-data` dapat menulis dan Nginx membacanya.
@@ -93,6 +94,6 @@ Script hanya fast-forward dari `origin/main`, memasang dependency sesuai lockfil
 - `nginx -t` lolos, service dashboard aktif, dan HTTPS menampilkan sertifikat untuk IP yang tepat.
 - `/tourify-api/wahana.php` menampilkan data wahana hasil impor; `/tourify-api/` dan `/tourify-api/cli/` tidak membuka file.
 - Daftar akun, login, pemesanan tiket, dan tampilan tiket tersimpan di MySQL berjalan dari jaringan luar melalui HTTPS.
-- Sebelum URL staging dibuka ke tester, aktifkan dan cek pembatas request server untuk `/tourify-api/register.php`, `/tourify-api/login.php`, dan `/tourify-api/dashboard_auth.php`; template Nginx saat ini belum membatasi percobaan login. Jika `OPENAI_API_KEY` dipasang, batasi `/tourify-api/chat.php` juga atau pasang batas pemakaian pada akun API karena endpoint ini belum punya kuota aplikasi.
+- Sebelum URL staging dibuka ke tester, pastikan file rate limit termuat dan Nginx lolos `nginx -t`. Batasnya memakai IP, jadi tester pada NAT yang sama berbagi kuota; jika `OPENAI_API_KEY` dipasang, atur juga batas pemakaian pada akun API karena chat belum punya kuota per akun.
 - Login dashboard hanya menerima akun ber-role `admin` atau `gate`; akun awal dipilih dan diberi role secara sadar.
 - MySQL tetap lokal dan firewall Lightsail tidak memiliki aturan untuk port 3306.

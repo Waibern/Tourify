@@ -24,6 +24,11 @@ server {
     root /var/www/tourify/web-dashboard/.output/public;
     client_max_body_size 6m;
 
+    # Key kosong melewati limit; endpoint autentikasi dan chat punya batas terpisah.
+    limit_req_status 429;
+    limit_req zone=tourify_auth burst=3 nodelay;
+    limit_req zone=tourify_chat burst=3 nodelay;
+
     location = /tourify-api {
         return 308 /tourify-api/;
     }
