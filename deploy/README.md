@@ -4,7 +4,7 @@ Panduan ini menyiapkan staging publik dari repo, PHP-FPM, MySQL lokal VPS, dan d
 
 ## Kondisi sebelum deploy
 
-- VPS ini memakai Lightsail. Lampirkan static IPv4 sebelum mengarahkan tester, lalu verifikasi aturan firewall Lightsail untuk TCP 80/443. Jangan membuka 3306; MySQL tetap di `127.0.0.1`.
+- VPS ini memakai Lightsail. Audit baca-saja 4 November 2026 menemukan static IPv4 belum terpasang; firewall Lightsail mengizinkan port 80 dan 22 dari semua IPv4/IPv6, sedangkan 443 belum dibuka. Periksa ulang status ini saat deploy, lampirkan static IPv4, lalu buka HTTPS setelah gerbang keamanan kernel siap. Jangan membuka 3306; MySQL tetap di `127.0.0.1`.
 - Simpan salinan konfigurasi Nginx lama, lalu nonaktifkan symlink `sites-enabled/default` saat mengaktifkan virtual host Tourify. Jangan hapus `/var/www/html` atau video lamanya.
 - Repo GitHub ini privat. Gunakan deploy key khusus baca-saja untuk repo ini; pasang private key sebagai `/home/ubuntu/.ssh/tourify-vps-deploy` dengan permission `600`, lalu clone sebagai `ubuntu` agar update berikutnya bisa menarik perubahan. Contoh: `git -c core.sshCommand='ssh -i /home/ubuntu/.ssh/tourify-vps-deploy -o IdentitiesOnly=yes' clone git@github.com:Waibern/Tourify.git /var/www/tourify`, lalu simpan perintah SSH itu di konfigurasi lokal repo dengan `git -C /var/www/tourify config --local core.sshCommand 'ssh -i /home/ubuntu/.ssh/tourify-vps-deploy -o IdentitiesOnly=yes'`. Jangan pakai token pribadi yang punya akses tulis atau kirim private key lewat chat.
 - Gunakan Node.js 24, pnpm 12.15.0 sesuai `web-dashboard/package.json`, PHP-FPM 8.3 dengan `pdo_mysql`, `curl`, `mbstring`, `xml`, `gd`, dan `fileinfo`, MySQL, serta Nginx.
