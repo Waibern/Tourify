@@ -45,6 +45,16 @@ Hanya untuk staging baru tanpa data MAMP: impor `database/schema.sql`, lalu `dat
 
 Let's Encrypt sekarang menerbitkan sertifikat untuk alamat IP. Certbot harus versi 5.4 atau lebih baru; sertifikat IP memakai profil `shortlived` dan berlaku sekitar enam hari, jadi pembaruan otomatis wajib. Certbot dapat menerbitkan sertifikatnya, tetapi Nginx perlu diarahkan manual ke file sertifikat dan hook pembaruan harus me-reload Nginx. Lihat [panduan IP certificate Certbot dari Let's Encrypt](https://letsencrypt.org/2026/03/11/shorter-certs-certbot) dan [masa berlaku profil](https://letsencrypt.org/docs/profiles/).
 
+VPS sudah memiliki `snapd` aktif. Saat audit 4 November 2026, Certbot belum terpasang dan kandidat apt masih `2.9.0-1`, terlalu lama untuk sertifikat IP. Cek lagi pada hari deploy, lalu gunakan [paket Snap resmi Certbot](https://certbot.eff.org/instructions?os=snap&ws=nginx):
+
+```bash
+sudo snap install --classic certbot
+sudo ln -s /snap/bin/certbot /usr/local/bin/certbot
+certbot --version
+```
+
+Pastikan versi yang tampil 5.4 atau lebih baru sebelum menerbitkan sertifikat. Jangan memasang versi apt yang lebih lama.
+
 Sebelum memakai template HTTPS, terbitkan sertifikat dengan nama `tourify` menggunakan webroot `/var/www/certbot` dan public IPv4 yang sudah dipastikan stabil. Pastikan timer `certbot renew` aktif dan deploy hook me-reload Nginx; lakukan `certbot renew --dry-run` sebelum membuka alamat ke tester.
 
 Perintah penerbitan setelah Certbot 5.4+ tersedia:
