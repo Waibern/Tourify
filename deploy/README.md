@@ -55,7 +55,32 @@ fi
 ```
 
 Ganti path ke binary `mysqldump` MAMP 8, target SSH, IP statis, nama database unik, dan user MAMP sesuai konfigurasi hari deploy. `--password` meminta password langsung di terminal; jangan isi nilainya di command. Siapkan autentikasi SSH berbasis key untuk kedua koneksi karena koneksi kedua memakai stdin untuk stream. Database tujuan harus sudah dibuat dan user SSH harus dapat menjalankan `sudo -n mysql` tanpa prompt password agar stream tidak terpotong.
-- Salin juga foto profil yang dirujuk `users.profile_image` dari folder upload MAMP ke `/var/lib/tourify/uploads/profile` melalui SSH, dengan nama file dan path relatif tetap. Verifikasi setiap referensi foto punya file tujuan sebelum mengalihkan konfigurasi.
+- Salin juga folder foto profil yang dirujuk `users.profile_image`. Isi path sumber dan target SSH yang sama seperti perintah database, lalu gunakan:
+
+```bash
+set -Eeuo pipefail
+MAMP_PROFILE_DIR='<PATH_TO_MAMP_API_UPLOADS_PROFILE>'
+VPS_TARGET='ubuntu@<STATIC_IPV4>'
+REMOTE_PROFILE_DIR='/var/lib/tourify/uploads/profile'
+
+if [[ ! -d "$MAMP_PROFILE_DIR" ]]; then
+  echo 'Isi MAMP_PROFILE_DIR dengan folder uploads/profile MAMP.' >&2
+  exit 1
+fi
+
+if ! ssh "$VPS_TARGET" "sudo -n test ! -e '$REMOTE_PROFILE_DIR'"; then
+  echo 'Folder tujuan foto sudah ada atau tidak bisa diperiksa; periksa dan cadangkan dulu.' >&2
+  exit 1
+fi
+ssh "$VPS_TARGET" "sudo -n install -d -o www-data -g www-data -m 0750 '$REMOTE_PROFILE_DIR'"
+
+rsync -rpt \
+  --rsync-path='sudo -n rsync' -e ssh \
+  "$MAMP_PROFILE_DIR/" "$VPS_TARGET:$REMOTE_PROFILE_DIR/"
+ssh "$VPS_TARGET" "sudo -n chown -R www-data:www-data '$REMOTE_PROFILE_DIR'"
+```
+
+Perintah ini tidak menghapus file sumber atau tujuan. Setelah itu, pastikan setiap nilai `users.profile_image` punya file dengan nama/path yang sama di tujuan sebelum mengalihkan konfigurasi database.
 - Jalankan query berikut pada database sumber dan tujuan; jumlah baris harus sama dan semua hitungan relasi yatim harus nol. Lalu cek login, dashboard, daftar wahana, pemesanan, dan tiket. Jangan alihkan `/etc/tourify/database.php` ke database hasil impor sebelum hasilnya cocok.
 
 ```sql
