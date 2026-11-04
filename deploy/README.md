@@ -22,7 +22,39 @@ Deploy ini menyalin database MAMP `tourify`, termasuk akun, tiket, wahana, dan c
 - Jangan impor `database/schema.sql` atau `database/seed.sql` untuk jalur ini; keduanya hanya untuk staging kosong. Jangan menjalankan migrasi 001–005 di atas dump yang sudah memiliki skema terbaru.
 - Buat database tujuan baru dengan nama sementara yang unik, lalu beri akun aplikasi akses hanya ke database itu dari `127.0.0.1`. Biarkan MySQL tetap terikat ke alamat lokal itu.
 - Buat dump konsisten dengan `mysqldump --single-transaction --routines --triggers --events --hex-blob --default-character-set=utf8mb4 --no-tablespaces`, lalu kirim sebagai stream melalui SSH terenkripsi langsung ke MySQL VPS. Jangan menyimpan dump plaintext di disk, memasukkannya ke Git, atau mengirim isi database lewat chat. Pakai prompt password, bukan argumen password di command line.
-- Untuk database tujuan contoh `tourify_mamp_import`, alirkan `mysqldump` yang memakai koneksi MAMP aktif ke `gzip`, lalu `ssh` ke VPS dan impor hasil dekompresi dengan `sudo mysql --database=tourify_mamp_import`. Jika nama itu sudah ada, pilih nama unik lain dan jangan timpa. Aktifkan `set -o pipefail` di shell lokal dan shell remote agar kegagalan dump atau impor terlihat. Isi host, port, user, kunci SSH, dan IPv4 dari konfigurasi yang aktif saat deploy; gunakan opsi `--password` supaya mysqldump meminta password secara interaktif.
+- Untuk database tujuan yang baru dibuat dan masih kosong, contoh stream dari Mac ke VPS:
+
+```bash
+set -Eeuo pipefail
+MAMP_MYSQLDUMP='<PATH_TO_MAMP_8_MYSQLDUMP>'
+MAMP_DB_USER='root'
+VPS_TARGET='ubuntu@<STATIC_IPV4>'
+REMOTE_DB='tourify_mamp_import'
+
+case "$REMOTE_DB" in
+  ''|*[!A-Za-z0-9_]*) echo 'Nama database hanya boleh berisi huruf, angka, dan underscore.' >&2; exit 1 ;;
+esac
+if [[ ! -x "$MAMP_MYSQLDUMP" ]]; then
+  echo 'Isi MAMP_MYSQLDUMP dengan path mysqldump MAMP 8 yang valid.' >&2
+  exit 1
+fi
+
+REMOTE_TABLES="$(ssh "$VPS_TARGET" "sudo -n mysql --database=$REMOTE_DB -Nse 'SHOW TABLES'")"
+if [[ -n "$REMOTE_TABLES" ]]; then
+  echo 'Database tujuan tidak kosong. Pilih database baru; jangan menimpanya.' >&2
+  exit 1
+fi
+
+"$MAMP_MYSQLDUMP" \
+  --host=127.0.0.1 --port=8889 --user="$MAMP_DB_USER" --password \
+  --single-transaction --routines --triggers --events --hex-blob \
+  --default-character-set=utf8mb4 --no-tablespaces \
+  tourify \
+| gzip -c \
+| ssh "$VPS_TARGET" "bash -o pipefail -c 'gzip -dc | sudo -n mysql --database=$REMOTE_DB'"
+```
+
+Ganti path ke binary `mysqldump` MAMP 8, target SSH, IP statis, nama database unik, dan user MAMP sesuai konfigurasi hari deploy. `--password` meminta password langsung di terminal; jangan isi nilainya di command. Siapkan autentikasi SSH berbasis key untuk kedua koneksi karena koneksi kedua memakai stdin untuk stream. Database tujuan harus sudah dibuat dan user SSH harus dapat menjalankan `sudo -n mysql` tanpa prompt password agar stream tidak terpotong.
 - Salin juga foto profil yang dirujuk `users.profile_image` dari folder upload MAMP ke `/var/lib/tourify/uploads/profile` melalui SSH, dengan nama file dan path relatif tetap. Verifikasi setiap referensi foto punya file tujuan sebelum mengalihkan konfigurasi.
 - Jalankan query berikut pada database sumber dan tujuan; jumlah baris harus sama dan semua hitungan relasi yatim harus nol. Lalu cek login, dashboard, daftar wahana, pemesanan, dan tiket. Jangan alihkan `/etc/tourify/database.php` ke database hasil impor sebelum hasilnya cocok.
 
