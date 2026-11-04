@@ -18,4 +18,6 @@ Nginx harus meneruskan header login Android ke PHP-FPM dengan `fastcgi_param HTT
 
 `../schema.sql` adalah skema dasar saat ini tanpa data pengguna. Untuk memindahkan data dari MAMP, buat backup terpisah lalu impor dump ke database baru di AWS. Dump penuh sudah membawa skema, jadi jangan jalankan ulang migrasi 001–005 di atasnya. Migrasi berikutnya dijalankan satu kali setelah backup.
 
+Untuk database staging baru tanpa akun/tiket lama, impor `../schema.sql` lalu `../seed.sql`. Seed hanya mengisi katalog wahana dan aman dijalankan ulang.
+
 Backup lokal MAMP tetap menjadi salinan pemulihan sampai data AWS dan alur aplikasi selesai diperiksa.
