@@ -6,8 +6,8 @@ Panduan ini menyiapkan staging publik dari repo, PHP-FPM, MySQL lokal VPS, dan d
 
 - VPS ini memakai Lightsail. Lampirkan static IPv4 sebelum mengarahkan tester, lalu verifikasi aturan firewall Lightsail untuk TCP 80/443. Jangan membuka 3306; MySQL tetap di `127.0.0.1`.
 - Simpan salinan konfigurasi Nginx lama, lalu nonaktifkan symlink `sites-enabled/default` saat mengaktifkan virtual host Tourify. Jangan hapus `/var/www/html` atau video lamanya.
-- Repo GitHub ini privat. Sebelum clone ke `/var/www/tourify`, VPS perlu deploy key khusus dengan akses baca-saja ke repo ini; jangan pakai token pribadi yang punya akses tulis.
-- Gunakan Node.js, pnpm, PHP-FPM 8.3 dengan `pdo_mysql`, `curl`, `mbstring`, `xml`, `gd`, dan `fileinfo`, MySQL, serta Nginx.
+- Repo GitHub ini privat. Sebelum clone ke `/var/www/tourify`, gunakan deploy key khusus untuk repo ini: simpan private key di VPS, tambahkan public key sebagai GitHub Deploy Key baca-saja, dan clone lewat SSH agar `deploy/update-vps.sh` bisa menarik `main`. Jangan pakai token pribadi yang punya akses tulis atau kirim private key lewat chat.
+- Gunakan Node.js 24, pnpm 12.15.0 sesuai `web-dashboard/package.json`, PHP-FPM 8.3 dengan `pdo_mysql`, `curl`, `mbstring`, `xml`, `gd`, dan `fileinfo`, MySQL, serta Nginx.
 - Tinjau pemberitahuan keamanan Lightsail dan pembaruan Ubuntu yang tertunda sebelum membuka akses publik. Setelah pembaruan, cek ulang PHP-FPM, MySQL, dan Nginx serta apakah VPS perlu reboot.
 
 ## Database MAMP lengkap (jalur deploy yang dipilih)
