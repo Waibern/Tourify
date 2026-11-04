@@ -93,5 +93,6 @@ Script hanya fast-forward dari `origin/main`, memasang dependency sesuai lockfil
 - `nginx -t` lolos, service dashboard aktif, dan HTTPS menampilkan sertifikat untuk IP yang tepat.
 - `/tourify-api/wahana.php` menampilkan data wahana hasil impor; `/tourify-api/` dan `/tourify-api/cli/` tidak membuka file.
 - Daftar akun, login, pemesanan tiket, dan tampilan tiket tersimpan di MySQL berjalan dari jaringan luar melalui HTTPS.
+- Sebelum URL staging dibuka ke tester, aktifkan dan cek pembatas request server untuk `/tourify-api/register.php`, `/tourify-api/login.php`, dan `/tourify-api/dashboard_auth.php`; template Nginx saat ini belum membatasi percobaan login. Jika `OPENAI_API_KEY` dipasang, batasi `/tourify-api/chat.php` juga atau pasang batas pemakaian pada akun API karena endpoint ini belum punya kuota aplikasi.
 - Login dashboard hanya menerima akun ber-role `admin` atau `gate`; akun awal dipilih dan diberi role secara sadar.
 - MySQL tetap lokal dan firewall Lightsail tidak memiliki aturan untuk port 3306.
