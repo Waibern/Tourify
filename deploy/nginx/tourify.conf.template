@@ -1,0 +1,82 @@
+# Template Nginx; ganti path atau nama service kalau lokasi deploy berbeda.
+server {
+    listen 80 default_server;
+    server_name _;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        try_files $uri =404;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl default_server;
+    server_name _;
+
+    ssl_certificate /etc/letsencrypt/live/tourify/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/tourify/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    root /var/www/tourify/web-dashboard/.output/public;
+    client_max_body_size 6m;
+
+    location = /tourify-api {
+        return 308 /tourify-api/;
+    }
+
+    # Foto profil disimpan di luar checkout agar tetap ada saat update.
+    location ^~ /tourify-api/uploads/profile/ {
+        alias /var/lib/tourify/uploads/profile/;
+        autoindex off;
+    }
+
+    # Hanya endpoint API yang boleh dipanggil lewat PHP-FPM.
+    location ~ ^/tourify-api/(register|login|logout|wahana|tickets|chat|profile|dashboard_auth|dashboard_analytics|dashboard_activity|dashboard_activity_feed|dashboard_checkin|dashboard_checkins|dashboard_customers|dashboard_members|dashboard_orders|dashboard_security|dashboard_wahana|customer_presence)\.php$ {
+        fastcgi_param SCRIPT_FILENAME /var/www/tourify/database/api/$1.php;
+        fastcgi_param SCRIPT_NAME /tourify-api/$1.php;
+        fastcgi_param QUERY_STRING $query_string;
+        fastcgi_param REQUEST_METHOD $request_method;
+        fastcgi_param CONTENT_TYPE $content_type;
+        fastcgi_param CONTENT_LENGTH $content_length;
+        fastcgi_param REQUEST_URI $request_uri;
+        fastcgi_param DOCUMENT_URI $document_uri;
+        fastcgi_param DOCUMENT_ROOT /var/www/tourify/database/api;
+        fastcgi_param SERVER_PROTOCOL $server_protocol;
+        fastcgi_param REQUEST_SCHEME $scheme;
+        fastcgi_param GATEWAY_INTERFACE CGI/1.1;
+        fastcgi_param SERVER_SOFTWARE nginx/$nginx_version;
+        fastcgi_param REMOTE_ADDR $remote_addr;
+        fastcgi_param REMOTE_PORT $remote_port;
+        fastcgi_param SERVER_ADDR $server_addr;
+        fastcgi_param SERVER_PORT $server_port;
+        fastcgi_param SERVER_NAME $server_name;
+        fastcgi_param HTTP_AUTHORIZATION $http_authorization;
+        fastcgi_param HTTPS on;
+        fastcgi_param HTTP_PROXY "";
+        fastcgi_param REDIRECT_STATUS 200;
+        fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+    }
+
+    # File lain di jalur API, termasuk skrip CLI, tidak dilayani Nginx.
+    location /tourify-api/ {
+        return 404;
+    }
+
+    location / {
+        try_files $uri $uri/ @tourify_dashboard;
+    }
+
+    location @tourify_dashboard {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
