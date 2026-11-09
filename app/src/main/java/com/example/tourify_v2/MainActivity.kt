@@ -33,6 +33,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.exclude
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -310,7 +312,8 @@ private fun TourifyMainContent() {
     ) {
         Scaffold(
             containerColor = if (isTicketDetailVisible) Color.Transparent else Color.White,
-            contentWindowInsets = if (currentRoute == "destination/{destinationId}") WindowInsets(0) else ScaffoldDefaults.contentWindowInsets,
+            // Hilangkan ruang latar putih di atas; tiap layar sudah mengatur posisi konten dari status bar.
+            contentWindowInsets = ScaffoldDefaults.contentWindowInsets.exclude(WindowInsets.statusBars),
             bottomBar = {
                 if (
                     currentRoute in listOf("home", "destinations", "ticket", "account") &&
