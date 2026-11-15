@@ -4,7 +4,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 try {
     $pdo = getDatabaseConnection();
-    // Akun diambil dari token, bukan username yang bisa diubah klien.
+    // Ambil akun dari token supaya klien tidak bisa memilih akun lain.
     $userId = optionalAppUserId($pdo);
     if ($userId === null) {
         respond(401, ['success' => false, 'message' => 'Sesi aplikasi tidak valid. Silakan login kembali.']);
@@ -23,11 +23,11 @@ try {
         respond(405, ['success' => false, 'message' => 'Gunakan metode GET atau POST.']);
     }
     $input = $method === 'POST' ? readJsonInput() : [];
-    // tanggal acuan tiket mengikuti hari lokal aplikasi
+    // Tentukan tanggal tiket berdasarkan waktu Jakarta.
     $today = (new DateTimeImmutable('now', new DateTimeZone('Asia/Jakarta')))->format('Y-m-d');
 
     if ($method === 'GET') {
-        // Status terpakai tetap dipertahankan, lalu tiket lain disesuaikan dengan tanggal Jakarta.
+        // Jangan ubah status Terpakai; perbarui status tiket lain pakai tanggal Jakarta.
         $statement = $pdo->prepare(
             "UPDATE tickets SET status = CASE "
             . "WHEN checked_in_quantity >= quantity THEN 'Used' "
@@ -55,7 +55,7 @@ try {
                 'unit_price' => (int) $row['unit_price'],
                 'total_price' => (int) $row['total_price'],
                 'payment_method' => $row['payment_method'],
-                // kirim status tersimpan supaya tab aktif, terpakai, dan kedaluwarsa konsisten
+                // Kirim status yang sama dengan tab Aktif, Terpakai, dan Kedaluwarsa.
                 'status' => $row['status'],
             ];
         }, $statement->fetchAll());
@@ -91,7 +91,7 @@ try {
 
     $unitPrice = (int) $selectedWahana['ticket_price'];
     $totalPrice = $unitPrice * $quantity;
-    // setiap pemesanan baru dimulai dengan status Active
+    // Pesanan baru mulai dengan status Active.
     $statement = $pdo->prepare(
         'INSERT INTO tickets (user_id, wahana_id, visit_date, quantity, unit_price, total_price, payment_method, status) '
         . "VALUES (:user_id, :wahana_id, :visit_date, :quantity, :unit_price, :total_price, :payment_method, 'Active')"
@@ -114,7 +114,7 @@ try {
             'username' => $user['username'],
             'wahana_name' => $selectedWahana['name'],
             'visit_date' => $visitDate,
-            // kirim status awal yang sama dengan nilai default database
+            // Kirim status awal yang sama dengan default di database.
             'status' => 'Active',
             'quantity' => $quantity,
             'checked_in_quantity' => 0,

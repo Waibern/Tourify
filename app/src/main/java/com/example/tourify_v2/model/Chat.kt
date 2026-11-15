@@ -2,7 +2,7 @@ package com.example.tourify_v2.model
 
 import com.google.gson.annotations.SerializedName
 
-// Payload mengikuti kontrak endpoint PHP chat.php.
+// Bentuk data chat mengikuti yang diminta chat.php.
 data class ChatRequest(
     val message: String,
     val history: List<ChatHistoryItem>
@@ -20,7 +20,7 @@ data class ChatResponse(
     @SerializedName("booking_proposal") val bookingProposal: ChatBookingProposal? = null
 )
 
-// Ringkasan ini hanya draft; pesanan baru dibuat setelah pengguna konfirmasi.
+// Ini baru draf; pesanan dibuat setelah pengguna mengonfirmasi.
 data class ChatBookingProposal(
     @SerializedName("wahana_id") val wahanaId: Int,
     @SerializedName("wahana_name") val wahanaName: String,

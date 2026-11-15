@@ -31,7 +31,7 @@ try {
             'id' => (int) $user['id'],
             'username' => $user['username'],
         ],
-        // Token membatasi unggahan profil ke akun yang baru lolos login.
+        // Token memastikan foto diunggah ke akun yang baru login.
         'access_token' => createAppAccessToken((int) $user['id'], $user['password_hash']),
     ]);
 } catch (Throwable $exception) {

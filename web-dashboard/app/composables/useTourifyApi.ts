@@ -1,4 +1,4 @@
-// Semua request web ke PHP memakai sesi cookie dan URL yang bisa diganti lewat env.
+// Semua permintaan ke PHP memakai sesi login dan alamat API dari pengaturan.
 export function useTourifyApi() {
   const config = useRuntimeConfig()
   const baseUrl = String(config.public.tourifyApiBaseUrl).replace(/\/+$/, '')
@@ -8,7 +8,7 @@ export function useTourifyApi() {
   }
 
   return {
-    // Path media memakai base URL API yang sama dengan request PHP.
+    // Foto memakai alamat dasar API yang sama dengan permintaan lainnya.
     assetUrl(path?: string | null) {
       return path ? url(path) : undefined
     },
@@ -18,7 +18,7 @@ export function useTourifyApi() {
     post<T>(path: string, body: Record<string, unknown>, options: { timeout?: number } = {}) {
       return $fetch<T>(url(path), { method: 'POST', body, credentials: 'include', ...options })
     },
-    // FormData mengirim foto dan field tambahan tanpa menebak multipart boundary.
+    // FormData mengirim foto dan data lain dengan format yang benar.
     upload<T>(path: string, file: File, fields: Record<string, string> = {}) {
       const body = new FormData()
       body.append('image', file)
@@ -34,7 +34,7 @@ export function useTourifyApi() {
   }
 }
 
-// Pesan dari API ditampilkan apa adanya supaya UI tidak menebak hasil transaksi.
+// Tampilkan pesan dari API supaya hasil transaksi tidak ditebak oleh halaman.
 export function getTourifyErrorMessage(error: unknown, fallback: string): string {
   if (typeof error === 'object' && error !== null && 'data' in error) {
     const data = error.data

@@ -5,6 +5,7 @@ import com.example.tourify_v2.ui.theme.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -13,7 +14,12 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -21,17 +27,17 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowOutward
-import androidx.compose.material.icons.filled.BeachAccess
-import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.automirrored.filled.EventNote
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Terrain
-import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -43,44 +49,59 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextMotion
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.tourify_v2.model.Ticket
+import androidx.compose.ui.platform.LocalDensity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.awaitCancellation
 import com.example.tourify_v2.model.Wahana
 import com.example.tourify_v2.R
 import com.example.tourify_v2.viewmodel.TourifyViewModel
 import java.text.NumberFormat
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 private val Forest = TourifyForest
+// Kategori pakai hijau utama, sama seperti tombol Beranda.
+private val SelectedGreen = TourifyForest
 private val Mint = TourifyMint
-private val Canvas = Color.White
+private val Canvas = TourifyCanvas
 private val Ink = TourifyInk
 private val Muted = TourifyMuted
 
+// Setiap chip kategori menampilkan foto destinasi.
 internal enum class DestinationCategory(
     val label: String,
-    val icon: ImageVector,
+    val imageRes: Int,
     val keywords: List<String>
 
-    // list buat kategori
+    // Daftar kategori.
 ) {
     ALL(
         "Semua",
-        Icons.Filled.Explore,
+        R.drawable.card_opening,
         emptyList()
     ),
     BEACH(
         "Pantai",
-        Icons.Filled.BeachAccess,
+        R.drawable.pantai_mentari,
         listOf(
             "pantai",
             "pesisir"
@@ -88,7 +109,7 @@ internal enum class DestinationCategory(
     ),
     WATER(
         "Air",
-        Icons.Filled.WaterDrop,
+        R.drawable.pulau_air,
         listOf(
             "air",
             "samudra",
@@ -97,7 +118,7 @@ internal enum class DestinationCategory(
     ),
     ANIMALS(
         "Satwa",
-        Icons.Filled.Pets,
+        R.drawable.taman_satwa_pesisir,
         listOf(
             "satwa",
             "hewan"
@@ -105,7 +126,7 @@ internal enum class DestinationCategory(
     ),
     ADVENTURE(
         "Petualangan",
-        Icons.Filled.Terrain,
+        R.drawable.dunia_petualang,
         listOf(
             "petualang",
             "adrenalin"
@@ -123,9 +144,45 @@ internal fun DestinationFilters(
     selectedCategory: DestinationCategory,
     onCategorySelected: (DestinationCategory) -> Unit
 ) {
+    // Kolom cari dan pilihan kategori ada di bagian Destinasi.
+    DestinationSearchBar(
+        searchQuery = searchQuery,
+        onSearchQueryChange = onSearchQueryChange
+    )
+
+    Spacer(modifier = Modifier.height(TourifySpacing.control))
+
+    DestinationCategoryFilters(
+        selectedCategory = selectedCategory,
+        onCategorySelected = onCategorySelected
+    )
+}
+
+// Kolom cari ini juga dipakai di atas foto header Beranda.
+@Composable
+internal fun DestinationSearchBar(
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var inputQuery by remember(searchQuery) {
+        mutableStateOf(searchQuery)
+    }
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    // Tombol cari dan Enter di keyboard menjalankan pencarian yang sama.
+    val submitSearch: () -> Unit = {
+        onSearchQueryChange(inputQuery.trim())
+        focusManager.clearFocus()
+        keyboardController?.hide()
+        Unit
+    }
+
     OutlinedTextField(
-        value = searchQuery,
-        onValueChange = onSearchQueryChange,
+        value = inputQuery,
+        onValueChange = {
+            inputQuery = it
+        },
         placeholder = {
             Text(
                 "Cari destinasi",
@@ -133,50 +190,87 @@ internal fun DestinationFilters(
             )
         },
         leadingIcon = {
-            Icon(
-                Icons.Default.Search,
-                contentDescription = null,
-                tint = Forest
-            )
+            // Ikon hitam di kiri menjalankan pencarian tanpa alas berwarna.
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clickable(
+                        role = Role.Button,
+                        onClickLabel = "Cari destinasi",
+                        onClick = submitSearch
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = null,
+                    tint = Ink,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         },
-        trailingIcon = if (searchQuery.isNotEmpty()) {
-            {
+        keyboardOptions = KeyboardOptions(
+            imeAction = ImeAction.Search
+        ),
+        keyboardActions = KeyboardActions(
+            onSearch = {
+                submitSearch()
+            }
+        ),
+        trailingIcon = {
+            if (inputQuery.isNotEmpty()) {
                 IconButton(
                     onClick = {
+                        inputQuery = ""
                         onSearchQueryChange("")
-                    }
+                    },
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
-                        Icons.Default.Close,
+                        imageVector = Icons.Default.Close,
                         contentDescription = "Hapus pencarian"
                     )
                 }
             }
-        } else {
-            null
         },
         singleLine = true,
-        shape = RoundedCornerShape(18.dp),
+        shape = CircleShape,
+        // Sembunyikan garis tepi supaya kolom tampak lebih rapi.
         colors = OutlinedTextFieldDefaults.colors(
-            unfocusedContainerColor = Color.White,
-            focusedContainerColor = Color.White,
-            unfocusedBorderColor = Color(0xFFE4E9E4),
-            focusedBorderColor = Forest
+            unfocusedContainerColor = TourifySurface,
+            focusedContainerColor = TourifySurface,
+            unfocusedBorderColor = Color.Transparent,
+            focusedBorderColor = Color.Transparent,
+            cursorColor = TourifyForest
         ),
-        modifier = Modifier
+        // Sediakan tinggi minimum supaya teks dan ikon tidak terpotong.
+        // Modifier dari layar menempatkan kolom di pertemuan foto dan panel.
+        modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
             .shadow(
-                4.dp,
-                RoundedCornerShape(18.dp)
+                2.dp,
+                CircleShape
             )
     )
+}
 
-    Spacer(modifier = Modifier.height(12.dp))
-
+// Tampilkan foto dan chip pilihan kategori.
+@Composable
+internal fun DestinationCategoryFilters(
+    selectedCategory: DestinationCategory,
+    onCategorySelected: (DestinationCategory) -> Unit
+) {
+    // Tampilkan chip tanpa alas di belakangnya.
     LazyRow(
-        modifier = Modifier.selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(9.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectableGroup()
+            .padding(
+                horizontal = 4.dp,
+                vertical = 4.dp
+            ),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(
             DestinationCategory.entries,
@@ -185,11 +279,29 @@ internal fun DestinationFilters(
             }
         ) { category ->
             val isSelected = category == selectedCategory
-            val borderColor = if (isSelected) Forest else Color(0xFFE7ECE8)
+            // Kategori terpilih pakai hijau yang sama dengan tombol cari.
+            val chipShape = CircleShape
+            // Warna dan label chip berubah saat kategori dipilih.
+            val chipColor by animateColorAsState(
+                targetValue = if (isSelected) SelectedGreen else TourifySurface,
+                animationSpec = tween(TourifyMotion.standardMillis),
+                label = "categoryChipColor"
+            )
+            val chipBorderColor by animateColorAsState(
+                targetValue = if (isSelected) SelectedGreen else TourifyBorder,
+                animationSpec = tween(TourifyMotion.standardMillis),
+                label = "categoryChipBorder"
+            )
+            val chipTextColor by animateColorAsState(
+                targetValue = if (isSelected) Color.White else Ink,
+                animationSpec = tween(TourifyMotion.standardMillis),
+                label = "categoryChipText"
+            )
 
             Surface(
                 modifier = Modifier
-                    .height(44.dp)
+                    .height(48.dp)
+                    .clip(chipShape)
                     .selectable(
                         selected = isSelected,
                         role = Role.RadioButton,
@@ -197,30 +309,32 @@ internal fun DestinationFilters(
                             onCategorySelected(category)
                         }
                     ),
-                shape = CircleShape,
-                color = if (isSelected) Forest else Color.White,
-                shadowElevation = 3.dp,
+                shape = chipShape,
+                color = chipColor,
+                shadowElevation = 1.dp,
                 border = BorderStroke(
                     1.dp,
-                    borderColor
+                    chipBorderColor
                 )
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier.padding(start = 4.dp, end = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = category.icon,
+                    Image(
+                        painter = painterResource(category.imageRes),
                         contentDescription = null,
-                        tint = if (isSelected) Color.White else Muted,
-                        modifier = Modifier.size(16.dp)
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
                     )
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = category.label,
-                        color = if (isSelected) Color.White else Ink,
-                        fontSize = 13.sp,
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                        color = chipTextColor,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
                         maxLines = 1
                     )
                 }
@@ -234,13 +348,92 @@ fun HomeScreen(
     viewModel: TourifyViewModel,
     currentUser: String,
     profileImageUrl: String?,
-    onDestinationClick: (Int) -> Unit
+    onDestinationClick: (Int) -> Unit,
+    onExploreDestinations: () -> Unit,
+    welcomeTitleIntroPending: Boolean,
+    playWelcomeTitleIntro: Boolean,
+    // Navigasi tiket dan token tetap disediakan pemilik sesi.
+    accessToken: String = "",
+    onOpenTickets: () -> Unit = {},
+    onOpenTicket: (String) -> Unit = {},
+    // Bantuan memakai panel asisten yang sudah dikelola navigasi utama.
+    onOpenAssistant: () -> Unit = {}
 ) {
+    // Ukuran kartu tetap lega saat pengguna membesarkan teks.
+    val largeTextEnabled = LocalDensity.current.fontScale >= 1.3f
+    val featuredCardMinHeight = if (largeTextEnabled) 240.dp else 220.dp
+    val featuredCardAspectRatio = if (largeTextEnabled) 1.35f else 1.5f
+    val destinationCardAspectRatio = if (largeTextEnabled) 1.45f else 1.6f
+
+    // Ingat status judul supaya animasinya nggak berulang saat pindah tab.
+    var hasPlayedWelcomeTitleIntro by rememberSaveable {
+        mutableStateOf(false)
+    }
+    val titleIntroStartProgress = if (
+        (welcomeTitleIntroPending || playWelcomeTitleIntro) &&
+        !hasPlayedWelcomeTitleIntro
+    ) {
+        0f
+    } else {
+        1f
+    }
+    val firstTitleProgress = remember {
+        Animatable(titleIntroStartProgress)
+    }
+    val secondTitleProgress = remember {
+        Animatable(titleIntroStartProgress)
+    }
+    // Setelah login, dua baris judul naik satu per satu.
+    LaunchedEffect(playWelcomeTitleIntro) {
+        if (playWelcomeTitleIntro && !hasPlayedWelcomeTitleIntro) {
+            hasPlayedWelcomeTitleIntro = true
+            launch {
+                firstTitleProgress.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(
+                        durationMillis = 280,
+                        easing = LinearOutSlowInEasing
+                    )
+                )
+            }
+            launch {
+                secondTitleProgress.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(
+                        durationMillis = 280,
+                        delayMillis = 170,
+                        easing = LinearOutSlowInEasing
+                    )
+                )
+            }
+        }
+    }
+
+    // Segarkan kunjungan saat Beranda aktif, termasuk setelah kembali dari aplikasi lain.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(currentUser, accessToken, lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            viewModel.loadTickets(
+                username = currentUser,
+                accessToken = accessToken
+            )
+            awaitCancellation()
+        }
+    }
+    // Pakai aturan urutan dan status yang sama dengan daftar tiket.
+    val upcomingTicket = if (viewModel.ticketsOwner == currentUser) {
+        visibleTickets(
+            tickets = viewModel.tickets,
+            showHistory = false
+        ).firstOrNull { canShowTicketQr(it) }
+    } else {
+        null
+    }
     val wahanaList = viewModel.wahana
     LaunchedEffect(Unit) {
         viewModel.loadWahana()
     }
-    // Simpan pencarian, kategori, dan favorit selama beranda dibuka.
+    // Ingat pencarian, kategori, dan favorit selama Beranda terbuka.
     var searchQuery by remember {
         mutableStateOf("")
     }
@@ -279,259 +472,404 @@ fun HomeScreen(
             ignoreCase = true
         )
     } ?: wahanaList.firstOrNull()
+    // Jarak ini menyisakan 60 dp bar dan 8 dp di atas/bawah, lalu inset gesture sistem.
+    val bottomNavClearance = 76.dp +
+        WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(Canvas),
-        // Sisakan ruang gulir agar isi terakhir tidak tertutup navbar.
+            .background(TourifySurface)
+            .padding(bottom = bottomNavClearance),
+        // Sisakan napas setelah konten terakhir di area yang sudah aman dari navbar.
         contentPadding = PaddingValues(
-            start = 20.dp,
-            top = 14.dp,
-            end = 20.dp,
-            bottom = 104.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+            bottom = TourifySpacing.card
         ),
-        verticalArrangement = Arrangement.spacedBy(22.dp)
+        // Rapatkan jarak antarbagian utama Beranda.
+        verticalArrangement = Arrangement.spacedBy(TourifySpacing.control)
     ) {
-        // Sapaan dan judul beranda.
+        // Foto tanpa fade bertemu panel putih membulat di bawahnya.
         item {
-            Row(
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Column(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    val displayName = currentUser
-                        .trim()
-                        .ifBlank {
-                            "petualang"
-                        }
-                        .replaceFirstChar {
-                            if (it.isLowerCase()) {
-                                it.titlecase(Locale.getDefault())
-                            } else {
-                                it.toString()
-                            }
-                        }
-                    // Sapaan di halaman beranda.
-                    Text(
-                        "Halo, $displayName",
-                        color = Forest,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    TourifyScreenTitle(
-                        text = "Mau ke mana hari ini?"
-                    )
-                }
-                // Avatar ikut state profil yang sama dengan halaman akun.
-                Surface(
-                    shape = CircleShape,
-                    color = Mint,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .shadow(
-                            8.dp,
-                            CircleShape
-                        )
-                ) {
-                    Box(
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = currentUser.firstOrNull()?.uppercase() ?: "?",
-                            color = Forest,
-                            fontSize = 19.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        if (!profileImageUrl.isNullOrBlank()) {
-                            AsyncImage(
-                                model = profileImageUrl,
-                                contentDescription = "Foto profil",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(CircleShape)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // search bar
-        item {
-            DestinationFilters(
-                searchQuery = searchQuery,
-                onSearchQueryChange = {
-                    searchQuery = it
-                },
-                selectedCategory = selectedCategory,
-                onCategorySelected = {
-                    selectedCategory = it
-                }
-            )
-        }
-
-        //Featured Box Model awas jan lupa pantek
-
-        if (searchQuery.isBlank() && selectedCategory == DestinationCategory.ALL &&
-            (viewModel.isLoadingWahana || featured != null)
-        ) item {
-            Text(
-                text = "Destinasi pilihan",
-                color = Ink,
-                fontSize = 21.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-
-            if (viewModel.isLoadingWahana && featured == null) {
-                FeaturedDestinationSkeleton()
-            } else if (featured != null) {
-                Card(
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .aspectRatio(1.45f),
-                    shape = RoundedCornerShape(22.dp),
-                    elevation = CardDefaults.cardElevation(
-                        defaultElevation = 4.dp,
-                        pressedElevation = 6.dp
-                    ),
-                    onClick = {
-                        onDestinationClick(featured.id)
-                    }
+                        // Sisakan ruang gambar agar lengkung panel terlihat jelas.
+                        .heightIn(min = 232.dp)
                 ) {
-                    Box(
-                        Modifier.fillMaxSize()
+                    Image(
+                        // Pakai ilustrasi hijau sebagai latar header Beranda.
+                        painter = painterResource(R.drawable.home_header_background),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        alignment = androidx.compose.ui.BiasAlignment(0f, -0.45f),
+                        modifier = Modifier.matchParentSize()
+                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                start = 20.dp,
+                                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 24.dp,
+                                end = 20.dp,
+                                bottom = 16.dp
+                            ),
+                        // Header yang lebih ringkas memberi ruang lebih banyak untuk destinasi.
+                        verticalArrangement = Arrangement.spacedBy(TourifySpacing.compact)
                     ) {
-                        val featuredPhoto = painterResource(destinationImage(featured.id))
-                        Image(
-                            painter = featuredPhoto,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        Box(
-                            Modifier
-                                .fillMaxSize()
-                                .graphicsLayer {
-                                    compositingStrategy = CompositingStrategy.Offscreen
-                                }
-
-                                //Blur
-                                .drawWithContent {
-                                    drawContent()
-                                    drawRect(
-                                        brush = Brush.verticalGradient(
-                                            0f to Color.Transparent,
-                                            0.52f to Color.Transparent,
-                                            0.76f to Color.Black,
-                                            1f to Color.Black
-                                        ),
-                                        blendMode = BlendMode.DstIn
-                                    )
-                                }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Column(
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                val displayName = currentUser
+                                    .trim()
+                                    .ifBlank {
+                                        "petualang"
+                                    }
+                                    .replaceFirstChar {
+                                        if (it.isLowerCase()) {
+                                            it.titlecase(Locale.getDefault())
+                                        } else {
+                                            it.toString()
+                                        }
+                                    }
+                                // Judul tetap menonjol, tapi tidak mendorong konten terlalu jauh.
+                                val photoHeadingStyle = MaterialTheme.typography.headlineLarge.copy(
+                                    fontSize = 32.sp,
+                                    lineHeight = 38.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    shadow = Shadow(
+                                        color = Color.Black.copy(alpha = 0.32f),
+                                        offset = Offset(0f, 2f),
+                                        blurRadius = 4f
+                                    )
+                                )
+                                Text(
+                                    text = "Halo, $displayName",
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        shadow = photoHeadingStyle.shadow
+                                    )
+                                )
+                                // Dua baris ini jadi fokus utama di header Beranda.
+                                Text(
+                                    text = "Mau ke mana",
+                                    color = Color.White,
+                                    modifier = Modifier.graphicsLayer {
+                                        alpha = firstTitleProgress.value
+                                        translationY = (1f - firstTitleProgress.value) * 18.dp.toPx()
+                                    },
+                                    style = photoHeadingStyle.copy(
+                                        textMotion = TextMotion.Animated
+                                    )
+                                )
+                                Text(
+                                    text = "hari ini?",
+                                    color = Color.White,
+                                    modifier = Modifier.graphicsLayer {
+                                        alpha = secondTitleProgress.value
+                                        translationY = (1f - secondTitleProgress.value) * 12.dp.toPx()
+                                    },
+                                    style = photoHeadingStyle.copy(
+                                        textMotion = TextMotion.Animated
+                                    )
+                                )
+                            }
+                            // Tetap pakai foto profil yang sama dengan layar akun.
+                            Surface(
+                                shape = CircleShape,
+                                color = Mint,
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .shadow(
+                                        8.dp,
+                                        CircleShape
+                                    )
+                            ) {
+                                Box(
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = currentUser.firstOrNull()?.uppercase() ?: "?",
+                                        color = Forest,
+                                        fontSize = 17.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    if (!profileImageUrl.isNullOrBlank()) {
+                                        AsyncImage(
+                                            model = profileImageUrl,
+                                            contentDescription = "Foto profil",
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .clip(CircleShape)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // Naikkan panel ke atas foto sambil menjaga tinggi item tetap rapat.
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .layout { measurable, constraints ->
+                            val panel = measurable.measure(constraints)
+                            // Sisakan gambar di bawah supaya transisi melengkung tetap tampak.
+                            val overlap = 24.dp.roundToPx()
+                            layout(
+                                width = panel.width,
+                                height = (panel.height - overlap).coerceAtLeast(0)
+                            ) {
+                                panel.placeRelative(
+                                    x = 0,
+                                    y = -overlap
+                                )
+                            }
+                        }
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(
+                                RoundedCornerShape(
+                                    topStart = 40.dp,
+                                    topEnd = 40.dp
+                                )
+                            )
+                            .background(TourifySurface)
+                            // Sisakan jarak tipis sebelum judul fitur.
+                            .padding(bottom = 8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                // Tempatkan kategori rapat di bawah searchbar.
+                                .padding(top = 40.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier.padding(horizontal = 20.dp)
+                            ) {
+                                DestinationCategoryFilters(
+                                    selectedCategory = selectedCategory,
+                                    onCategorySelected = {
+                                        selectedCategory = it
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    // Pusatkan searchbar di batas foto dan panel putih.
+                    DestinationSearchBar(
+                        searchQuery = searchQuery,
+                        onSearchQueryChange = {
+                            searchQuery = it
+                        },
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .offset(y = (-32).dp)
+                            .padding(horizontal = 20.dp)
+                    )
+                }
+            }
 
+        }
+
+        // Judul dan kartu unggulan jadi satu bagian di daftar.
+        item {
+            Column(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Judul pendek menjaga nada tetap akrab dan cepat dipindai.
+                Text(
+                    text = "Rekomendasi untukmu",
+                    color = Ink,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 20.dp)
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                if (viewModel.isLoadingWahana && featured == null) {
+                    Box(
+                        modifier = Modifier.padding(horizontal = 20.dp)
+                    ) {
+                        FeaturedDestinationSkeleton()
+                    }
+                } else if (featured != null) {
+                    Card(
+                        modifier = Modifier
+                            .padding(horizontal = 20.dp)
+                            .fillMaxWidth()
+                            // Kartu diringkas, dengan tinggi penuh untuk ukuran teks besar.
+                            .heightIn(min = featuredCardMinHeight)
+                            .aspectRatio(featuredCardAspectRatio),
+                        shape = TourifyShapes.card,
+                        elevation = CardDefaults.cardElevation(
+                            defaultElevation = TourifyElevation.destinationCard,
+                            pressedElevation = TourifyElevation.floating
+                        ),
+                        onClick = {
+                            onDestinationClick(featured.id)
+                        }
+                    ) {
+                        Box(
+                            Modifier.fillMaxSize()
+                        ) {
+                            val featuredPhoto = painterResource(destinationImage(featured.id))
                             Image(
                                 painter = featuredPhoto,
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
-                                modifier = Modifier
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            Box(
+                                Modifier
                                     .fillMaxSize()
-                                    .blur(18.dp)
-                            )
-                        }
-                        Box(
-                            Modifier
-                                .fillMaxSize()
-                                .background(
-                                    Brush.horizontalGradient(
-                                        colors = listOf(
-                                            Color(0xD90B263A),
-                                            Color(0x990B263A),
-                                            Color(0x220B263A),
-                                            Color.Transparent
+                                    .graphicsLayer {
+                                        compositingStrategy = CompositingStrategy.Offscreen
+                                    }
+
+                                    // Gelapkan bagian bawah foto supaya teks tetap terbaca.
+                                    .drawWithContent {
+                                        drawContent()
+                                        drawRect(
+                                            brush = Brush.verticalGradient(
+                                                0f to Color.Transparent,
+                                                0.52f to Color.Transparent,
+                                                0.76f to Color.Black,
+                                                1f to Color.Black
+                                            ),
+                                            blendMode = BlendMode.DstIn
                                         )
-                                    )
-                                )
-                        )
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .height(72.dp)
-                                .align(Alignment.BottomCenter)
-                                .background(
-                                    Brush.verticalGradient(
-                                        colors = listOf(
-                                            Color.Transparent,
-                                            Color(0x55081724)
-                                        )
-                                    )
-                                )
-                        )
-                        Column(
-                            modifier = Modifier
-                                .align(Alignment.BottomStart)
-                                .fillMaxWidth(0.78f)
-                                .padding(
-                                    horizontal = 16.dp,
-                                    vertical = 25.dp
-                                ),
-                            verticalArrangement = Arrangement.spacedBy(1.dp)
-                        ) {
-                            Text(
-                                text = "Indonesia",
-                                color = Color.White.copy(alpha = 0.82f),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium,
-                                letterSpacing = 0.8.sp
-                            )
-                            Text(
-                                text = featured.name,
-                                color = Color.White,
-                                fontSize = 35.sp,
-                                lineHeight = 27.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = "Mulai dari ${rupiah(featured.ticketPrice)}",
-                                color = Color.White.copy(alpha = 0.9f),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Surface(
-                                color = TourifyGlassSurface,
-                                shape = CircleShape,
-                                border = BorderStroke(
-                                    1.dp,
-                                    TourifyGlassHighlight
-                                )
+                                    }
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(
-                                        horizontal = 12.dp,
-                                        vertical = 7.dp
+
+                                Image(
+                                    painter = featuredPhoto,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .blur(18.dp)
+                                )
+                            }
+                            Box(
+                                Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        // Gradasi gelap bikin teks terbaca di atas foto.
+                                        Brush.horizontalGradient(
+                                            colors = listOf(
+                                                TourifyForestDeep.copy(alpha = 0.85f),
+                                                TourifyForestDeep.copy(alpha = 0.6f),
+                                                TourifyForestDeep.copy(alpha = 0.13f),
+                                                Color.Transparent
+                                            )
+                                        )
+                                    )
+                            )
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(72.dp)
+                                    .align(Alignment.BottomCenter)
+                                    .background(
+                                        Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color.Transparent,
+                                                TourifyForestDeep.copy(alpha = 0.34f)
+                                            )
+                                        )
+                                    )
+                            )
+                            // Nama destinasi tampil dulu, lalu ringkasannya di bawah.
+                            Column(
+                                modifier = Modifier
+                                    .align(Alignment.TopStart)
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = 18.dp,
+                                        vertical = 20.dp
                                     ),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = featured.name,
+                                    color = Color.White,
+                                    fontSize = 21.sp,
+                                    lineHeight = 26.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = featured.description,
+                                    color = Color.White.copy(alpha = 0.88f),
+                                    fontSize = 14.sp,
+                                    lineHeight = 19.sp,
+                                    // Batasi ringkasan supaya foto dan harga tetap jadi fokus kartu.
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            // Harga dan tombol pesan tetap satu baris di bawah.
+                            Row(
+                                modifier = Modifier
+                                    .align(Alignment.BottomStart)
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = 18.dp,
+                                        vertical = 16.dp
+                                    ),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Text(
+                                        text = "Mulai dari",
+                                        color = Color.White.copy(alpha = 0.78f),
+                                        fontSize = 14.sp,
+                                        lineHeight = 16.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = rupiah(featured.ticketPrice),
+                                        color = Color.White,
+                                        fontSize = 16.sp,
+                                        lineHeight = 19.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                Row(
+                                    modifier = Modifier.widthIn(max = 190.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(7.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     Text(
                                         text = "Jelajahi sekarang",
                                         color = Color.White,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold
+                                        fontSize = 14.sp,
+                                        lineHeight = 16.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                     Icon(
                                         imageVector = Icons.Filled.ArrowOutward,
                                         contentDescription = null,
                                         tint = Color.White,
-                                        modifier = Modifier.size(14.dp)
+                                        modifier = Modifier.size(16.dp)
                                     )
                                 }
                             }
@@ -539,44 +877,54 @@ fun HomeScreen(
                     }
                 }
             }
-        }
 
-        // judul daftar destinasi
+        }
+        // Judul daftar destinasi.
         item {
+            val canOpenDestinations = searchQuery.isBlank() &&
+                selectedCategory == DestinationCategory.ALL
             Row(
-                verticalAlignment = Alignment.Bottom
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        when {
-                            searchQuery.isNotBlank() -> "Hasil pencarian"
-                            selectedCategory != DestinationCategory.ALL ->
-                                "Destinasi ${selectedCategory.label.lowercase(Locale.getDefault())}"
-                            else -> "Jelajahi destinasi"
-                        },
-                        color = Ink,
-                        fontSize = 21.sp,
-                        fontWeight = FontWeight.Bold
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        enabled = canOpenDestinations,
+                        role = Role.Button,
+                        onClick = onExploreDestinations
                     )
-                    Text(
-                        if (searchQuery.isBlank() && selectedCategory == DestinationCategory.ALL) {
-                            "Pilih tempat yang ingin kamu kunjungi"
-                        } else {
-                            "${filteredWahana.size} destinasi ditemukan"
-                        },
-                        color = Muted,
-                        fontSize = 13.sp
+                    .padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Ketuk baris untuk membuka daftar destinasi.
+                Text(
+                    text = when {
+                        searchQuery.isNotBlank() -> "Hasil pencarian"
+                        selectedCategory != DestinationCategory.ALL ->
+                            "Destinasi ${selectedCategory.label.lowercase(Locale.getDefault())}"
+                        else -> "Jelajahi destinasi"
+                    },
+                    color = Ink,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                if (canOpenDestinations) {
+                    // Panah berada di ujung kanan baris.
+                    Icon(
+                        imageVector = Icons.Filled.ArrowOutward,
+                        contentDescription = "Buka semua destinasi",
+                        tint = Ink,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
         }
 
-        // state loading, error, dan daftar kosong
+        // Tampilkan status memuat, gagal, atau daftar kosong.
         if (viewModel.isLoadingWahana && wahanaList.isEmpty()) {
             item {
+                // Samakan batas carousel sementara dengan kartu destinasi.
                 LazyRow(
+                    modifier = Modifier.padding(start = 20.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     item {
@@ -590,8 +938,11 @@ fun HomeScreen(
         if (viewModel.wahanaError.isNotEmpty()) {
             item {
                 Surface(
-                    color = Color(0xFFFFF1EC),
-                    shape = RoundedCornerShape(16.dp)
+                    modifier = Modifier
+                        .padding(horizontal = 20.dp)
+                        .fillMaxWidth(),
+                    color = TourifyErrorContainer,
+                    shape = TourifyShapes.input
                 ) {
                     Column(
                         Modifier
@@ -619,8 +970,11 @@ fun HomeScreen(
         if (wahanaList.isEmpty() && !viewModel.isLoadingWahana && viewModel.wahanaError.isEmpty()) {
             item {
                 Surface(
-                    color = Color.White,
-                    shape = RoundedCornerShape(18.dp)
+                    modifier = Modifier
+                        .padding(horizontal = 20.dp)
+                        .fillMaxWidth(),
+                    color = TourifySurface,
+                    shape = TourifyShapes.input
                 ) {
                     Text(
                         "Destinasi belum tersedia. Coba lagi nanti.",
@@ -635,8 +989,11 @@ fun HomeScreen(
         if (filteredWahana.isEmpty() && wahanaList.isNotEmpty()) {
             item {
                 Surface(
-                    color = Color.White,
-                    shape = RoundedCornerShape(18.dp)
+                    modifier = Modifier
+                        .padding(horizontal = 20.dp)
+                        .fillMaxWidth(),
+                    color = TourifySurface,
+                    shape = TourifyShapes.input
                 ) {
                     Text(
                         "Tidak ada destinasi yang cocok dengan pilihanmu.",
@@ -648,10 +1005,12 @@ fun HomeScreen(
                 }
             }
         }
-        // card destination
+        // Kartu destinasi tanpa tombol favorit.
         if (searchQuery.isBlank() && selectedCategory == DestinationCategory.ALL) {
             item {
+                // Biarkan carousel melebar sampai tepi layar supaya kartu berikutnya terlihat utuh.
                 LazyRow(
+                    modifier = Modifier.padding(start = 20.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     items(
@@ -660,38 +1019,46 @@ fun HomeScreen(
                             it.id
                         }
                     ) { wahana ->
+                        // Kartu ikut bergeser saat hasil kategori berubah.
                         DestinationCard(
                             wahana = wahana,
                             modifier = Modifier
+                                .animateItem(
+                                    fadeInSpec = tween(TourifyMotion.standardMillis),
+                                    placementSpec = tween(TourifyMotion.standardMillis),
+                                    fadeOutSpec = tween(TourifyMotion.standardMillis)
+                                )
                                 .width(300.dp)
-                                .aspectRatio(1.45f),
-                            isFavorite = wahana.id in favoriteIds,
+                                // Kartu lebih pendek agar carousel terbaca sebelum navbar.
+                                .aspectRatio(destinationCardAspectRatio),
+                            isFavorite = false,
                             onClick = {
                                 onDestinationClick(wahana.id)
-                            },
-                            onFavoriteClick = {
-                                favoriteIds = if (wahana.id in favoriteIds) {
-                                    favoriteIds - wahana.id
-                                } else {
-                                    favoriteIds + wahana.id
-                                }
                             }
                         )
                     }
                 }
             }
         } else {
+            // Rasio lebih kecil bikin kartu penuh terlihat lebih tinggi.
             items(
                 filteredWahana,
                 key = {
                     it.id
                 }
             ) { wahana ->
+                // Kartu baru dan lama bergerak dengan durasi yang sama.
                 DestinationCard(
                     wahana = wahana,
                     modifier = Modifier
+                        .animateItem(
+                            fadeInSpec = tween(TourifyMotion.standardMillis),
+                            placementSpec = tween(TourifyMotion.standardMillis),
+                            fadeOutSpec = tween(TourifyMotion.standardMillis)
+                        )
+                        .padding(horizontal = 20.dp)
                         .fillMaxWidth()
-                        .aspectRatio(1.8f),
+                        .aspectRatio(1.7f),
                     isFavorite = wahana.id in favoriteIds,
                     onClick = {
                         onDestinationClick(wahana.id)
@@ -706,10 +1073,294 @@ fun HomeScreen(
                 )
             }
         }
+        // Kunjungan pribadi muncul setelah jelajah, hanya pada tampilan Beranda utama.
+        if (upcomingTicket != null && searchQuery.isBlank() && selectedCategory == DestinationCategory.ALL) {
+            item(key = "upcoming-visit") {
+                UpcomingVisitSection(
+                    ticket = upcomingTicket,
+                    refreshError = viewModel.ticketsError,
+                    isRefreshing = viewModel.isLoadingTickets,
+                    onOpenTickets = onOpenTickets,
+                    onOpenTicket = {
+                        onOpenTicket(upcomingTicket.id)
+                    },
+                    onRetry = {
+                        viewModel.loadTickets(
+                            username = currentUser,
+                            accessToken = accessToken
+                        )
+                    }
+                )
+            }
+        }
+        // Panduan berangkat tetap tersedia saat belum ada tiket dan tidak muncul di hasil pencarian.
+        if (searchQuery.isBlank() && selectedCategory == DestinationCategory.ALL) {
+            item(key = "before-departure") {
+                BeforeDepartureSection(
+                    onOpenVisit = {
+                        if (upcomingTicket != null) {
+                            onOpenTicket(upcomingTicket.id)
+                        } else {
+                            onOpenTickets()
+                        }
+                    },
+                    onOpenAssistant = onOpenAssistant
+                )
+            }
+        }
     }
 
 }
 
+// Tiga pintasan ringan membantu pengunjung menyiapkan tiket sebelum berangkat.
+@Composable
+internal fun BeforeDepartureSection(
+    onOpenVisit: () -> Unit,
+    onOpenAssistant: () -> Unit
+) {
+    var showEntryGuide by rememberSaveable {
+        mutableStateOf(false)
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = "Sebelum berangkat",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = Ink
+        )
+        Surface(
+            shape = TourifyShapes.card,
+            color = TourifySurface,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column {
+                // Setiap baris punya aksi sendiri dan ikon dekoratif tanpa label berulang.
+                val titles = listOf(
+                    "Cara masuk wahana",
+                    "Cek detail kunjungan",
+                    "Butuh bantuan?"
+                )
+                val icons = listOf(
+                    Icons.Default.QrCode,
+                    Icons.AutoMirrored.Filled.EventNote,
+                    Icons.AutoMirrored.Filled.HelpOutline
+                )
+                titles.forEachIndexed { index, title ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(
+                                role = Role.Button,
+                                onClick = {
+                                    when (index) {
+                                        0 -> showEntryGuide = true
+                                        1 -> onOpenVisit()
+                                        else -> onOpenAssistant()
+                                    }
+                                }
+                            )
+                            .heightIn(min = 48.dp)
+                            .padding(
+                                horizontal = 12.dp,
+                                vertical = 10.dp
+                            ),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = icons[index],
+                            contentDescription = null,
+                            tint = Forest,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = title,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Ink
+                        )
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = Muted,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+    // Panduan bisa ditutup tanpa meninggalkan Beranda atau dilanjutkan ke tiket.
+    if (showEntryGuide) {
+        AlertDialog(
+            onDismissRequest = {
+                showEntryGuide = false
+            },
+            title = {
+                Text(text = "Cara masuk wahana")
+            },
+            text = {
+                Text(text = "1. Buka tiket sesuai tanggal kunjungan.\n\n2. Ketuk QR untuk memperbesar.\n\n3. Tunjukkan QR ke petugas saat masuk.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showEntryGuide = false
+                        onOpenVisit()
+                    }
+                ) {
+                    Text(text = "Buka tiket")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showEntryGuide = false
+                    }
+                ) {
+                    Text(text = "Tutup")
+                }
+            }
+        )
+    }
+}
+
+// Ringkasan kunjungan terdekat memakai tinggi fleksibel agar teks besar tetap muat.
+@Composable
+internal fun UpcomingVisitSection(
+    ticket: Ticket,
+    refreshError: String,
+    isRefreshing: Boolean,
+    onOpenTickets: () -> Unit,
+    onOpenTicket: () -> Unit,
+    onRetry: () -> Unit
+) {
+    val largeText = LocalDensity.current.fontScale >= 1.3f
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Kunjungan berikutnya",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Ink
+            )
+            TextButton(onClick = onOpenTickets) {
+                Text(
+                    text = "Semua tiket ›",
+                    color = Forest
+                )
+            }
+        }
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = TourifyShapes.card,
+            color = TourifySurface,
+            shadowElevation = TourifyElevation.card
+        ) {
+            // Tombol sejajar pada ukuran normal, turun saat ruang atau ukuran teks membutuhkannya.
+            BoxWithConstraints {
+                val inlineButton = maxWidth >= 320.dp && !largeText
+                val qrButton: @Composable (Modifier) -> Unit = { buttonModifier ->
+                    Button(
+                        onClick = onOpenTicket,
+                        modifier = buttonModifier.heightIn(min = 48.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp),
+                        shape = TourifyShapes.pill,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Forest,
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.QrCode,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Lihat QR",
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Image(
+                            painter = painterResource(ticketWahanaImage(ticket.wahanaName)),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                        )
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = ticket.wahanaName,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Ink,
+                                maxLines = if (largeText) Int.MAX_VALUE else 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = "${formatTicketDate(ticket.visitDate)} · ${ticket.quantity} tiket",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Muted
+                            )
+                        }
+                        if (inlineButton) {
+                            qrButton(Modifier)
+                        }
+                    }
+                    if (!inlineButton) {
+                        qrButton(Modifier.align(Alignment.End))
+                    }
+                    // Data lama tetap tersedia saat penyegaran gagal, dengan aksi coba lagi.
+                    if (refreshError.isNotBlank()) {
+                        Text(
+                            text = "Status belum diperbarui",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Muted
+                        )
+                        TextButton(
+                            onClick = onRetry,
+                            enabled = !isRefreshing
+                        ) {
+                            Text(text = if (isRefreshing) "Memperbarui…" else "Coba lagi")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Kartu foto ini punya bayangan jelas, tombol favorit, dan pintasan ke detail.
 @Composable
 internal fun DestinationCard(
     wahana: Wahana,
@@ -720,10 +1371,10 @@ internal fun DestinationCard(
 ) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(24.dp),
+        shape = TourifyShapes.card,
         elevation = CardDefaults.cardElevation(
-            defaultElevation = 5.dp,
-            pressedElevation = 7.dp
+            defaultElevation = TourifyElevation.destinationCard,
+            pressedElevation = TourifyElevation.floating
         ),
         onClick = onClick
     ) {
@@ -742,10 +1393,10 @@ internal fun DestinationCard(
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                Color(0x220C211C),
+                                TourifyForestDeep.copy(alpha = 0.13f),
                                 Color.Transparent,
-                                Color(0xAA0C211C),
-                                Color(0xE60C211C)
+                                TourifyForestDeep.copy(alpha = 0.67f),
+                                TourifyForestDeep.copy(alpha = 0.9f)
                             )
                         )
                     )
@@ -755,7 +1406,7 @@ internal fun DestinationCard(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(12.dp)
-                        .size(42.dp),
+                        .size(48.dp),
                     shape = CircleShape,
                     color = TourifyGlassSurface,
                     border = BorderStroke(
@@ -794,19 +1445,13 @@ internal fun DestinationCard(
             ) {
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        text = "TIKET · ${rupiah(wahana.ticketPrice)}",
-                        color = Color.White.copy(alpha = 0.88f),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
                     Text(
                         text = wahana.name,
                         color = Color.White,
-                        fontSize = 22.sp,
-                        lineHeight = 26.sp,
+                        fontSize = 19.sp,
+                        lineHeight = 23.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
@@ -814,8 +1459,9 @@ internal fun DestinationCard(
                     Text(
                         text = wahana.description,
                         color = Color.White.copy(alpha = 0.88f),
-                        fontSize = 13.sp,
-                        lineHeight = 17.sp,
+                        fontSize = 14.sp,
+                        lineHeight = 19.sp,
+                        // Dua baris menjaga kartu carousel tetap ringan saat dipindai.
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -910,7 +1556,7 @@ private fun DestinationCardSkeleton(modifier: Modifier = Modifier) {
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(containerColor = TourifySurface),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
     ) {
         Column {
@@ -970,8 +1616,9 @@ private fun DestinationCardSkeleton(modifier: Modifier = Modifier) {
     }
 }
 
+// Animasi cahaya ini dipakai pada kartu sementara destinasi dan tiket.
 @Composable
-private fun SkeletonBlock(
+internal fun SkeletonBlock(
     modifier: Modifier,
     shape: RoundedCornerShape
 ) {
@@ -991,9 +1638,9 @@ private fun SkeletonBlock(
     val bandStart = 560f * (progress - 1f)
     val shimmer = Brush.linearGradient(
         colors = listOf(
-            Color(0xFFE8ECE8),
-            Color(0xFFF4F6F3),
-            Color(0xFFE8ECE8)
+            TourifyBorder,
+            TourifySoftSurface,
+            TourifyBorder
         ),
         start = Offset(
             bandStart,
@@ -1022,6 +1669,9 @@ fun HomeScreenPreview() {
         viewModel = TourifyViewModel(),
         currentUser = "admin",
         profileImageUrl = null,
-        onDestinationClick = {}
+        onDestinationClick = {},
+        onExploreDestinations = {},
+        welcomeTitleIntroPending = false,
+        playWelcomeTitleIntro = false
     )
 }

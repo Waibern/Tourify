@@ -19,7 +19,7 @@ const currencyFormat = new Intl.NumberFormat('id-ID', {
 
 const hasBookings = computed(() => props.series.some(point => point.order_count > 0))
 
-// Nilai harian diringkas sesuai rentang harian, mingguan, atau bulanan yang dipilih.
+// Gabungkan nilai harian sesuai pilihan rentang tanggal.
 const chartData = computed(() => {
   const groups = new Map<string, { date: string, amount: number }>()
 
@@ -50,25 +50,25 @@ const chartData = computed(() => {
 })
 
 const total = computed(() => props.series.reduce((sum, point) => sum + point.booking_value, 0))
-// Nominal selisih memakai rupiah dan arah perubahan tetap ditunjukkan persentase.
+// Tampilkan selisih dalam rupiah dan arah perubahannya dalam persen.
 const totalDifference = computed(() => props.previousValue === null
   ? null
   : Math.abs(total.value - props.previousValue))
-// Nilai omzet dibandingkan dengan rentang yang sama tepat sebelumnya.
+// Bandingkan omzet dengan rentang tanggal sebelumnya yang sama panjang.
 const totalChange = computed(() => props.previousValue === null
   ? null
   : analyticsChange(total.value, props.previousValue))
 </script>
 
 <template>
-  <!-- Nilai transaksi ditelusuri lewat daftar pesanan dan terurai dari posisi cursor. -->
+  <!-- Klik kartu untuk membuka daftar pesanan yang diringkas di grafik. -->
   <NuxtLink
     to="/orders"
-    class="group block cursor-pointer rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50"
+    class="group block h-full min-w-0 cursor-pointer rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50"
     aria-label="Buka Pesanan dan Tiket untuk melihat nilai pemesanan"
   >
-    <!-- Panel grafik mengikuti kilau putih pada kartu metrik. -->
-    <UCard data-dashboard-card :ui="{ root: 'overflow-visible border border-default bg-default transition-colors group-hover:border-white/35', body: 'p-0! overflow-hidden rounded-b-[inherit]' }">
+    <!-- Kartu grafik memakai tampilan yang sama dengan kartu angka. -->
+    <UCard data-dashboard-card :ui="{ root: 'h-full overflow-visible border border-default bg-default transition-colors group-hover:border-white/35', body: 'p-0! overflow-hidden rounded-b-[inherit]' }">
       <div class="px-6 pt-4">
         <p class="text-xs text-muted uppercase mb-1.5">
           Nilai pemesanan
@@ -76,7 +76,7 @@ const totalChange = computed(() => props.previousValue === null
       </div>
       <AsciiReveal :loading="loading" origin="pointer">
         <template #skeleton>
-          <!-- Ukuran grafik tetap stabil tanpa pola skeleton saat data dimuat. -->
+          <!-- Sisakan ruang grafik supaya ukuran kartu tidak berubah saat memuat. -->
           <div class="px-6 pb-4">
             <div class="h-9" aria-hidden="true" />
           </div>
@@ -108,7 +108,7 @@ const totalChange = computed(() => props.previousValue === null
             </p>
           </div>
         </div>
-        <!-- Keadaan kosong tetap pendek dan memberi langkah berikutnya. -->
+        <!-- Kalau belum ada pesanan, pengguna bisa mencoba tanggal lain. -->
         <div v-if="!hasBookings" class="flex flex-wrap items-center justify-between gap-3 px-6 pb-5 text-sm text-muted">
           <span>Belum ada pemesanan pada rentang tanggal ini. Coba pilih tanggal lain.</span>
           <span class="inline-flex items-center gap-1 text-primary">
@@ -117,7 +117,7 @@ const totalChange = computed(() => props.previousValue === null
           </span>
         </div>
         <div v-else class="px-6" data-ascii-chart>
-          <!-- Sumbu memberi tanggal dan skala tanpa memenuhi grafik dengan label. -->
+          <!-- Tanggal dan angka pada sumbu membantu membaca grafik. -->
           <UChart
             type="area"
             curve="monotone"

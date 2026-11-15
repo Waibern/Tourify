@@ -14,7 +14,7 @@ const selectedTab = ref('all')
 
 const { data: mails } = await useFetch<Mail[]>('/api/mails', { default: () => [] })
 
-// Filter mails based on the selected tab
+// Tampilkan email sesuai tab yang dipilih.
 const filteredMails = computed(() => {
   if (selectedTab.value === 'unread') {
     return mails.value.filter(mail => !!mail.unread)
@@ -36,7 +36,7 @@ const isMailPanelOpen = computed({
   }
 })
 
-// Reset selected mail if it's not in the filtered mails
+// Tutup email yang tidak lagi masuk ke hasil filter.
 watch(filteredMails, () => {
   if (!filteredMails.value.find(mail => mail.id === selectedMail.value?.id)) {
     selectedMail.value = null

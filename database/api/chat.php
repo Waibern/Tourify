@@ -3,7 +3,7 @@ require_once __DIR__ . '/common.php';
 header('Content-Type: application/json; charset=utf-8');
 requireMethod('POST');
 
-// Baca body dengan batas ukuran supaya endpoint chat tidak menerima payload besar.
+// Batasi ukuran request sebelum membaca isi chat.
 function readChatRequest(): array
 {
     $body = file_get_contents('php://input', false, null, 0, 16385);
@@ -18,7 +18,7 @@ function readChatRequest(): array
     return $input;
 }
 
-// Pastikan teks punya batas panjang dan encoding yang bisa dikirim ke OpenAI.
+// Cek panjang dan encoding pesan sebelum dipakai di chat.
 function validateChatText($value, string $fieldName, int $maxLength): string
 {
     if (!is_string($value)) {
@@ -38,7 +38,7 @@ function validateChatText($value, string $fieldName, int $maxLength): string
     return $text;
 }
 
-// Ambil maksimal lima pasang pesan lama; pertanyaan terbaru dikirim terpisah.
+// Ambil lima pasang pesan terakhir; pesan terbaru dikirim terpisah.
 function normalizeChatHistory($history): array
 {
     if ($history === null) {
@@ -68,7 +68,7 @@ function normalizeChatHistory($history): array
             continue;
         }
 
-        // Riwayat memakai role yang diminta Chat Completions.
+        // Format peran user dan assistant mengikuti format chat OpenAI.
         $openAiRole = $role;
         if (empty($normalized) && $openAiRole !== 'user') {
             continue;
@@ -83,14 +83,14 @@ function normalizeChatHistory($history): array
         ];
     }
 
-    // Buang pertanyaan lama yang belum punya balasan agar urutan role tetap valid.
+    // Hapus pesan user yang belum dijawab supaya urutan chat tetap benar.
     if (!empty($normalized) && end($normalized)['role'] === 'user') {
         array_pop($normalized);
     }
     return $normalized;
 }
 
-// Riwayat akun hanya diminta saat chat memang menanyakan tiket milik pengguna.
+// Ambil riwayat tiket hanya kalau pengguna bertanya soal tiketnya.
 function isTicketLookupRequest(string $message, array $history): bool
 {
     $conversationText = $message;
@@ -105,7 +105,7 @@ function isTicketLookupRequest(string $message, array $history): bool
     );
 }
 
-// Tool pemesanan hanya tersedia dalam percakapan yang benar-benar meminta beli tiket.
+// Kenali juga ucapan santai seperti "pesen tiket".
 function hasExplicitBookingIntent(string $message, array $history): bool
 {
     $userMessages = array_values(array_filter(
@@ -116,13 +116,18 @@ function hasExplicitBookingIntent(string $message, array $history): bool
 
     foreach ($userMessages as $item) {
         $question = mb_strtolower((string) ($item['content'] ?? ''), 'UTF-8');
-        $isHowTo = preg_match('/\b(cara|bagaimana|gimana|di mana|dimana|where|how to)\b/u', $question)
-            && preg_match('/\b(pesan|memesan|pemesanan|booking|book|beli|ticket|tiket)\b/u', $question);
-        if ($isHowTo) {
+        // Bedakan pertanyaan cara memesan dari permintaan untuk langsung memesan.
+        $mentionsHowTo = preg_match('/\b(cara|bagaimana|gimana|di mana|dimana|where|how to)\b/u', $question);
+        $mentionsBooking = preg_match('/\b(pesan(?:kan|in)?|pesen(?:in|kan)?|memesan|pemesanan|booking|book|beli|ticket|tiket)\b/u', $question);
+        if ($mentionsHowTo && $mentionsBooking) {
             continue;
         }
 
-        if (preg_match('/\b(pesankan|pesan tiket|mau pesan|ingin pesan|tolong pesan|beli tiket|belikan tiket|booking tiket|book ticket|book me)\b/u', $question)) {
+        // Cek ucapan langsung seperti "pesen tiket", "tolong beli", atau "book ticket".
+        $asksToBookTicketDirectly = preg_match('/\b(pesan(?:kan|in)?|pesen(?:in|kan)?|memesan|beli|belikan)\s+(?:kan\s+)?tiket\b/u', $question)
+            || preg_match('/\b(mau|ingin|tolong)\s+(?:pesan(?:kan|in)?|pesen(?:in|kan)?|memesan|booking|beli)\b/u', $question)
+            || preg_match('/\b(booking tiket|book ticket|book me)\b/u', $question);
+        if ($asksToBookTicketDirectly) {
             return true;
         }
     }
@@ -130,12 +135,12 @@ function hasExplicitBookingIntent(string $message, array $history): bool
     return false;
 }
 
-// Jawab pertanyaan Tourify dan lookup wahana langsung tanpa menunggu OpenAI.
+// Jawab pertanyaan umum dan info wahana langsung dari server.
 function quickTourifyAnswer(string $message, array $wahana): ?string
 {
     $question = mb_strtolower($message, 'UTF-8');
 
-    // FAQ menjelaskan alur aplikasi dari fitur yang benar-benar tersedia.
+    // Jawab pertanyaan umum berdasarkan fitur yang memang ada di aplikasi.
     if (preg_match('/\b(pembayaran|bayar|qris|e-wallet)\b/u', $question)) {
         return 'Di form pemesanan Tourify, kamu bisa memilih Bank, QRIS, atau E-Wallet. Pilihan ini dicatat bersama pesanan. Saat memesan, total dihitung dari harga tiket wahana dikali jumlah tiket.';
     }
@@ -166,7 +171,7 @@ function quickTourifyAnswer(string $message, array $wahana): ?string
         return 'Setelah pemesanan berhasil, buka menu “Tiket Saya”, pilih kartu tiket, lalu tekan “Lihat QR”. QR digital dan detail tiket akan tampil di halaman tersebut. Kalau tiketnya belum muncul, buka ulang menu Tiket agar daftar dimuat lagi.';
     }
 
-    // Katalog berasal dari database, jadi daftar, deskripsi, dan harga tetap terbaru.
+    // Ambil daftar, deskripsi, dan harga dari database supaya datanya tetap terbaru.
     $asksForList = preg_match('/\b(daftar|semua|apa saja|apa aja|yang tersedia|tersedia)\b/u', $question)
         && preg_match('/\b(wahana|destinasi)\b/u', $question);
     if ($asksForList && !empty($wahana)) {
@@ -180,7 +185,7 @@ function quickTourifyAnswer(string $message, array $wahana): ?string
         return "Wahana yang tersedia di katalog Tourify saat ini:\n• " . implode("\n• ", $items);
     }
 
-    // Cocokkan nama wahana dulu supaya harga tidak ditebak untuk wahana lain.
+    // Cocokkan nama wahana sebelum menampilkan harganya.
     $matchedWahana = null;
     foreach ($wahana as $item) {
         $name = mb_strtolower($item['name'], 'UTF-8');
@@ -207,7 +212,7 @@ function quickTourifyAnswer(string $message, array $wahana): ?string
         return implode(' ', $answerParts);
     }
 
-    // Data jam, alamat, dan kebijakan belum ada di katalog backend.
+    // Info jam buka, alamat, dan aturan kunjungan belum ada di katalog.
     if (preg_match('/\b(jam buka|jam operasional|alamat|lokasi|refund|pengembalian dana|aturan kunjungan)\b/u', $question)) {
         return 'Informasi itu belum tersedia di data Tourify saat ini.';
     }
@@ -215,7 +220,7 @@ function quickTourifyAnswer(string $message, array $wahana): ?string
     return null;
 }
 
-// Kirim request lewat curl terpisah untuk menghindari crash PHP-FCGI MAMP di macOS.
+// Jalankan curl terpisah karena PHP-FCGI MAMP di macOS bisa crash.
 function requestOpenAIViaCurlProcess(string $url, string $apiKey, string $jsonBody): array
 {
     $payloadPath = tempnam(sys_get_temp_dir(), 'tourify-chat-');
@@ -230,7 +235,7 @@ function requestOpenAIViaCurlProcess(string $url, string $apiKey, string $jsonBo
     if (file_put_contents($payloadPath, $jsonBody, LOCK_EX) === false) {
         $errorMessage = 'Tidak bisa menulis file request.';
     } else {
-        // Kirim key lewat stdin proses curl supaya tidak muncul di daftar argumen proses.
+        // Kirim API key lewat stdin agar tidak terlihat di daftar proses.
         $command = [
             '/usr/bin/curl',
             '--silent',
@@ -258,7 +263,7 @@ function requestOpenAIViaCurlProcess(string $url, string $apiKey, string $jsonBo
         if (!is_resource($process)) {
             $errorMessage = 'Proses curl tidak bisa dijalankan.';
         } else {
-            // Bearer key dikirim lewat stdin agar tidak muncul di daftar argumen proses.
+            // Kirim bearer key lewat stdin agar tidak terlihat di daftar proses.
             $curlConfig = 'header = "Content-Type: application/json"' . "\n"
                 . 'header = "Authorization: Bearer ' . $apiKey . '"' . "\n";
             $configWritten = @fwrite($pipes[0], $curlConfig);
@@ -283,7 +288,7 @@ function requestOpenAIViaCurlProcess(string $url, string $apiKey, string $jsonBo
         }
     }
 
-    // Hapus payload sementara setelah proses curl selesai.
+    // Hapus payload sementara setelah curl selesai.
     if (is_file($payloadPath)) {
         unlink($payloadPath);
     }
@@ -295,7 +300,7 @@ function requestOpenAIViaCurlProcess(string $url, string $apiKey, string $jsonBo
     ];
 }
 
-// Panggil OpenAI memakai key server dan kembalikan pesan agar tool call bisa divalidasi.
+// Kirim chat ke OpenAI dengan key server, lalu kembalikan respons untuk diperiksa.
 function requestOpenAI(string $model, string $apiKey, array $payload): array
 {
     $url = 'https://api.openai.com/v1/chat/completions';
@@ -304,7 +309,7 @@ function requestOpenAI(string $model, string $apiKey, array $payload): array
         respond(500, ['success' => false, 'message' => 'Pesan gagal disiapkan.']);
     }
 
-    // MAMP macOS menjalankan PHP lewat FastCGI yang crash saat akses HTTPS langsung.
+    // PHP-FCGI MAMP di macOS bisa crash kalau mengakses HTTPS langsung.
     if (PHP_OS_FAMILY === 'Darwin' && PHP_SAPI === 'cgi-fcgi') {
         $providerResponse = requestOpenAIViaCurlProcess($url, $apiKey, $jsonBody);
         $responseBody = $providerResponse['body'];
@@ -365,9 +370,9 @@ $history = normalizeChatHistory($input['history'] ?? null);
 $ticketLookupRequested = isTicketLookupRequest($message, $history);
 $bookingIntent = hasExplicitBookingIntent($message, $history);
 try {
-    // Data katalog selalu diambil dari database supaya nama dan harga tetap terbaru.
+    // Ambil katalog dari database supaya nama dan harga tetap terbaru.
     $pdo = getDatabaseConnection();
-    // Token memastikan konteks tiket berasal dari akun login.
+    // Pakai token akun yang sedang login untuk mengambil tiket pribadi.
     $userId = optionalAppUserId($pdo);
     if ($userId === null) {
         respond(401, ['success' => false, 'message' => 'Sesi aplikasi tidak valid. Silakan login kembali.']);
@@ -385,7 +390,7 @@ try {
         ];
     }, $rows);
 
-    // Data tiket pribadi hanya dimuat saat pengguna menanyakannya.
+    // Ambil tiket pribadi hanya kalau pengguna bertanya soal tiketnya.
     $userTicketContext = null;
     if ($ticketLookupRequested) {
         $statement = $pdo->prepare('SELECT COUNT(*) FROM tickets WHERE user_id = :user_id');
@@ -407,7 +412,7 @@ try {
         ];
     }
 
-    // FAQ katalog yang pasti dijawab lokal; tiket pribadi dan permintaan beli memakai AI.
+    // Jawab info wahana di server; AI dipakai untuk cek tiket dan menyusun draf pesanan.
     if (!$ticketLookupRequested && !$bookingIntent) {
         $quickAnswer = quickTourifyAnswer($message, $wahana);
         if ($quickAnswer !== null) {
@@ -415,7 +420,7 @@ try {
         }
     }
 
-    // Baca key OpenAI hanya untuk pertanyaan yang memang perlu jawaban AI.
+    // Ambil key OpenAI hanya saat pertanyaan perlu dijawab AI.
     $localSecrets = [];
     $localSecretFile = '/Applications/MAMP/conf/tourify-openai.php';
     if (is_file($localSecretFile) && is_readable($localSecretFile)) {
@@ -436,7 +441,7 @@ try {
         respond(503, ['success' => false, 'message' => 'Format API key OpenAI di server tidak valid.']);
     }
 
-    // Pakai model OpenAI dari konfigurasi lokal, lalu environment, lalu model chatbot hemat.
+    // Pilih model dari konfigurasi lokal, variabel lingkungan, lalu model hemat bawaan.
     $model = trim((string) ($localSecrets['OPENAI_MODEL'] ?? ''));
     if ($model === '') {
         $model = trim((string) getenv('OPENAI_MODEL'));
@@ -449,7 +454,7 @@ try {
         respond(500, ['success' => false, 'message' => 'Konfigurasi asisten tidak valid.']);
     }
 
-    // Fakta aplikasi dan katalog memberi batas jawaban dan dasar usulan pesanan.
+    // Pakai info Tourify dan katalog supaya jawaban dan usulan pesanan sesuai data.
     $tourifyFacts = [
         'Tourify adalah aplikasi berbahasa Indonesia untuk menjelajahi destinasi/wahana, membaca deskripsi dan harga, memesan tiket, serta melihat tiket yang dipesan.',
         'Beranda dan menu Destinasi menampilkan katalog. Pengguna dapat mencari berdasarkan nama atau deskripsi, lalu membuka detail wahana.',
@@ -522,7 +527,7 @@ try {
         'store' => false,
     ];
     if ($bookingIntent) {
-        // Tool ini hanya meminta AI menyusun draf; fungsi booking tidak dipanggil di server chat.
+        // AI cuma menyusun draf; server belum memesan tiket di sini.
         $payload['tools'] = [[
             'type' => 'function',
             'function' => [
@@ -593,7 +598,7 @@ try {
             }
         }
 
-        // Validasi katalog dan aturan tiket tetap dilakukan server, bukan dipercayakan pada AI.
+        // Server tetap memeriksa wahana dan aturan tiket sebelum menerima usulan AI.
         if (
             ($function['name'] ?? '') !== 'propose_ticket_booking'
             || $selectedWahana === null

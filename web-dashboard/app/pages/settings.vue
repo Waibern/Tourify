@@ -3,7 +3,7 @@ import type { NavigationMenuItem } from '@nuxt/ui'
 
 const auth = useDashboardAuth()
 
-// Tab horizontal mengikuti daftar yang sama dengan submenu sidebar.
+// Tab pengaturan sama dengan menu di sidebar.
 const settingsTabs = computed<NavigationMenuItem[][]>(() => [[
   {
     label: 'Umum',

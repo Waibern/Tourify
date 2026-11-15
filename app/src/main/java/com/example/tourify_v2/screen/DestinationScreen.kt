@@ -72,7 +72,7 @@ private val DestinationMuted = TourifyMuted
 private val DestinationMint = TourifyMint
 private val DestinationCanvas = TourifyCanvas
 
-// Token login diteruskan ke pemesanan tiket.
+// Pakai token login saat memesan tiket.
 @Composable
 fun DestinationScreen(
     destinationId: Int,
@@ -82,7 +82,7 @@ fun DestinationScreen(
     onBack: () -> Unit,
     onBookingSuccess: () -> Unit
 ) {
-    // ambil destinasi yang dipilih dan atur form pesan tiket
+    // Ambil destinasi yang dipilih dan siapkan form tiket.
     val destination = viewModel.wahana.firstOrNull {
         it.id == destinationId
     }
@@ -97,7 +97,8 @@ fun DestinationScreen(
 
     DisposableEffect(
         context,
-        destination != null
+        destination != null,
+        showBookingForm
     ) {
         val window = (context as? Activity)?.window
         val insetsController = window?.let {
@@ -107,8 +108,11 @@ fun DestinationScreen(
             )
         }
         insetsController?.isAppearanceLightStatusBars = destination == null
+        // Ikon di atas foto berwarna terang; saat form putih dibuka, ikonnya jadi gelap.
+        insetsController?.isAppearanceLightNavigationBars = destination == null || showBookingForm
         onDispose {
             insetsController?.isAppearanceLightStatusBars = true
+            insetsController?.isAppearanceLightNavigationBars = true
         }
     }
 
@@ -116,7 +120,7 @@ fun DestinationScreen(
         if (viewModel.wahana.isEmpty()) viewModel.loadWahana()
     }
 
-    // detail destinasi atau state loading/error
+    // Tampilkan detail atau status memuat/gagal.
     when {
         destination != null -> {
             Box(
@@ -186,7 +190,7 @@ fun DestinationScreen(
     }
 }
 
-// Tampilkan foto, rincian, dan aksi pemesanan destinasi.
+// Tampilkan foto, detail, dan tombol pesan tiket.
 @Composable
 internal fun DestinationContent(
     destination: Wahana,
@@ -207,7 +211,7 @@ internal fun DestinationContent(
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
-        // Salinan foto dibaurkan bertahap ke foto tajam agar tidak ada garis batas blur.
+        // Foto blur berubah perlahan jadi tajam supaya sambungannya nggak kelihatan.
         Box(
             Modifier
                 .fillMaxSize()
@@ -240,17 +244,18 @@ internal fun DestinationContent(
             Modifier
                 .fillMaxSize()
                 .background(
+                    // Fade hitam bikin judul putih terbaca tanpa menutup foto sepenuhnya.
                     Brush.verticalGradient(
-                        0f to Color(0x55000000),
+                        0f to Color.Black.copy(alpha = 0.34f),
                         0.35f to Color.Transparent,
-                        0.55f to Color(0x44000000),
-                        0.78f to Color(0xC9000000),
-                        1f to Color(0xF2000000)
+                        0.55f to Color.Black.copy(alpha = 0.27f),
+                        0.78f to Color.Black.copy(alpha = 0.79f),
+                        1f to Color.Black.copy(alpha = 0.95f)
                     )
                 )
         )
 
-        // tombol kembali dan share
+        // Tombol kembali dan bagikan destinasi.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -268,7 +273,7 @@ internal fun DestinationContent(
                 onPhoto = true,
                 icon = {
                     Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Kembali",
                         tint = Color.White
                     )
@@ -279,7 +284,7 @@ internal fun DestinationContent(
                 onPhoto = true,
                 icon = {
                     Icon(
-                        Icons.Default.Share,
+                        imageVector = Icons.Default.Share,
                         contentDescription = "Bagikan destinasi",
                         tint = Color.White
                     )
@@ -357,7 +362,7 @@ internal fun DestinationContent(
     }
 }
 
-// Tombol bulat dipakai untuk kembali atau membagikan destinasi.
+// Tombol bulat untuk kembali atau membagikan destinasi.
 @Composable
 private fun DestinationIconButton(
     onClick: () -> Unit,
@@ -366,7 +371,11 @@ private fun DestinationIconButton(
 ) {
     Surface(
         shape = CircleShape,
-        color = if (onPhoto) TourifyGlassSurface else Color(0xEFFFFFFF),
+        color = if (onPhoto) {
+            TourifyGlassSurface
+        } else {
+            TourifySurface.copy(alpha = 0.94f)
+        },
         border = if (onPhoto) BorderStroke(
             1.dp,
             TourifyGlassHighlight
@@ -382,7 +391,7 @@ private fun DestinationIconButton(
     }
 }
 
-// Beri jalan kembali saat destinasi belum tersedia.
+// Tampilkan tombol kembali kalau destinasi belum tersedia.
 @Composable
 private fun DestinationUnavailable(
     message: String,
@@ -402,7 +411,7 @@ private fun DestinationUnavailable(
             onClick = onBack,
             icon = {
                 Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Kembali",
                     tint = DestinationInk
                 )
@@ -431,7 +440,7 @@ private fun DestinationUnavailable(
     }
 }
 
-// Form mengumpulkan tanggal, jumlah tiket, dan metode pembayaran.
+// Form ini menyimpan tanggal, jumlah tiket, dan cara bayar.
 @Composable
 private fun DestinationBookingForm(
     destination: Wahana,
@@ -442,7 +451,7 @@ private fun DestinationBookingForm(
     onDismiss: () -> Unit,
     onBookingSuccess: () -> Unit
 ) {
-    // data yang dipilih buat pemesanan
+    // Data yang dipilih untuk pesanan.
     var quantity by remember(destination.id) {
         mutableIntStateOf(1)
     }
@@ -519,7 +528,7 @@ private fun DestinationBookingForm(
                     topStart = 28.dp,
                     topEnd = 28.dp
                 ),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = TourifySurface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
             ) {
                 Column(
@@ -544,14 +553,14 @@ private fun DestinationBookingForm(
                             onClick = onDismiss
                         ) {
                             Icon(
-                                Icons.Default.Close,
+                                imageVector = Icons.Default.Close,
                                 contentDescription = "Tutup form pemesanan",
                                 tint = DestinationMuted
                             )
                         }
                     }
                     Surface(
-                        shape = RoundedCornerShape(18.dp),
+                        shape = TourifyShapes.card,
                         color = DestinationMint
                     ) {
                         Box(
@@ -584,14 +593,14 @@ private fun DestinationBookingForm(
                             ) {
                                 Surface(
                                     Modifier.size(48.dp),
-                                    shape = RoundedCornerShape(14.dp),
+                                    shape = TourifyShapes.input,
                                     color = Color.Transparent
                                 ) {
                                     Box(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
-                                            Icons.Default.LocationOn,
+                                            imageVector = Icons.Default.LocationOn,
                                             contentDescription = null,
                                             tint = Color.White
                                         )
@@ -640,15 +649,15 @@ private fun DestinationBookingForm(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .heightIn(min = 52.dp),
-                                shape = RoundedCornerShape(16.dp),
+                                shape = TourifyShapes.input,
                                 border = BorderStroke(
                                     1.dp,
-                                    Color(0xFFB6CFCA)
+                                    TourifyOutline
                                 ),
                                 contentPadding = PaddingValues(horizontal = 12.dp)
                             ) {
                                 Icon(
-                                    Icons.Default.CalendarMonth,
+                                    imageVector = Icons.Default.CalendarMonth,
                                     contentDescription = null,
                                     tint = DestinationGreen,
                                     modifier = Modifier.size(18.dp)
@@ -675,11 +684,11 @@ private fun DestinationBookingForm(
                             )
                             Surface(
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(16.dp),
-                                color = Color.White,
+                                shape = TourifyShapes.input,
+                                color = TourifySurface,
                                 border = BorderStroke(
                                     1.dp,
-                                    Color(0xFFB6CFCA)
+                                    TourifyOutline
                                 )
                             ) {
                                 Row(
@@ -695,7 +704,7 @@ private fun DestinationBookingForm(
                                         modifier = Modifier.size(40.dp)
                                     ) {
                                         Icon(
-                                            Icons.Default.Remove,
+                                            imageVector = Icons.Default.Remove,
                                             contentDescription = "Kurangi tiket",
                                             modifier = Modifier.size(18.dp)
                                         )
@@ -713,7 +722,7 @@ private fun DestinationBookingForm(
                                         modifier = Modifier.size(40.dp)
                                     ) {
                                         Icon(
-                                            Icons.Default.Add,
+                                            imageVector = Icons.Default.Add,
                                             contentDescription = "Tambah tiket",
                                             modifier = Modifier.size(18.dp)
                                         )
@@ -746,7 +755,7 @@ private fun DestinationBookingForm(
                                         )
                                     },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        containerColor = Color.White,
+                                        containerColor = TourifySurface,
                                         labelColor = DestinationInk,
                                         selectedContainerColor = DestinationMint,
                                         selectedLabelColor = DestinationGreen
@@ -756,31 +765,25 @@ private fun DestinationBookingForm(
                             }
                         }
                     }
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = DestinationMint
+                    // Tampilkan total langsung tanpa panel latar.
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "Total",
-                                color = DestinationMuted,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                rupiah(totalPrice),
-                                color = DestinationGreen,
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                        Text(
+                            "Total",
+                            color = DestinationMuted,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            rupiah(totalPrice),
+                            color = DestinationGreen,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
-                    // Samakan tombol konfirmasi dengan warna hijau di layar tujuan.
+                    // Tombol konfirmasi pakai hijau yang sama dengan layar destinasi.
                     Button(
                         onClick = {
                             val date = selectedDate?.takeUnless {
@@ -851,7 +854,7 @@ private fun DestinationBookingForm(
     }
 }
 
-// Kalender memilih tanggal kunjungan mulai hari ini.
+// Tanggal kunjungan bisa dipilih mulai hari ini.
 @Composable
 private fun CompactDatePicker(
     selectedDate: LocalDate?,
@@ -904,8 +907,8 @@ private fun CompactDatePicker(
                 .padding(horizontal = 24.dp)
                 .widthIn(max = 340.dp)
                 .fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-            color = Color.White,
+            shape = TourifyShapes.sheet,
+            color = TourifySurface,
             shadowElevation = 12.dp
         ) {
             Column(
@@ -926,7 +929,7 @@ private fun CompactDatePicker(
                         onClick = onDismiss
                     ) {
                         Icon(
-                            Icons.Default.Close,
+                            imageVector = Icons.Default.Close,
                             contentDescription = "Tutup kalender",
                             tint = DestinationMuted
                         )
@@ -944,7 +947,7 @@ private fun CompactDatePicker(
                         enabled = displayedMonth > YearMonth.from(today)
                     ) {
                         Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Bulan sebelumnya",
                             tint = DestinationGreen
                         )
@@ -961,7 +964,7 @@ private fun CompactDatePicker(
                         }
                     ) {
                         Icon(
-                            Icons.AutoMirrored.Filled.ArrowForward,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                             contentDescription = "Bulan berikutnya",
                             tint = DestinationGreen
                         )
@@ -1033,7 +1036,7 @@ private fun CompactDatePicker(
                                             fontSize = 13.sp,
                                             color = when {
                                                 isSelected -> Color.White
-                                                isPast -> Color(0xFFAAB3AE)
+                                                isPast -> TourifyMuted
                                                 else -> DestinationInk
                                             }
                                         )

@@ -10,7 +10,7 @@ const appConfig = useAppConfig()
 
 const auth = useDashboardAuth()
 const api = useTourifyApi()
-// Avatar menu memakai foto yang sama dengan halaman profil.
+// Foto avatar sama dengan foto di halaman profil.
 const user = computed(() => {
   const name = auth.user.value?.username || 'Tourify'
 
@@ -24,11 +24,11 @@ const user = computed(() => {
   }
 })
 
-// Palet warna mengikuti pilihan Theme dari template dashboard.
+// Warna menu mengikuti tema dashboard yang dipilih.
 const colors = ['red', 'orange', 'amber', 'yellow', 'lime', 'green', 'emerald', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'violet', 'purple', 'fuchsia', 'pink', 'rose']
 const neutrals = ['slate', 'gray', 'zinc', 'neutral', 'stone', 'taupe', 'mauve', 'mist', 'olive']
 
-// Menu akun menyediakan halaman profil, pengaturan tampilan, dan logout.
+// Menu akun berisi profil, tampilan, dan tombol keluar.
 const items = computed<DropdownMenuItem[][]>(() => [[{
   type: 'label',
   label: user.value.name,

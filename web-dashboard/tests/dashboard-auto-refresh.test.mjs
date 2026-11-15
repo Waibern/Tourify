@@ -6,7 +6,7 @@ import ts from 'typescript'
 import { parse } from 'vue/compiler-sfc'
 import { useDashboardAutoRefresh } from '../app/composables/useDashboardAutoRefresh.ts'
 
-// Jadwal dikendalikan tes agar aturan lima detik dan request tumpang tindih bisa diuji cepat.
+// Atur waktu di tes supaya jeda lima detik dan permintaan bersamaan bisa dicek cepat.
 test('polling lima detik melewati tab tersembunyi, halaman sibuk, dan request aktif', async (t) => {
   let tick
   let interval
@@ -50,7 +50,7 @@ test('polling lima detik melewati tab tersembunyi, halaman sibuk, dan request ak
   await next
 })
 
-// Pakai fungsi pemuat asli dari SFC agar tes menangkap regresi loading pemicu ASCII.
+// Pakai pemuat asli dari halaman supaya tes menangkap masalah saat data dimuat.
 const { descriptor } = parse(readFileSync(new URL('../app/pages/index.vue', import.meta.url), 'utf8'))
 const source = ts.createSourceFile('index.ts', descriptor.scriptSetup.content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
 const loader = source.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'loadAnalytics')

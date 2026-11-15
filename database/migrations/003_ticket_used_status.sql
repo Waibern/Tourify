@@ -1,8 +1,8 @@
--- Tambah status terpakai untuk pesanan yang semua tiketnya sudah check-in.
+-- Tambah status Terpakai kalau semua tiket dalam pesanan sudah discan.
 ALTER TABLE `tickets`
     MODIFY COLUMN `status` ENUM('Active', 'Expire', 'Used') NOT NULL DEFAULT 'Active';
 
--- Selaraskan tiket lama dengan jumlah scan yang sudah tercatat dan tanggal Jakarta.
+-- Perbarui status tiket lama dari jumlah scan dan tanggal Jakarta.
 UPDATE `tickets`
 SET `status` = CASE
     WHEN `checked_in_quantity` >= `quantity` THEN 'Used'

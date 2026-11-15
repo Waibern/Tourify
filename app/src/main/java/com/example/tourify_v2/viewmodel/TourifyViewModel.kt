@@ -18,9 +18,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-// ambil data destinasi dan urus tiket
+// Muat destinasi dan kelola tiket.
 class TourifyViewModel(
-    // Service yang sama bisa diganti saat menguji koneksi tiket yang gagal.
+    // Service bisa diganti saat tes koneksi tiket gagal.
     private val apiService: ApiService = ApiClient.service
 ) : ViewModel() {
     var wahana by mutableStateOf<List<Wahana>>(emptyList())
@@ -35,7 +35,7 @@ class TourifyViewModel(
         private set
     var ticketsError by mutableStateOf("")
         private set
-    // Waktu ini hanya maju kalau status tiket benar-benar berhasil diambil.
+    // Perbarui waktu sinkron hanya kalau tiket berhasil dimuat.
     var ticketsUpdatedAtMillis by mutableStateOf<Long?>(null)
         private set
     var ticketsOwner by mutableStateOf("")
@@ -52,7 +52,7 @@ class TourifyViewModel(
         bookingMessage = ""
     }
 
-    // Token mengikat konteks chat ke akun yang sudah login.
+    // Token login mengikat chat ke akun yang sedang dipakai.
     fun sendChatMessage(
         accessToken: String,
         message: String,
@@ -71,17 +71,27 @@ class TourifyViewModel(
                         history = history
                     )
                 )
-                val result = response.body()
-                val chatResult = if (response.isSuccessful && result?.success == true) {
-                    if (result.answer.isNullOrBlank() && result.bookingProposal == null) {
+                val serverChatResponse = response.body()
+                // Siapkan jawaban untuk ditampilkan di layar.
+                val displayChatResponse = if (
+                    response.isSuccessful &&
+                    serverChatResponse?.success == true
+                ) {
+                    if (
+                        serverChatResponse.answer.isNullOrBlank() &&
+                        serverChatResponse.bookingProposal == null
+                    ) {
                         ChatResponse(message = "Asisten belum bisa membuat jawaban. Coba lagi nanti.")
                     } else {
-                        result
+                        serverChatResponse
                     }
                 } else {
-                    ChatResponse(message = result?.message ?: "Asisten gagal menjawab. Coba lagi nanti.")
+                    ChatResponse(
+                        message = serverChatResponse?.message
+                            ?: "Asisten gagal menjawab. Coba lagi nanti."
+                    )
                 }
-                onComplete(chatResult)
+                onComplete(displayChatResponse)
             } catch (_: Exception) {
                 onComplete(
                     ChatResponse(
@@ -100,9 +110,13 @@ class TourifyViewModel(
             wahanaError = ""
             try {
                 val response = apiService.getWahana()
-                val result = response.body()
-                if (response.isSuccessful && result?.success == true) {
-                    wahana = result.wahana
+                val wahanaResult = response.body()
+                // Ganti daftar wahana hanya setelah server berhasil mengirim data.
+                if (
+                    response.isSuccessful &&
+                    wahanaResult?.success == true
+                ) {
+                    wahana = wahanaResult.wahana
                 } else {
                     wahanaError = "Daftar wahana gagal dimuat dari server."
                 }
@@ -114,13 +128,13 @@ class TourifyViewModel(
         }
     }
 
-    // Token menentukan akun tiket langsung dari sesi server.
+    // Token menentukan akun pemilik tiket.
     fun loadTickets(
         username: String,
         accessToken: String,
         forceRefresh: Boolean = false
     ) {
-        // Jangan tumpuk refresh, dan jangan pakai tiket dari akun sebelumnya.
+        // Cegah refresh bertumpuk dan jangan pakai tiket dari akun lama.
         val alreadyRefreshing = ticketsOwner == username && ticketsRequest?.isActive == true
         if (username.isBlank() || accessToken.isBlank() || (!forceRefresh && alreadyRefreshing)) {
             return
@@ -136,18 +150,22 @@ class TourifyViewModel(
             ticketsError = ""
             try {
                 val response = apiService.getTickets("Bearer $accessToken")
-                val result = response.body()
-                if (response.isSuccessful && result?.success == true) {
-                    tickets = result.tickets
+                val ticketsResult = response.body()
+                // Perbarui daftar tiket dan waktu sinkron setelah permintaan berhasil.
+                if (
+                    response.isSuccessful &&
+                    ticketsResult?.success == true
+                ) {
+                    tickets = ticketsResult.tickets
                     ticketsUpdatedAtMillis = System.currentTimeMillis()
                 } else {
-                    ticketsError = result?.message?.takeIf { it.isNotBlank() }
+                    ticketsError = ticketsResult?.message?.takeIf { it.isNotBlank() }
                         ?: "Status tiket belum bisa diperbarui. Coba lagi."
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                // Tiket yang sudah ada tetap disimpan saat koneksi terputus.
+                // Kalau koneksi gagal, pertahankan tiket yang sudah dimuat.
                 ticketsError = "Status tiket belum bisa diperbarui. Periksa koneksi lalu coba lagi."
             } finally {
                 if (isActive) {
@@ -168,10 +186,14 @@ class TourifyViewModel(
             bookingMessage = ""
             try {
                 val response = apiService.bookTicket("Bearer $accessToken", request)
-                val result = response.body()
-                if (response.isSuccessful && result?.success == true) {
-                    bookingMessage = result.message
-                    // Pesanan baru harus mengambil hasil baru meski refresh sebelumnya belum selesai.
+                val bookingResult = response.body()
+                // Tampilkan pesan dari server.
+                if (
+                    response.isSuccessful &&
+                    bookingResult?.success == true
+                ) {
+                    bookingMessage = bookingResult.message
+                    // Muat ulang tiket setelah pesan berhasil, walau refresh sebelumnya belum selesai.
                     loadTickets(
                         username = username,
                         accessToken = accessToken,
@@ -179,7 +201,7 @@ class TourifyViewModel(
                     )
                     onComplete(true)
                 } else {
-                    bookingMessage = result?.message ?: "Pemesanan tiket gagal."
+                    bookingMessage = bookingResult?.message ?: "Pemesanan tiket gagal."
                     onComplete(false)
                 }
             } catch (_: Exception) {

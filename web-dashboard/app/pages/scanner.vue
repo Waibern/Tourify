@@ -62,7 +62,7 @@ const cameraOverlayDescription = computed(() => {
   return 'Aktifkan kamera, lalu pilih kamera yang sesuai jika tersedia.'
 })
 
-// Tombol lanjut langsung siap dipakai dengan keyboard setelah hasil tampil.
+// Setelah hasil scan muncul, tombol lanjut bisa langsung dipakai dengan keyboard.
 watch(phase, async (value) => {
   if (value === 'result') {
     await nextTick()
@@ -72,7 +72,7 @@ watch(phase, async (value) => {
   }
 })
 
-// Pemindai hanya dibuat di browser dan bisa dimuat ulang dari tombol kamera.
+// Buat pemindai di browser; tombol kamera bisa menyiapkannya lagi.
 async function initializeScanner() {
   if (disposed || scanner) return
   if (!video.value) {
@@ -105,7 +105,7 @@ async function initializeScanner() {
   }
 }
 
-// Nama kamera biasanya baru tersedia setelah browser memberi izin ke stream.
+// Nama kamera muncul setelah browser mengizinkan akses kamera.
 async function refreshCameraDevices(request: number) {
   if (!listCameraDevices) return
 
@@ -122,11 +122,11 @@ async function refreshCameraDevices(request: number) {
       selectedCameraId.value = activeCameraId
     }
   } catch {
-    // Pemindaian tetap jalan kalau browser gagal mencantumkan kamera.
+    // Pemindai tetap bisa dipakai kalau daftar kamera gagal dimuat.
   }
 }
 
-// Kamera aktif langsung beralih; saat jeda, pilihan disimpan untuk scan berikutnya.
+// Saat kamera menyala, pilihan langsung dipakai; saat jeda, pilihan dipakai di scan berikutnya.
 async function selectCamera(cameraId: string) {
   if (!scanner || !cameraId || cameraId === selectedCameraId.value) return
 
@@ -149,7 +149,7 @@ async function selectCamera(cameraId: string) {
       try {
         await scanner.setCamera(previousCameraId)
       } catch {
-        // Tombol kamera tetap tersedia untuk mencoba ulang.
+        // Petugas bisa menekan tombol kamera untuk mencoba lagi.
       }
     }
     selectedCameraId.value = previousCameraId
@@ -160,13 +160,13 @@ async function selectCamera(cameraId: string) {
   }
 }
 
-// Kamera baru disiapkan setelah halaman tampil supaya akses browser tidak dipanggil saat SSR.
+// Siapkan kamera setelah halaman tampil karena server tidak punya akses kamera.
 onMounted(() => {
   document.addEventListener('visibilitychange', handlePageVisibility)
   void initializeScanner()
 })
 
-// Kamera berhenti saat tab disembunyikan dan saat halaman ditinggalkan.
+// Hentikan kamera saat tab disembunyikan atau halaman ditinggalkan.
 function handlePageVisibility() {
   if (document.visibilityState !== 'hidden' || !['starting', 'scanning'].includes(phase.value)) {
     return
@@ -201,7 +201,7 @@ function responseStatusCode(error: unknown): number | null {
   return null
 }
 
-// Satu QR menghitung satu orang; server yang menentukan validitas dan sisa tiket.
+// Satu scan mencatat satu orang; server mengecek tiket dan sisa jumlahnya.
 async function handleQr(value: string) {
   if (phase.value !== 'scanning') {
     return
@@ -249,7 +249,7 @@ async function handleQr(value: string) {
   phase.value = 'result'
 }
 
-// Memulai kamera hanya setelah petugas menekan tombol dan memberi izin browser.
+// Kamera mulai setelah petugas menekan tombol dan memberi izin.
 async function startScanner() {
   if (!scanner) {
     await initializeScanner()
@@ -316,22 +316,22 @@ async function scanNext() {
     </template>
 
     <template #body>
-      <!-- Kamera dan hasil berdampingan supaya petugas tidak perlu menggulir setelah scan. -->
-      <div class="mx-auto w-full max-w-6xl space-y-5">
-        <div class="flex flex-wrap items-end justify-between gap-3">
+      <!-- Kamera dan hasil tampil berdampingan supaya petugas bisa mengecek tiket. -->
+      <div class="mx-auto w-full max-w-6xl space-y-6">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 class="text-xl font-semibold text-highlighted">
+            <h1 class="text-2xl font-semibold tracking-tight text-highlighted">
               Check-in pengunjung
             </h1>
-            <p class="mt-1 text-sm text-muted">
-              Arahkan kamera ke QR tiket. Satu scan mencatat satu pengunjung.
+            <p class="mt-2 max-w-xl text-base leading-6 text-muted">
+              Pindai QR tiket untuk mencatat satu pengunjung. Pastikan kamera mengarah ke kode dengan jelas.
             </p>
           </div>
-          <div class="flex flex-wrap items-end gap-3">
+          <div class="flex flex-wrap items-end gap-3 sm:justify-end">
             <UFormField
               v-if="cameraDevices.length > 1"
               label="Kamera"
-              class="w-48"
+              class="w-full max-w-56"
             >
               <USelect
                 :model-value="selectedCameraId"
@@ -344,8 +344,11 @@ async function scanNext() {
               />
             </UFormField>
             <UBadge
+              v-if="phase !== 'scanning'"
               :color="cameraStatusColor"
               variant="subtle"
+              class="min-h-8 rounded-full px-3"
+              role="status"
               aria-live="polite"
             >
               {{ cameraStatusLabel }}
@@ -353,8 +356,8 @@ async function scanNext() {
           </div>
         </div>
 
-        <div class="grid items-stretch gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(300px,0.9fr)]">
-          <!-- Di HP, kamera disembunyikan saat hasil supaya hasil check-in tetap jelas. -->
+        <div class="grid items-stretch gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(18rem,0.9fr)]">
+          <!-- Di HP, tampilkan hasil scan saja supaya detail check-in lebih mudah dibaca. -->
           <UCard
             class="h-full overflow-hidden"
             :ui="{ body: 'p-0 sm:p-0' }"
@@ -365,24 +368,35 @@ async function scanNext() {
                 ref="video"
                 muted
                 playsinline
-                class="h-full w-full object-cover"
+                class="absolute inset-0 h-full w-full object-cover"
                 :class="{ 'opacity-30': phase !== 'scanning' }"
                 aria-label="Tampilan kamera untuk scan QR tiket"
               />
 
               <div
                 v-if="phase === 'scanning'"
-                class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-5"
+                class="pointer-events-none absolute inset-0"
               >
-                <div class="size-48 rounded-3xl border-2 border-white/90 shadow-[0_0_0_999px_rgba(0,0,0,0.38)] sm:size-60" />
-                <span class="rounded-full bg-black/70 px-4 py-2 text-sm text-white">
+                <div class="absolute inset-x-0 bottom-14 top-14 flex items-center justify-center">
+                  <div class="relative size-32 sm:size-48 lg:size-52" aria-hidden="true">
+                    <div class="absolute inset-4 overflow-hidden rounded-2xl">
+                      <span class="scan-line absolute inset-x-0 h-0.5 bg-white shadow-[0_0_14px_rgba(255,255,255,0.75)]" />
+                    </div>
+                    <span class="absolute inset-0 rounded-3xl border border-white/35" />
+                    <span class="absolute left-0 top-0 size-9 rounded-tl-3xl border-l-[3px] border-t-[3px] border-primary" />
+                    <span class="absolute right-0 top-0 size-9 rounded-tr-3xl border-r-[3px] border-t-[3px] border-primary" />
+                    <span class="absolute bottom-0 left-0 size-9 rounded-bl-3xl border-b-[3px] border-l-[3px] border-primary" />
+                    <span class="absolute bottom-0 right-0 size-9 rounded-br-3xl border-b-[3px] border-r-[3px] border-primary" />
+                  </div>
+                </div>
+                <span class="absolute inset-x-4 bottom-3 mx-auto w-fit whitespace-nowrap rounded-full border border-white/15 bg-black/80 px-4 py-2 text-sm font-medium text-white shadow-lg">
                   Posisikan QR di dalam bingkai
                 </span>
               </div>
 
               <div
                 v-else
-                class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center text-white"
+                class="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950/60 p-6 text-center text-white"
               >
                 <UIcon
                   :name="phase === 'checking' || phase === 'starting' || phase === 'preparing' ? 'i-lucide-loader-circle' : phase === 'result' ? 'i-lucide-scan-line' : 'i-lucide-camera'"
@@ -406,26 +420,25 @@ async function scanNext() {
                 />
               </div>
 
-              <div class="absolute inset-x-0 top-0 flex justify-end p-3 sm:p-4">
+              <div class="absolute inset-x-0 top-0 flex items-start justify-end p-3 sm:p-4">
                 <UButton
                   v-if="phase === 'scanning'"
                   label="Hentikan kamera"
                   icon="i-lucide-camera-off"
                   color="neutral"
-                  variant="solid"
+                  variant="outline"
                   size="sm"
-                  class="min-h-11"
+                  class="min-h-11 border-white/25 bg-black/70 text-white hover:bg-black/85"
                   @click="stopScanner"
                 />
               </div>
             </div>
-            <div class="flex items-start gap-2.5 p-4 text-sm text-muted sm:px-5">
+            <div class="flex items-start gap-3 border-t border-default bg-elevated/20 p-4 text-sm leading-6 text-muted sm:px-5">
               <UIcon name="i-lucide-info" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
               <p>Satu QR bisa mewakili beberapa orang. Pindai ulang untuk tiap orang dan tunggu hasil sebelum melanjutkan.</p>
             </div>
           </UCard>
 
-          <!-- Panel hasil mengikuti tinggi kamera agar ruang kerja tidak terasa kosong. -->
           <UCard class="h-full">
             <div
               ref="resultPanel"
@@ -573,3 +586,30 @@ async function scanNext() {
     </template>
   </UDashboardPanel>
 </template>
+
+<style scoped>
+.scan-line {
+  animation: scan-line-sweep 2.2s ease-in-out infinite;
+}
+
+@keyframes scan-line-sweep {
+  0%,
+  100% {
+    top: 0;
+    opacity: 0.45;
+  }
+
+  50% {
+    top: calc(100% - 2px);
+    opacity: 0.95;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-line {
+    animation: none;
+    top: 50%;
+    opacity: 0.8;
+  }
+}
+</style>

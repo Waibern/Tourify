@@ -18,7 +18,7 @@ const lastUsernameKey = 'tourify-last-login-username'
 let revealController: AsciiRevealController | undefined
 let revealPromise: Promise<void> | undefined
 
-// Sesi lama dicek setelah halaman login selesai dihidrasi.
+// Cek sesi setelah halaman login selesai dimuat.
 async function redirectSavedSession() {
   const user = await auth.loadSession()
   if (user) {
@@ -26,9 +26,9 @@ async function redirectSavedSession() {
   }
 }
 
-// Form dibuka dengan efek ASCII, kecuali pengguna memilih kurangi animasi.
+// Matikan animasi pembuka kalau pengguna memilih gerakan yang lebih ringan.
 onMounted(() => {
-  // Isi username terakhir dari browser tanpa menyimpan password.
+  // Isi username terakhir dari browser; password tidak disimpan.
   state.username = localStorage.getItem(lastUsernameKey) ?? ''
   void redirectSavedSession()
 
@@ -58,7 +58,7 @@ watch(asciiAnimations, (enabled) => {
   revealPromise = undefined
 })
 
-// Bersihkan kanvas animasi saat form login ditinggalkan.
+// Hentikan animasi saat meninggalkan halaman login.
 onBeforeUnmount(() => {
   revealController?.destroy()
   revealController = undefined
@@ -71,7 +71,7 @@ const schema = z.object({
 
 type LoginForm = z.output<typeof schema>
 
-// Login hanya menerima akun yang sudah diberi role admin atau gate di server.
+// Server hanya menerima akun admin atau petugas yang sudah terdaftar.
 async function onSubmit(event: FormSubmitEvent<LoginForm>) {
   if (pending.value) return
   pending.value = true
@@ -80,7 +80,7 @@ async function onSubmit(event: FormSubmitEvent<LoginForm>) {
 
   try {
     const user = await auth.login(event.data.username, event.data.password)
-    // Simpan username setelah login berhasil supaya siap saat kembali.
+    // Simpan username setelah login berhasil supaya tidak perlu mengetik lagi.
     localStorage.setItem(lastUsernameKey, event.data.username.trim())
 
     if (revealController && reducedMotion.value !== 'reduce' && asciiAnimations.value) {
@@ -95,7 +95,7 @@ async function onSubmit(event: FormSubmitEvent<LoginForm>) {
           formHidden = true
         }
       } catch {
-        // Animasi yang gagal tidak boleh menghalangi login berhasil.
+        // Login tetap berhasil meski animasinya gagal.
       }
     }
     await navigateTo(user.role === 'gate' ? '/scanner' : '/')
@@ -115,7 +115,7 @@ async function onSubmit(event: FormSubmitEvent<LoginForm>) {
 
 <template>
   <div ref="loginRevealRoot" class="mx-auto w-full max-w-[24rem] min-w-0">
-    <!-- Form tetap jadi target reveal ASCII tanpa kotak pembungkus. -->
+    <!-- Animasi pembuka menampilkan form tanpa kotak tambahan. -->
     <section
       data-ascii="surface"
       class="space-y-5"
@@ -124,7 +124,7 @@ async function onSubmit(event: FormSubmitEvent<LoginForm>) {
         <h1 class="text-2xl font-semibold leading-tight tracking-[-0.03em] text-white sm:text-[1.75rem]">
           Selamat datang kembali
         </h1>
-        <p class="text-sm leading-6 text-white/70 sm:text-base">
+        <p class="text-xs leading-5 text-white/70 sm:text-sm">
           Gunakan akun admin atau petugas gate.
         </p>
       </div>
@@ -136,18 +136,18 @@ async function onSubmit(event: FormSubmitEvent<LoginForm>) {
         :description="errorMessage"
       />
 
-      <!-- Ring putih menjaga fokus keyboard tetap terlihat di latar gelap. -->
+      <!-- Garis putih menunjukkan kolom yang sedang dipilih dengan keyboard. -->
       <UForm
         :schema="schema"
         :state="state"
         class="space-y-4"
         @submit="onSubmit"
       >
-        <!-- Kolom username memakai ikon sebagai petunjuk visual. -->
+        <!-- Ikon membantu mengenali kolom username. -->
         <UFormField
           label="Username"
           name="username"
-          :ui="{ label: 'text-sm font-medium text-white/75', labelWrapper: 'mb-2' }"
+          :ui="{ label: 'text-xs font-medium text-white/75', labelWrapper: 'mb-2' }"
         >
           <div class="relative">
             <UIcon
@@ -161,16 +161,16 @@ async function onSubmit(event: FormSubmitEvent<LoginForm>) {
               placeholder="Masukkan username"
               size="lg"
               class="w-full"
-              :ui="{ base: 'h-12 rounded-2xl border border-transparent bg-[#242426] pl-12 pr-4 text-base text-white placeholder:text-white/50 focus-visible:border-white focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0b0d]' }"
+              :ui="{ base: 'h-12 rounded-2xl border border-transparent bg-[#242426] pl-12 pr-4 text-base text-white placeholder:text-white/50 focus-visible:border-white focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#0e0e0e]' }"
             />
           </div>
         </UFormField>
 
-        <!-- Password punya kontrol tampil-sembunyi yang tetap mudah disentuh. -->
+        <!-- Tombol mata bisa menampilkan atau menyembunyikan password. -->
         <UFormField
           label="Password"
           name="password"
-          :ui="{ label: 'text-sm font-medium text-white/75', labelWrapper: 'mb-2' }"
+          :ui="{ label: 'text-xs font-medium text-white/75', labelWrapper: 'mb-2' }"
         >
           <div class="relative">
             <UIcon
@@ -185,7 +185,7 @@ async function onSubmit(event: FormSubmitEvent<LoginForm>) {
               placeholder="Masukkan password"
               size="lg"
               class="w-full"
-              :ui="{ base: 'h-12 rounded-2xl border border-transparent bg-[#242426] pl-12 pr-14 text-base text-white placeholder:text-white/50 focus-visible:border-white focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0b0d]' }"
+              :ui="{ base: 'h-12 rounded-2xl border border-transparent bg-[#242426] pl-12 pr-14 text-base text-white placeholder:text-white/50 focus-visible:border-white focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#0e0e0e]' }"
             />
             <button
               type="button"
@@ -203,7 +203,7 @@ async function onSubmit(event: FormSubmitEvent<LoginForm>) {
           </div>
         </UFormField>
 
-        <!-- Tombol putih tetap menonjol dengan label dan panah di tengah. -->
+        <!-- Tombol masuk menampilkan label dan panah di tengah. -->
         <UButton
           type="submit"
           color="neutral"

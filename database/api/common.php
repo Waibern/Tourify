@@ -16,7 +16,7 @@ function requireMethod(string $method): void
     }
 }
 
-// Token aplikasi ditandatangani memakai hash akun dan kedaluwarsa dalam 24 jam.
+// Token ditandatangani dengan hash password akun dan berlaku 24 jam.
 function createAppAccessToken(int $userId, string $passwordHash): string
 {
     $payload = $userId . ':' . (time() + 86400) . ':' . bin2hex(random_bytes(16));
@@ -27,11 +27,11 @@ function createAppAccessToken(int $userId, string $passwordHash): string
     return $encodedPayload . '.' . $encodedSignature;
 }
 
-// Endpoint profil menerima akun aplikasi terverifikasi atau sesi dashboard.
+// Profil bisa diakses dengan token aplikasi atau sesi dashboard yang sah.
 function optionalAppUserId(PDO $pdo): ?int
 {
     $authorization = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-    // MAMP menaruh header di variabel REDIRECT setelah request lewat handler FastCGI.
+    // Di MAMP, header Authorization bisa pindah ke REDIRECT_* saat PHP memakai FastCGI.
     if ($authorization === '') {
         $authorization = $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
     }
@@ -102,7 +102,7 @@ function readJsonInput(): array
     return $input;
 }
 
-// Batasi akses browser ke dashboard yang diizinkan dan dukung cookie sesi lintas port lokal.
+// Izinkan alamat dashboard yang terdaftar dan dukung cookie sesi.
 function configureDashboardCors(): void
 {
     $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
@@ -126,7 +126,7 @@ function configureDashboardCors(): void
     }
 }
 
-// Sesi dipakai khusus dashboard; akun customer tetap memakai alur login Android yang lama.
+// Sesi ini untuk dashboard; pelanggan tetap login lewat aplikasi Android.
 function startDashboardSession(): void
 {
     if (session_status() === PHP_SESSION_ACTIVE) {
@@ -159,7 +159,7 @@ function destroyDashboardSession(): void
     session_destroy();
 }
 
-// Semua aksi admin dan gate memeriksa role di server, bukan cuma menyembunyikan tombol.
+// Server tetap memeriksa peran admin atau gate untuk setiap aksi.
 function requireDashboardRole(array $allowedRoles): array
 {
     startDashboardSession();
@@ -169,7 +169,7 @@ function requireDashboardRole(array $allowedRoles): array
         respond(401, ['success' => false, 'message' => 'Silakan login ke dashboard.']);
     }
 
-    // Baca ulang role di database agar perubahan akses langsung berlaku untuk sesi aktif.
+    // Cek lagi peran di database supaya perubahan akses langsung berlaku.
     try {
         $statement = getDatabaseConnection()->prepare(
             'SELECT id, username, role FROM users WHERE id = :id LIMIT 1'

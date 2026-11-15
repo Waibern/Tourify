@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -37,7 +39,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -52,7 +53,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
 
-// form login dan animasi logo
+// Form login dan animasi logo.
 @Composable
 fun LoginScreen(
     authViewModel: AuthViewModel,
@@ -60,7 +61,7 @@ fun LoginScreen(
     onNavigateToRegister: () -> Unit,
     isActive: Boolean = true
 ) {
-    // Simpan isian login dan status tampilan password.
+    // Simpan isian login dan status password.
     var username by remember {
         mutableStateOf("")
     }
@@ -79,7 +80,7 @@ fun LoginScreen(
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val screenHeight = LocalConfiguration.current.screenHeightDp.toFloat()
-    // Logo masuk dari atas setiap layar login kembali aktif.
+    // Logo turun dari atas setiap kali layar login dibuka lagi.
     val logoOffsetY = remember(screenHeight) {
         Animatable(-screenHeight)
     }
@@ -103,7 +104,7 @@ fun LoginScreen(
             logoOffsetY.snapTo(-screenHeight)
         }
     }
-    // Form muncul setelah logo selesai bergerak dari atas.
+    // Tampilkan form setelah logo selesai turun.
     val loginFormAlpha by animateFloatAsState(
         targetValue = if (isLoginFormVisible) 1f else 0f,
         animationSpec = tween(
@@ -112,19 +113,23 @@ fun LoginScreen(
         label = "loginFormReveal"
     )
     val fieldColors = OutlinedTextFieldDefaults.colors(
-        unfocusedBorderColor = Color.LightGray,
-        focusedBorderColor = Color.Gray
+        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+        focusedBorderColor = MaterialTheme.colorScheme.primary,
+        focusedLabelColor = MaterialTheme.colorScheme.primary,
+        cursorColor = MaterialTheme.colorScheme.primary,
+        errorBorderColor = MaterialTheme.colorScheme.error
     )
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White)
-            .padding(24.dp),
+            .background(TourifyCanvas)
+            .verticalScroll(rememberScrollState())
+            .padding(TourifySpacing.screen),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // logo di atas form
+        // Logo di atas form.
         Image(
             painter = painterResource(id = R.drawable.logo),
             contentDescription = "Tourify Logo",
@@ -135,7 +140,7 @@ fun LoginScreen(
         )
         Spacer(modifier = Modifier.height(30.dp))
 
-        // Form menunggu logo selesai dan tidak bisa disentuh selama reveal.
+        // Form baru bisa disentuh setelah animasi logo selesai.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -147,7 +152,7 @@ fun LoginScreen(
                 },
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Label field di dalam mengikuti pola layar daftar akun.
+            // Label input sama seperti yang dipakai di form daftar.
             OutlinedTextField(
                 value = username,
                 onValueChange = {
@@ -161,7 +166,7 @@ fun LoginScreen(
                         "Nama pengguna"
                     )
                 },
-                // Enter dari username langsung pindah ke password.
+                // Enter di username langsung pindah ke password.
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                 keyboardActions = KeyboardActions(
                     onNext = {
@@ -169,12 +174,12 @@ fun LoginScreen(
                     }
                 ),
                 colors = fieldColors,
-                shape = RoundedCornerShape(12.dp),
+                shape = TourifyShapes.input,
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(16.dp))
 
-            // input password dan tombol lihat/sembunyikan
+            // Input password dan tombol lihat/sembunyikan.
             OutlinedTextField(
                 value = password,
                 onValueChange = {
@@ -193,7 +198,7 @@ fun LoginScreen(
                 } else {
                     PasswordVisualTransformation()
                 },
-                // Tombol Done di keyboard menjalankan login.
+                // Tombol Done di keyboard langsung menjalankan login.
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Password,
                     imeAction = ImeAction.Done
@@ -222,8 +227,11 @@ fun LoginScreen(
                     ) {
                         Icon(
                             painter = painterResource(
-                                if (passwordVisible) android.R.drawable.ic_menu_close_clear_cancel
-                                else android.R.drawable.ic_menu_view
+                                id = if (passwordVisible) {
+                                    android.R.drawable.ic_menu_close_clear_cancel
+                                } else {
+                                    android.R.drawable.ic_menu_view
+                                }
                             ),
                             contentDescription = if (passwordVisible) {
                                 "Sembunyikan kata sandi"
@@ -238,7 +246,7 @@ fun LoginScreen(
                 shape = RoundedCornerShape(12.dp)
             )
 
-            // pesan kalau login gagal
+            // Pesan kalau login gagal.
             if (errorMessage.isNotEmpty() || authViewModel.errorMessage.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
@@ -251,7 +259,7 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // masuk ke akun
+            // Tombol masuk ke akun.
             Button(
                 onClick = {
                     if (username.isBlank() || password.isBlank()) {
@@ -269,7 +277,7 @@ fun LoginScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(53.dp),
-                shape = RoundedCornerShape(12.dp),
+                shape = TourifyShapes.input,
                 colors = ButtonDefaults.buttonColors(containerColor = TourifyForest)
             ) {
                 Text(
@@ -279,7 +287,7 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Aksi sekunder memakai tautan seperti di form daftar akun.
+            // Tampilkan tautan buat pengguna yang belum punya akun.
             TextButton(
                 onClick = {
                     onNavigateToRegister()
@@ -295,7 +303,7 @@ fun LoginScreen(
     }
 }
 
-// Contoh form login untuk preview Compose.
+// Preview form login.
 @Preview(showBackground = true)
 @Composable
 fun LoginScreenPreview() {

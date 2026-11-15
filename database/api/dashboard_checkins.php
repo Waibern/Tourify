@@ -7,12 +7,20 @@ requireDashboardRole(['admin']);
 
 try {
     $pdo = getDatabaseConnection();
-    // Timestamp scan ditampilkan dan difilter dalam waktu Jakarta.
+    // Tanggal scan ditampilkan dan difilter pakai waktu Jakarta.
     $pdo->exec("SET time_zone = '+07:00'");
     $query = $_GET['q'] ?? '';
     $date = $_GET['date'] ?? '';
     $page = filter_var($_GET['page'] ?? 1, FILTER_VALIDATE_INT);
-    if (!is_string($query) || strlen($query) > 200 || !is_string($date) || $page === false || $page < 1 || $page > 1000000) {
+    // Cek filter dan nomor halaman sebelum dipakai di query.
+    if (
+        !is_string($query)
+        || strlen($query) > 200
+        || !is_string($date)
+        || $page === false
+        || $page < 1
+        || $page > 1000000
+    ) {
         respond(400, ['success' => false, 'message' => 'Parameter pencarian tidak valid.']);
     }
     if ($date !== '') {
@@ -23,7 +31,7 @@ try {
     }
     $where = [];
     $params = [];
-    // Riwayat dari detail pesanan dibatasi ke tiket yang dipilih saja.
+    // Kalau dibuka dari pesanan, tampilkan check-in untuk tiket itu saja.
     $ticketId = $_GET['ticket_id'] ?? '';
     if (!is_string($ticketId) || ($ticketId !== '' && !preg_match('/^[1-9][0-9]{0,9}$/D', $ticketId))) {
         respond(400, ['success' => false, 'message' => 'Nomor tiket tidak valid.']);
@@ -44,19 +52,24 @@ try {
         $params['date'] = $date;
     }
 
-    $from = 'FROM ticket_checkins c INNER JOIN tickets t ON t.id = c.ticket_id INNER JOIN users u ON u.id = t.user_id INNER JOIN wahana w ON w.id = t.wahana_id LEFT JOIN users staff ON staff.id = c.staff_user_id';
+    // Bagian tabel ini dipakai untuk menghitung total dan mengambil daftar check-in.
+    $from = 'FROM ticket_checkins c '
+        . 'INNER JOIN tickets t ON t.id = c.ticket_id '
+        . 'INNER JOIN users u ON u.id = t.user_id '
+        . 'INNER JOIN wahana w ON w.id = t.wahana_id '
+        . 'LEFT JOIN users staff ON staff.id = c.staff_user_id';
     $filter = $where ? ' WHERE ' . implode(' AND ', $where) : '';
     $count = $pdo->prepare('SELECT COUNT(*) ' . $from . $filter);
     $count->execute($params);
     $total = (int) $count->fetchColumn();
 
-    // Ringkasan menghitung semua catatan, termasuk yang tidak ada di halaman ini.
+    // Ringkasan menghitung semua check-in, bukan cuma baris di halaman ini.
     $summary = $pdo->query(
         'SELECT COUNT(*) AS checkins, COUNT(DISTINCT ticket_id) AS tickets '
         . 'FROM ticket_checkins'
     )->fetch();
 
-    // Wahana teratas dihitung dari jumlah catatan masuk sepanjang waktu.
+    // Urutkan wahana berdasarkan total check-in yang pernah tercatat.
     $topWahana = $pdo->query(
         'SELECT w.id, w.name, COUNT(*) AS checkins '
         . 'FROM ticket_checkins c '
@@ -69,8 +82,16 @@ try {
 
     $perPage = 20;
     $page = min($page, max(1, (int) ceil($total / $perPage)));
-    // Pagination membatasi jumlah baris yang dibawa browser setiap permintaan.
-    $statement = $pdo->prepare('SELECT CAST(c.id AS CHAR) AS id, CAST(t.id AS CHAR) AS ticket_id, u.username, w.name AS wahana_name, c.scanned_at, COALESCE(staff.username, \'Petugas tidak tersedia\') AS staff_username ' . $from . $filter . ' ORDER BY c.scanned_at DESC, c.id DESC LIMIT 20 OFFSET ' . (($page - 1) * $perPage));
+    // Ambil 20 baris per halaman supaya respons tetap ringan.
+    $statement = $pdo->prepare(
+        'SELECT CAST(c.id AS CHAR) AS id, CAST(t.id AS CHAR) AS ticket_id, '
+        . 'u.username, w.name AS wahana_name, c.scanned_at, '
+        . 'COALESCE(staff.username, \'Petugas tidak tersedia\') AS staff_username '
+        . $from
+        . $filter
+        . ' ORDER BY c.scanned_at DESC, c.id DESC LIMIT 20 OFFSET '
+        . (($page - 1) * $perPage)
+    );
 
     $statement->execute($params);
     $rows = $statement->fetchAll();

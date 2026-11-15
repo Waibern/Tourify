@@ -14,7 +14,7 @@ const props = defineProps<{
   loading: boolean
 }>()
 
-// Reveal awal cukup sekali; filter dan refresh tidak perlu memutar ulang skeleton.
+// Animasi awal berjalan sekali; filter dan pembaruan data tidak mengulangnya.
 const initialLoading = ref(props.loading)
 const numberFormat = new Intl.NumberFormat('id-ID')
 const hasPrimaryTrend = computed(() => props.cards[0]?.trend?.some(point => point.value > 0) ?? false)
@@ -24,7 +24,7 @@ watch(() => props.loading, (loading) => {
 </script>
 
 <template>
-  <!-- Ringkasan pakai susunan utama-kecil yang sama dengan kartu Overview. -->
+  <!-- Ringkasan memakai susunan yang sama dengan kartu di Beranda. -->
   <section
     class="grid gap-3 min-[900px]:grid-cols-2"
     aria-label="Ringkasan data"
@@ -36,7 +36,7 @@ watch(() => props.loading, (loading) => {
     >
       <AsciiReveal :loading="initialLoading" origin="pointer">
         <template #skeleton>
-          <!-- Ruang grafik disediakan sejak awal agar tinggi kartu tetap stabil. -->
+          <!-- Sisakan ruang grafik supaya tinggi kartu tidak berubah saat data siap. -->
           <div :class="cards[0]?.trendLabel ? 'h-56' : 'h-44'" aria-hidden="true" />
         </template>
         <div class="flex min-h-44 flex-col justify-between gap-3 p-4 sm:p-5">
@@ -59,7 +59,7 @@ watch(() => props.loading, (loading) => {
                 {{ cards[0]?.hint }}
               </p>
             </div>
-            <!-- Grafik hanya muncul pada kartu yang menerima data tren. -->
+            <!-- Tampilkan grafik hanya saat kartu punya data tren. -->
             <div v-if="cards[0]?.trend?.length" class="space-y-1">
               <p class="text-sm text-muted">
                 {{ cards[0].trendLabel }}

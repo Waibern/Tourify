@@ -1,4 +1,4 @@
--- Tambah role dashboard dan pencatatan masuk per orang tanpa mengubah status tiket aplikasi.
+-- Tambah peran dashboard dan catatan check-in tanpa mengubah status tiket lama.
 ALTER TABLE `users`
     ADD COLUMN `role` ENUM('customer', 'admin', 'gate') NOT NULL DEFAULT 'customer' AFTER `password_hash`;
 

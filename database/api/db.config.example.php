@@ -1,6 +1,6 @@
 <?php
 
-// Salin ke /etc/tourify/database.php lalu isi rahasia di server.
+// Salin file ini ke /etc/tourify/database.php, lalu isi konfigurasinya di server.
 return [
     'host' => '127.0.0.1',
     'port' => 3306,

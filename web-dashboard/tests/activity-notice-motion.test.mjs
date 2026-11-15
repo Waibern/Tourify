@@ -6,7 +6,7 @@ import ts from 'typescript'
 import { parse } from 'vue/compiler-sfc'
 import { computed, effectScope, markRaw, nextTick, reactive, ref, watch } from 'vue'
 
-// Pakai skrip kartu asli agar urutan hide → dismiss dan timer bisa dibuktikan tanpa browser.
+// Pakai komponen notifikasi asli untuk mengecek urutan animasi tutup dan timer tanpa browser.
 const { descriptor } = parse(readFileSync(new URL('../app/components/DashboardActivityNotice.vue', import.meta.url), 'utf8'))
 const source = ts.createSourceFile('notice.ts', descriptor.scriptSetup.content, ts.ScriptTarget.Latest, true)
 const script = source.statements.filter(node => !ts.isImportDeclaration(node)).map(node => node.getText(source)).join('\n')
@@ -24,7 +24,7 @@ function notice({ motion = 'no-preference', holdEntrance = false, failHide = fal
   let mounted
   let unmount
   let now = 1000
-  // Model fokus kecil ini menguji pemulihan tanpa meniru layout atau animasi browser.
+  // Tes ini memastikan fokus kembali dengan benar tanpa meniru tampilan browser.
   const document = { activeElement: null, body: null }
   const focusListeners = []
   const motionPreference = ref(motion)
@@ -77,7 +77,7 @@ function notice({ motion = 'no-preference', holdEntrance = false, failHide = fal
     createAsciiReveal: (target, options) => {
       let finishReveal
       const reveal = new Promise(resolve => finishReveal = resolve)
-      // Pisahkan penyelesaian glyph dan surface agar tes membuktikan urutan kedua tahap.
+      // Pastikan isi hilang dulu, baru kartu dan bingkainya.
       const hides = []
       const effect = {
         target,

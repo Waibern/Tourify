@@ -5,7 +5,7 @@ export default defineAppConfig({
       neutral: 'zinc'
     },
 
-    // Drawer tetap jadi navigasi utama sampai layar cukup lebar untuk sidebar.
+    // Di layar kecil, menu samping jadi navigasi utama.
     dashboardSidebar: {
       slots: {
         root: 'md:flex md:max-lg:max-w-52',
@@ -14,7 +14,7 @@ export default defineAppConfig({
       }
     },
 
-    // Tombol menu HP dan lipat manual mengikuti batas tampilan sidebar yang sama.
+    // Tombol menu dan sidebar berubah di ukuran layar yang sama.
     dashboardSidebarToggle: {
       base: 'md:hidden'
     },

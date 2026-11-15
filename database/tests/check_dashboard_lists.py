@@ -33,7 +33,7 @@ if 'admin' not in user_ids:
 
 with tempfile.TemporaryDirectory() as sessions:
     def request(endpoint, params=None, role='admin', method='GET'):
-        # Sesi hanya dibuat di folder sementara agar login browser tidak tersentuh.
+        # Simpan sesi tes di folder sementara supaya login browser tetap aman.
         wrapper = '''
         session_save_path($argv[1]); session_start(); $_SESSION = [];
         $role = $argv[2];
@@ -51,7 +51,7 @@ with tempfile.TemporaryDirectory() as sessions:
 
     for key in ['orders', 'checkins']:
         endpoint = f'dashboard_{key}.php'
-        # Akun aplikasi customer bukan sesi dashboard dan harus mendapat 401.
+        # Login customer dari aplikasi bukan sesi dashboard, jadi hasilnya harus 401.
         denied_roles = [('', 401)]
         if 'gate' in user_ids:
             denied_roles.append(('gate', 403))

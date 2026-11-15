@@ -4,7 +4,11 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.net.Uri
+import android.content.pm.PackageManager
+import androidx.core.content.FileProvider
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -16,8 +20,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Edit
@@ -39,6 +43,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -47,33 +52,43 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tourify_v2.model.Ticket
 import com.example.tourify_v2.ui.theme.TourifyBorder
+import com.example.tourify_v2.ui.theme.TourifyCanvas
+import com.example.tourify_v2.ui.theme.TourifyElevation
 import com.example.tourify_v2.ui.theme.TourifyError
+import com.example.tourify_v2.ui.theme.TourifyErrorContainer
 import com.example.tourify_v2.ui.theme.TourifyForest
 import com.example.tourify_v2.ui.theme.TourifyInk
+import com.example.tourify_v2.ui.theme.TourifyMint
 import com.example.tourify_v2.ui.theme.TourifyMuted
+import com.example.tourify_v2.ui.theme.TourifyShapes
+import com.example.tourify_v2.ui.theme.TourifySpacing
 import com.example.tourify_v2.ui.theme.TourifySoftSurface
+import com.example.tourify_v2.ui.theme.TourifySurface
 import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.IOException
 
-// Profil memakai data akun dan tiket Tourify yang sudah tersedia.
+// Tampilkan info akun dan tiket yang sudah dimuat.
 @Composable
 fun AccountScreen(
     currentUser: String,
@@ -89,7 +104,7 @@ fun AccountScreen(
     onDestinationsClick: () -> Unit,
     onLogout: () -> Unit
 ) {
-    // Simpan pilihan foto dan status akun sebelum menampilkan profil.
+    // Simpan foto yang dipilih dan status akun untuk layar ini.
     val accountName = currentUser.ifBlank {
         "Pengguna Tourify"
     }
@@ -98,7 +113,7 @@ fun AccountScreen(
     var selectedImageBitmap by remember {
         mutableStateOf<Bitmap?>(null)
     }
-    // Nilai ini jadi titik awal pengaturan crop untuk setiap foto baru.
+    // Atur posisi crop dari awal setiap kali foto baru dipilih.
     var cropZoom by remember {
         mutableStateOf(1f)
     }
@@ -117,50 +132,81 @@ fun AccountScreen(
     var selectedImageError by remember {
         mutableStateOf("")
     }
-    // Abaikan tiket dari sesi akun sebelumnya saat pengguna berganti.
+    var cameraPhotoPath by rememberSaveable {
+        mutableStateOf<String?>(null)
+    }
+    // Abaikan tiket dari akun lama saat akun berganti.
     val accountTickets = tickets.filter {
         it.username == currentUser
+    }
+    // Foto dari kamera dan galeri diproses dengan cara yang sama sebelum di-crop.
+    fun prepareSelectedImage(
+        uri: Uri,
+        cleanupFile: File? = null
+    ) {
+        selectedImageBitmap = null
+        selectedImageError = ""
+        isPreparingImage = true
+        scope.launch {
+            try {
+                val bitmap = withContext(Dispatchers.IO) {
+                    if (cleanupFile != null) {
+                        decodeCameraProfileImage(
+                            context,
+                            uri
+                        )
+                    } else {
+                        val selectedImage = readProfileImage(
+                            context,
+                            uri
+                        )
+                        decodeProfileImage(selectedImage.bytes)
+                    }
+                }
+                selectedImageBitmap = bitmap
+                cropZoom = 1f
+                cropPositionX = 0.5f
+                cropPositionY = 0.5f
+            } catch (exception: Exception) {
+                selectedImageBitmap = null
+                selectedImageError = exception.message ?: "Foto gagal dibaca."
+            } finally {
+                isPreparingImage = false
+                cleanupFile?.delete()
+                cameraPhotoPath = null
+            }
+        }
     }
     val imagePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
-            selectedImageBitmap = null
-            selectedImageError = ""
-            isPreparingImage = true
-            scope.launch {
-                try {
-                    val selectedImage = withContext(Dispatchers.IO) {
-                        readProfileImage(
-                            context,
-                            uri
-                        )
-                    }
-                    val bitmap = withContext(Dispatchers.IO) {
-                        decodeProfileImage(selectedImage.bytes)
-                    }
-                    selectedImageBitmap = bitmap
-                    cropZoom = 1f
-                    cropPositionX = 0.5f
-                    cropPositionY = 0.5f
-                } catch (exception: Exception) {
-                    selectedImageBitmap = null
-                    selectedImageError = exception.message ?: "Foto gagal dibaca."
-                } finally {
-                    isPreparingImage = false
-                }
-            }
+            prepareSelectedImage(uri)
         }
     }
     val cameraPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicturePreview()
-    ) { bitmap ->
-        if (bitmap != null) {
-            selectedImageBitmap = bitmap
-            selectedImageError = ""
-            cropZoom = 1f
-            cropPositionX = 0.5f
-            cropPositionY = 0.5f
+        contract = ActivityResultContracts.TakePicture()
+    ) { saved ->
+        val photoFile = cameraPhotoPath?.let(::File)
+        if (saved && photoFile != null) {
+            try {
+                prepareSelectedImage(
+                    FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        photoFile
+                    ),
+                    photoFile
+                )
+            } catch (exception: Exception) {
+                photoFile.delete()
+                cameraPhotoPath = null
+                selectedImageError = exception.message ?: "Foto kamera gagal dibaca."
+            }
+        } else {
+            photoFile?.delete()
+            cameraPhotoPath = null
+            selectedImageError = "Foto kamera tidak tersimpan. Coba ambil foto lagi."
         }
     }
     LaunchedEffect(profileImageUrl) {
@@ -176,81 +222,92 @@ fun AccountScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White)
+            .background(TourifyCanvas)
     ) {
-        // Latar putih bikin profil lebih bersih.
+        // Header profil polos, tanpa gambar latar.
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .navigationBarsPadding()
-                .padding(
-                    start = 20.dp,
-                    top = 24.dp,
-                    end = 20.dp,
-                    bottom = 64.dp
-                ),
-            verticalArrangement = Arrangement.spacedBy(22.dp)
+                .padding(bottom = 64.dp),
+            verticalArrangement = Arrangement.spacedBy(TourifySpacing.section)
         ) {
-            // Judul profil ikut gaya layar lain.
-            TourifyScreenTitle(
-                text = "Profil",
-            )
-
-            // Inisial muncul kalau foto belum bisa dimuat.
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(
+                        start = TourifySpacing.screen,
+                        top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 24.dp,
+                        end = TourifySpacing.screen,
+                        bottom = 24.dp
+                    ),
+                verticalArrangement = Arrangement.spacedBy(TourifySpacing.section)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(80.dp)
-                        .clip(CircleShape)
-                        .background(Color.White)
-                        .border(
-                            width = 1.dp,
-                            color = TourifyBorder,
-                            shape = CircleShape
-                        )
-                        .semantics {
-                            contentDescription = "Foto profil $accountName"
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = accountName.firstOrNull()?.uppercase() ?: "?",
-                        color = TourifyForest,
-                        style = MaterialTheme.typography.headlineMedium,
-                        modifier = Modifier.semantics {
-                            hideFromAccessibility()
-                        }
-                    )
-                    val imageModel = selectedImageBitmap
-                        ?: profileImageUrl
-                    if (imageModel != null) {
-                        AsyncImage(
-                            model = imageModel,
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.width(16.dp))
+                // Judul profil rata kiri, sama seperti layar lain.
+                Text(
+                    text = "Profil",
+                    modifier = Modifier.semantics {
+                        heading()
+                    },
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = TourifyInk
+                )
+
+                // Susun foto, nama akun, dan tombol ganti foto di tengah.
                 Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .size(96.dp)
+                            .clip(CircleShape)
+                            .background(TourifySurface)
+                            .border(
+                                width = 1.dp,
+                                color = TourifyBorder,
+                                shape = CircleShape
+                            )
+                            .semantics {
+                                contentDescription = "Foto profil $accountName"
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = accountName.firstOrNull()?.uppercase() ?: "?",
+                            color = TourifyForest,
+                            style = MaterialTheme.typography.headlineMedium,
+                            modifier = Modifier.semantics {
+                                hideFromAccessibility()
+                            }
+                        )
+                        val imageModel = selectedImageBitmap
+                            ?: profileImageUrl
+                        if (imageModel != null) {
+                            AsyncImage(
+                                model = imageModel,
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+                    }
+
                     Text(
                         text = accountName,
                         color = TourifyInk,
                         style = MaterialTheme.typography.titleLarge,
+                        textAlign = TextAlign.Center,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
-                    // Tombol untuk ganti foto profil.
+
+                    // Tombol ganti foto pakai hijau di atas latar polos.
                     OutlinedButton(
                         onClick = {
                             showImageSourceDialog = true
@@ -280,14 +337,18 @@ fun AccountScreen(
             }
             if (imageError.isNotBlank()) {
                 Text(
-                    imageError,
+                    text = imageError,
                     color = TourifyError,
-                    fontSize = 14.sp
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(horizontal = 20.dp)
                 )
             }
 
-            // Tampilkan ringkasan aktivitas akun.
+            // Ringkasan aktivitas akun.
             Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = TourifySpacing.screen),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
@@ -297,9 +358,9 @@ fun AccountScreen(
                 )
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    color = Color.White,
-                    shadowElevation = 5.dp
+                    shape = TourifyShapes.card,
+                    color = TourifySurface,
+                    shadowElevation = TourifyElevation.card
                 ) {
                     when {
                         isLoadingTickets -> {
@@ -375,8 +436,11 @@ fun AccountScreen(
                 }
             }
 
-            // Pintasan akun.
+            // Pintasan ke pengaturan akun.
             Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = TourifySpacing.screen),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
@@ -386,9 +450,9 @@ fun AccountScreen(
                 )
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    color = Color.White,
-                    shadowElevation = 5.dp
+                    shape = TourifyShapes.card,
+                    color = TourifySurface,
+                    shadowElevation = TourifyElevation.card
                 ) {
                     Column {
                         ProfileMenuRow(
@@ -408,18 +472,22 @@ fun AccountScreen(
                 }
             }
 
-            // Tombol keluar dipisah dari menu lain.
-            ProfileMenuRow(
-                label = "Keluar dari akun",
-                icon = Icons.AutoMirrored.Filled.Logout,
-                onClick = onLogout,
-                tint = TourifyError,
-                iconBackground = Color(0xFFFDECEA),
-                showArrow = false
-            )
+            // Pisahkan tombol keluar dari menu lainnya.
+            Box(
+                modifier = Modifier.padding(horizontal = TourifySpacing.screen)
+            ) {
+                ProfileMenuRow(
+                    label = "Keluar dari akun",
+                    icon = Icons.AutoMirrored.Filled.Logout,
+                    onClick = onLogout,
+                    tint = TourifyError,
+                    iconBackground = TourifyErrorContainer,
+                    showArrow = false
+                )
+            }
         }
 
-        // Pilihan sumber foto tetap lewat pemilih sistem Android.
+        // Pilih foto lewat pemilih bawaan Android.
         if (showImageSourceDialog) {
             AlertDialog(
                 onDismissRequest = {
@@ -450,10 +518,39 @@ fun AccountScreen(
                             onClick = {
                                 showImageSourceDialog = false
                                 selectedImageError = ""
-                                try {
-                                    cameraPicker.launch(null)
-                                } catch (exception: ActivityNotFoundException) {
-                                    selectedImageError = "Aplikasi kamera tidak tersedia."
+                                if (!context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)) {
+                                    selectedImageError = "Kamera tidak tersedia di perangkat ini."
+                                } else {
+                                    try {
+                                        val photoDirectory = File(
+                                            context.cacheDir,
+                                            "profile-photos"
+                                        )
+                                        if (!photoDirectory.exists() && !photoDirectory.mkdirs()) {
+                                            throw IOException("Penyimpanan foto sementara tidak tersedia.")
+                                        }
+                                        val photoFile = File.createTempFile(
+                                            "profile-",
+                                            ".jpg",
+                                            photoDirectory
+                                        )
+                                        cameraPhotoPath = photoFile.absolutePath
+                                        cameraPicker.launch(
+                                            FileProvider.getUriForFile(
+                                                context,
+                                                "${context.packageName}.fileprovider",
+                                                photoFile
+                                            )
+                                        )
+                                    } catch (exception: Exception) {
+                                        cameraPhotoPath?.let(::File)?.delete()
+                                        cameraPhotoPath = null
+                                        selectedImageError = if (exception is ActivityNotFoundException) {
+                                            "Aplikasi kamera tidak tersedia."
+                                        } else {
+                                            exception.message ?: "Kamera gagal dibuka. Coba lagi."
+                                        }
+                                    }
                                 }
                             },
                             modifier = Modifier.fillMaxWidth()
@@ -480,7 +577,7 @@ fun AccountScreen(
             )
         }
 
-        // Foto baru masuk ke pratinjau dulu, lalu dipotong sesuai posisi dan zoom.
+        // Tinjau foto dulu, lalu atur posisi dan zoom sebelum dipotong.
         selectedImageBitmap?.let { bitmap ->
             ProfileImageCropDialog(
                 bitmap = bitmap,
@@ -535,7 +632,7 @@ fun AccountScreen(
     }
 }
 
-// Dialog ini menampilkan hasil crop dan kontrol posisi yang dipakai saat upload.
+// Atur posisi foto di sini sebelum diunggah.
 @Composable
 private fun ProfileImageCropDialog(
     bitmap: Bitmap,
@@ -570,7 +667,7 @@ private fun ProfileImageCropDialog(
                         .size(220.dp)
                         .align(Alignment.CenterHorizontally)
                         .clip(CircleShape)
-                        .background(Color(0xFFE8F3EF)),
+                        .background(TourifyMint),
                     contentAlignment = Alignment.Center
                 ) {
                     androidx.compose.foundation.Image(
@@ -657,7 +754,7 @@ private fun ProfileImageCropDialog(
     )
 }
 
-// Angka dan label aktivitas ditaruh dalam satu baris.
+// Tampilkan angka dan label aktivitas sejajar.
 @Composable
 private fun ProfileActivityRow(
     label: String,
@@ -688,7 +785,7 @@ private fun ProfileActivityRow(
     }
 }
 
-// Garis pemisah antaraktivitas.
+// Pisahkan tiap aktivitas dengan garis.
 @Composable
 private fun ProfileActivityDivider() {
     Box(
@@ -804,7 +901,7 @@ private data class SelectedProfileImage(
     val mimeType: String
 )
 
-// Decode gambar dengan ukuran pratinjau agar foto resolusi tinggi tetap ringan.
+// Baca foto dalam ukuran kecil dulu supaya foto besar tetap ringan.
 private fun decodeProfileImage(bytes: ByteArray): Bitmap {
     val bounds = BitmapFactory.Options().apply {
         inJustDecodeBounds = true
@@ -834,7 +931,78 @@ private fun decodeProfileImage(bytes: ByteArray): Bitmap {
     ) ?: throw IOException("Foto tidak bisa disiapkan.")
 }
 
-// Ambil potongan persegi yang sama dengan pratinjau sebelum dikirim ke server.
+// Kecilkan foto kamera dulu supaya gambar besar nggak memenuhi memori.
+private fun decodeCameraProfileImage(
+    context: Context,
+    uri: Uri
+): Bitmap {
+    val mimeType = context.contentResolver.getType(uri)
+    if (mimeType != "image/jpeg") {
+        throw IOException("Foto kamera tidak bisa dibaca. Coba ambil foto lagi.")
+    }
+
+    val bounds = BitmapFactory.Options().apply {
+        inJustDecodeBounds = true
+    }
+    // Tahap ini cuma membaca ukuran foto; bitmap-nya belum dibuat.
+    val boundsStream = context.contentResolver.openInputStream(uri)
+        ?: throw IOException("Foto kamera tidak bisa dibuka.")
+    boundsStream.use { stream ->
+        BitmapFactory.decodeStream(
+            stream,
+            null,
+            bounds
+        )
+    }
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+        throw IOException("Foto kamera tidak valid.")
+    }
+
+    var sampleSize = 1
+    while (maxOf(bounds.outWidth, bounds.outHeight) / sampleSize > MAX_PROFILE_PREVIEW_DIMENSION) {
+        sampleSize *= 2
+    }
+    val options = BitmapFactory.Options().apply {
+        inSampleSize = sampleSize
+    }
+    val bitmap = context.contentResolver.openInputStream(uri)?.use { stream ->
+        BitmapFactory.decodeStream(
+            stream,
+            null,
+            options
+        )
+    } ?: throw IOException("Foto kamera tidak bisa disiapkan.")
+    val orientation = context.contentResolver.openInputStream(uri)?.use { stream ->
+        ExifInterface(stream).getAttributeInt(
+            ExifInterface.TAG_ORIENTATION,
+            ExifInterface.ORIENTATION_NORMAL
+        )
+    } ?: ExifInterface.ORIENTATION_NORMAL
+    val rotation = when (orientation) {
+        ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+        ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+        ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+        else -> 0f
+    }
+    if (rotation == 0f) {
+        return bitmap
+    }
+
+    val matrix = Matrix().apply {
+        postRotate(rotation)
+    }
+    return Bitmap.createBitmap(
+        bitmap,
+        0,
+        0,
+        bitmap.width,
+        bitmap.height,
+        matrix,
+        true
+    )
+}
+
+// Potong foto dengan ukuran yang sama seperti pratinjau sebelum dikirim.
 private fun cropProfileImage(
     bitmap: Bitmap,
     zoom: Float,
@@ -860,7 +1028,7 @@ private fun cropProfileImage(
     )
 }
 
-// Baca foto di background dan batasi ukurannya sebelum upload.
+// Baca foto di latar belakang dan kecilkan sebelum diunggah.
 private fun readProfileImage(
     context: Context,
     uri: Uri
@@ -902,7 +1070,7 @@ private fun readProfileImage(
     )
 }
 
-// Foto kamera dikirim sebagai JPEG lewat endpoint profil yang sama.
+// Kirim foto kamera sebagai JPEG lewat endpoint profil.
 private fun encodeProfileImage(bitmap: Bitmap): ByteArray {
     val output = ByteArrayOutputStream()
     if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 92, output)) {

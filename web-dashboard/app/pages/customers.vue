@@ -7,8 +7,18 @@ import type { DashboardCustomer, DashboardCustomersApiResponse } from '~/types/t
 
 const api = useTourifyApi()
 const route = useRoute()
-// ID dari notifikasi harus cocok persis, supaya pelanggan #6 tidak tertukar dengan #16.
-const customerId = computed(() => typeof route.query.customer === 'string' && /^[1-9]\d{0,9}$/.test(route.query.customer) ? route.query.customer : '')
+// Pakai ID dari notifikasi supaya pelanggan yang dibuka tidak tertukar.
+const customerId = computed(() => {
+  const customerQuery = route.query.customer
+  if (
+    typeof customerQuery !== 'string'
+    || !/^[1-9]\d{0,9}$/.test(customerQuery)
+  ) {
+    return ''
+  }
+
+  return customerQuery
+})
 const UAvatar = resolveComponent('UAvatar')
 const UCheckbox = resolveComponent('UCheckbox')
 const customers = ref<DashboardCustomer[]>([])
@@ -19,10 +29,10 @@ const loading = ref(true)
 const errorMessage = ref('')
 const table = useTemplateRef('table')
 const columnVisibility = ref()
-// Daftar datar jadi pilihan awal; kartu ringkas tetap bisa dipilih dari menu Tampilan.
+// Tampilkan daftar dulu; kartu ringkas bisa dipilih lewat menu Tampilan.
 const viewMode = ref<'compact' | 'list'>('list')
 const pagination = ref({ pageIndex: 0, pageSize: 10 })
-// Seleksi memakai ID akun supaya tetap akurat saat urutan atau filter berubah.
+// Simpan pilihan berdasarkan ID supaya tetap benar saat daftar diurutkan atau difilter.
 const rowSelection = ref<RowSelectionState>({})
 const deleteModalOpen = ref(false)
 const deletingCustomers = ref(false)
@@ -30,7 +40,7 @@ const deleteError = ref('')
 const currentMonth = ref(jakartaMonthKey())
 let requestId = 0
 
-// Periode pelanggan baru mengikuti tanggal Jakarta yang dipakai dashboard.
+// Hitung pelanggan baru memakai tanggal Jakarta seperti bagian dashboard lainnya.
 function jakartaMonthKey(): string {
   const parts = new Intl.DateTimeFormat('en-US', {
     month: '2-digit',
@@ -42,7 +52,7 @@ function jakartaMonthKey(): string {
   return `${year}-${month}`
 }
 
-// Pembaruan otomatis tetap menampilkan daftar lama sampai data baru siap.
+// Tampilkan daftar lama sampai hasil pembaruan siap.
 async function loadCustomers(background = false) {
   const request = ++requestId
   currentMonth.value = jakartaMonthKey()
@@ -130,7 +140,7 @@ const filteredCustomers = computed(() => {
   })
 })
 
-// Kartu HP mengikuti halaman dan urutan yang sama dengan tabel desktop.
+// Kartu HP memakai halaman dan urutan yang sama seperti tabel.
 const mobileCustomers = computed(() => {
   const start = pagination.value.pageIndex * pagination.value.pageSize
   return filteredCustomers.value.slice(start, start + pagination.value.pageSize)
@@ -139,22 +149,28 @@ const mobileCustomers = computed(() => {
 function updateCustomerSelection(customer: DashboardCustomer, selected: boolean) {
   if (customer.order_count > 0) return
 
+  // Pilihan baris lain tetap tersimpan saat satu pelanggan diubah.
   const id = String(customer.id)
-  const selection = { ...rowSelection.value }
-  if (selected) selection[id] = true
-  else rowSelection.value = Object.fromEntries(
-    Object.entries(selection).filter(([selectedId]) => selectedId !== id)
+  if (selected) {
+    rowSelection.value = {
+      ...rowSelection.value,
+      [id]: true
+    }
+    return
+  }
+
+  rowSelection.value = Object.fromEntries(
+    Object.entries(rowSelection.value).filter(([selectedId]) => selectedId !== id)
   )
-  if (selected) rowSelection.value = selection
 }
 
-// Hanya akun tanpa pesanan yang bisa dipilih; riwayat pelanggan tetap utuh.
+// Pelanggan yang punya pesanan tidak bisa dipilih agar riwayatnya tetap aman.
 const selectedCustomerIds = computed(() => Object.entries(rowSelection.value)
   .filter(([, selected]) => selected)
   .map(([id]) => Number(id))
   .filter(id => customers.value.some(customer => customer.id === id && customer.order_count === 0)))
 
-// Hapus terpilih memakai endpoint admin dan muat ulang daftar setelah berhasil.
+// Setelah penghapusan berhasil, muat ulang daftar pelanggan.
 async function deleteSelectedCustomers() {
   if (!selectedCustomerIds.value.length || deletingCustomers.value) return
   deletingCustomers.value = true
@@ -173,7 +189,7 @@ async function deleteSelectedCustomers() {
   }
 }
 
-// Tautan pelanggan baru tidak tersaring oleh pencarian atau halaman tabel sebelumnya.
+// Tautan pelanggan baru tetap terbuka meski pencarian atau halaman tabel berubah.
 watch(customerId, () => {
   search.value = ''
 })
@@ -183,7 +199,7 @@ watch([search, sort, customerId], () => {
 
 const columns: TableColumn<DashboardCustomer>[] = [{
   id: 'select',
-  // Kotak seleksi tetap ada dan bukan kolom data yang bisa disembunyikan.
+  // Kolom kotak centang selalu tampil meski kolom data disembunyikan.
   enableHiding: false,
   header: ({ table: tableInstance }) => h(UCheckbox, {
     'aria-label': 'Pilih semua pelanggan di halaman ini',
@@ -229,12 +245,12 @@ const columns: TableColumn<DashboardCustomer>[] = [{
   cell: ({ row }) => formatRupiah(row.original.booking_value)
 }]
 
-// Daftar di layar kecil mengikuti kolom data yang dipilih petugas.
+// Di layar kecil, tampilkan kolom data yang dipilih petugas.
 function isCustomerColumnVisible(id: string): boolean {
   return columnVisibility.value?.[id] !== false
 }
 
-// Item menu tabel mengabaikan header fungsi supaya kode checkbox tidak tampil sebagai label.
+// Sembunyikan kolom aksi dari menu Tampilan supaya kotak centang tidak jadi pilihan.
 const displayItems = computed(() => {
   const items = [
     { label: 'Tampilan pelanggan', type: 'label' as const },
@@ -353,7 +369,7 @@ useDashboardAutoRefresh(() => loadCustomers(true), () => loading.value)
           </div>
         </div>
 
-        <!-- Pembatas dari notifikasi terlihat dan bisa dilepas tanpa kehilangan halaman pelanggan. -->
+        <!-- Tanda dari notifikasi terlihat dan bisa dihapus tanpa meninggalkan halaman ini. -->
         <div v-if="customerId" class="flex flex-wrap items-center gap-3 text-sm text-muted">
           <span>Pelanggan #{{ customerId }}</span>
           <UButton
@@ -373,7 +389,7 @@ useDashboardAutoRefresh(() => loadCustomers(true), () => loading.value)
           :actions="[{ label: 'Coba lagi', onClick: () => loadCustomers() }]"
         />
 
-        <!-- Polling tidak mengembalikan petugas ke halaman pertama tabel. -->
+        <!-- Pembaruan data tidak mengembalikan petugas ke halaman pertama tabel. -->
         <UTable
           ref="table"
           v-model:column-visibility="columnVisibility"
@@ -400,7 +416,7 @@ useDashboardAutoRefresh(() => loadCustomers(true), () => loading.value)
           </template>
         </UTable>
 
-        <!-- Kartu ringkas tetap membawa seleksi hapus dan ringkasan tiap pelanggan. -->
+        <!-- Di kartu, petugas tetap bisa memilih pelanggan dan melihat ringkasannya. -->
         <div v-if="viewMode === 'compact'" class="space-y-3">
           <p v-if="loading && !customers.length" role="status" class="py-6 text-center text-sm text-muted">
             Memuat pelanggan…
@@ -468,7 +484,7 @@ useDashboardAutoRefresh(() => loadCustomers(true), () => loading.value)
           </article>
         </div>
 
-        <!-- Daftar satu baris menjaga seleksi dan kolom pilihan di layar kecil. -->
+        <!-- Di HP, daftar tetap menampilkan pilihan hapus dan kolom terpilih. -->
         <section
           v-if="viewMode === 'list'"
           aria-label="Daftar pelanggan"

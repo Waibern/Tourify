@@ -49,7 +49,7 @@ class TicketCardTest {
     @get:Rule
     val compose = createComposeRule()
 
-    // Data kunjungan mendatang menjaga skenario aktif tidak bergantung pada hari tes dijalankan.
+    // Pakai tanggal mendatang supaya tiket tetap aktif kapan pun tes dijalankan.
     private val ticket = Ticket(
         id = "TRF-10248",
         wahanaName = "Taman Safari Indonesia",
@@ -62,7 +62,7 @@ class TicketCardTest {
         username = "Pengunjung contoh"
     )
 
-    // Lebar dan tinggi fixture meniru area kerja ponsel tanpa mengubah setelan emulator.
+    // Ukuran ini meniru layar ponsel tanpa mengubah setelan emulator.
     @Composable
     private fun TestSurface(
         fontScale: Float = 1f,
@@ -88,7 +88,7 @@ class TicketCardTest {
         }
     }
 
-    // Bukti visual berasal dari render Android yang sama dengan skenario pengujian.
+    // Gambar ini diambil dari tampilan Android yang sedang diuji.
     private fun capture(name: String) {
         compose.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -99,10 +99,12 @@ class TicketCardTest {
     }
 
     private fun assertWholeQrVisible() {
+        // Gulir dulu karena foto tiket mendorong QR ke bawah.
         val qr = compose.onNodeWithContentDescription("QR code tiket ${ticket.id}")
+            .performScrollTo()
             .assertIsDisplayed()
             .fetchSemanticsNode()
-        // assertIsDisplayed saja juga lolos saat hanya bagian atas QR yang terlihat.
+        // Cek seluruh QR supaya tes nggak lolos saat yang terlihat cuma bagian atas.
         assertEquals(qr.layoutInfo.height.toFloat(), qr.boundsInRoot.height, 1f)
     }
 
@@ -113,18 +115,18 @@ class TicketCardTest {
                 TicketsContent(tickets = listOf(ticket), updatedAtMillis = 1_793_488_000_000L)
             }
         }
-        // Ringkasan kembali berbentuk tiket lengkap seperti sebelum perombakan.
-        compose.onNodeWithText("Harga/tiket").assertIsDisplayed()
-        compose.onNodeWithText(ticketQrPayload(ticket)).assertIsDisplayed()
-        compose.onNodeWithText("Total pembayaran").assertIsDisplayed()
+        // Ringkasan menampilkan wahana, tanggal, dan kode sebelum tiket dibuka.
+        compose.onNodeWithText(ticket.wahanaName).assertIsDisplayed()
+        compose.onNodeWithText(formatTicketDate(ticket.visitDate)).assertIsDisplayed()
+        compose.onNodeWithText(ticket.id).assertIsDisplayed()
         capture("list")
-        compose.onNodeWithText("Lihat QR").performClick()
+        compose.onNodeWithText("Lihat tiket").performClick()
         compose.onNodeWithContentDescription("QR code tiket ${ticket.id}")
             .performScrollTo()
             .assertIsDisplayed()
         capture("qr")
         compose.onNodeWithContentDescription("Kembali ke daftar tiket").performClick()
-        compose.onNodeWithText("Lihat QR").assertIsDisplayed()
+        compose.onNodeWithText("Lihat tiket").assertIsDisplayed()
         compose.onNodeWithContentDescription("QR code tiket ${ticket.id}").assertDoesNotExist()
     }
 
@@ -140,13 +142,13 @@ class TicketCardTest {
                 TicketsContent(tickets = listOf(ticket, beach))
             }
         }
-        // Cari kode tiket, lalu pastikan pencarian tetap ada setelah kembali dari QR.
+        // Cari kode tiket dan pastikan pencariannya tetap ada setelah kembali dari QR.
         compose.onNode(hasSetTextAction()).performTextInput("  trf-pantai  ")
         compose.onNode(hasSetTextAction()).performImeAction()
         compose.onNodeWithText("Pantai Mentari").assertIsDisplayed()
         compose.onNodeWithText(ticket.wahanaName).assertDoesNotExist()
         capture("search")
-        compose.onNodeWithText("Lihat QR").performClick()
+        compose.onNodeWithText("Lihat tiket").performClick()
         compose.onNodeWithContentDescription("QR code tiket ${beach.id}").assertIsDisplayed()
         compose.onNodeWithContentDescription("Kembali ke daftar tiket").performClick()
         compose.onNodeWithText(ticket.wahanaName).assertDoesNotExist()
@@ -154,7 +156,7 @@ class TicketCardTest {
         compose.onNode(hasSetTextAction()).performTextInput("tidak-ada")
         compose.onNode(hasSetTextAction()).performImeAction()
         compose.onNodeWithText("Tiket tidak ditemukan").assertIsDisplayed()
-        // Tombol silang mengembalikan daftar tanpa perlu mengetik ulang.
+        // Tombol silang kembali ke daftar tanpa menghapus pencarian.
         compose.onNodeWithContentDescription("Hapus pencarian").performClick()
         compose.onNodeWithText("Pantai Mentari").assertIsDisplayed()
         compose.onNodeWithText(ticket.wahanaName).assertExists()
@@ -167,7 +169,7 @@ class TicketCardTest {
                 TicketDetailScreen(ticket = ticket, onDismiss = {})
             }
         }
-        // Bentuk tiket lama menaruh QR setelah rincian; gulir dulu untuk memindai.
+        // Tiket lama menaruh QR setelah detail, jadi gulir dulu untuk melihatnya.
         compose.onNodeWithContentDescription("QR code tiket ${ticket.id}").performScrollTo()
         assertWholeQrVisible()
         capture("qr-large-text")
@@ -178,7 +180,8 @@ class TicketCardTest {
         compose.onNodeWithText("TOTAL").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Rp\u00A0300.000").performScrollTo().assertIsDisplayed()
         capture("receipt-large-text")
-        compose.onNodeWithText("Unduh PDF").assertIsDisplayed()
+        // Tombol unduh tetap di kanan atas saat detail digulir.
+        compose.onNodeWithContentDescription("Unduh tiket PDF").assertIsDisplayed()
     }
 
     @Test
@@ -188,30 +191,32 @@ class TicketCardTest {
                 TicketDetailScreen(ticket = ticket, onDismiss = {})
             }
         }
-        // Ukuran aksesibilitas maksimum masih memungkinkan kode tampil utuh.
+        // QR tetap utuh saat ukuran teks paling besar dipakai.
         compose.onNodeWithContentDescription("QR code tiket ${ticket.id}").performScrollTo()
         assertWholeQrVisible()
         capture("qr-largest-text")
     }
 
     @Test
-    fun restoresOpenQrAndHistoryTabAfterConfigurationChange() {
+    fun restoresOpenQrAndHistoryFilterAfterConfigurationChange() {
         val restoration = StateRestorationTester(compose)
         restoration.setContent {
             TestSurface {
                 TicketsContent(tickets = listOf(ticket, ticket.copy(id = "expired", status = "Expired")))
             }
         }
-        // ID tiket dan pilihan tab ikut pulih setelah state komposisi dibuat ulang.
-        compose.onNodeWithText("Lihat QR").performClick()
+        // QR dan pilihan filter pulih setelah layar dibuat ulang.
+        compose.onNodeWithText("Lihat tiket").performClick()
         restoration.emulateSavedInstanceStateRestore()
         assertWholeQrVisible()
         compose.onNodeWithContentDescription("Kembali ke daftar tiket").performClick()
+        compose.onNodeWithText("Aktif").performClick()
         compose.onNodeWithText("Riwayat").performClick()
         restoration.emulateSavedInstanceStateRestore()
-        compose.onNodeWithText("Riwayat").assertIsSelected()
-        compose.onNodeWithText("Lihat detail").assertIsDisplayed()
-        compose.onNodeWithText("Lihat QR").assertDoesNotExist()
+        compose.onNodeWithText("Riwayat").assertIsDisplayed()
+        // Setelah layar dibuat ulang, riwayat tetap menampilkan tiket kedaluwarsa.
+        compose.onNodeWithText("expired").assertIsDisplayed()
+        compose.onNodeWithText(ticket.id).assertDoesNotExist()
     }
 
     @Test
@@ -222,7 +227,7 @@ class TicketCardTest {
                 TicketDetailScreen(ticket = current.value, onDismiss = {})
             }
         }
-        // Status riwayat tidak boleh bertentangan dengan instruksi masuk.
+        // Tiket riwayat tidak boleh menampilkan instruksi masuk.
         compose.onNodeWithText("Tidak dapat digunakan untuk masuk.").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("QR code tiket ${ticket.id}").assertDoesNotExist()
         capture("expired")
@@ -238,7 +243,7 @@ class TicketCardTest {
     fun failedRefreshKeepsTicketsAccessibleAndRetryUpdatesAdmissions() {
         val fail = AtomicBoolean(false)
         val checkedIn = AtomicInteger(0)
-        // Retrofit palsu hanya mengganti respons tes; tidak menghubungi akun atau server asli.
+        // Retrofit palsu memberi data tes tanpa menghubungi akun atau server asli.
         val service = Proxy.newProxyInstance(
             ApiService::class.java.classLoader,
             arrayOf(ApiService::class.java)
@@ -266,7 +271,7 @@ class TicketCardTest {
         }
         compose.waitUntil(5_000) { viewModel.ticketsUpdatedAtMillis != null }
         val verifiedAt = viewModel.ticketsUpdatedAtMillis
-        compose.onNodeWithText("Lihat QR").performClick()
+        compose.onNodeWithText("Lihat tiket").performClick()
         fail.set(true)
         compose.onNodeWithContentDescription("Perbarui tiket").performClick()
         compose.waitUntil(5_000) { viewModel.ticketsError.isNotBlank() }
@@ -276,9 +281,9 @@ class TicketCardTest {
             assertEquals(listOf(ticket), viewModel.tickets)
         }
         capture("refresh-failed")
-        // Tiket tetap bisa dibuka dari daftar setelah permintaan gagal.
+        // Tiket yang sudah ada tetap bisa dibuka setelah koneksi gagal.
         compose.onNodeWithContentDescription("Kembali ke daftar tiket").performClick()
-        compose.onNodeWithText("Lihat QR").performClick()
+        compose.onNodeWithText("Lihat tiket").performClick()
         assertWholeQrVisible()
         fail.set(false)
         checkedIn.set(1)

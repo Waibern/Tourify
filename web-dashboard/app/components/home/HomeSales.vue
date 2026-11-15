@@ -8,12 +8,12 @@ const props = defineProps<{
 }>()
 
 const searchQuery = ref('')
-// Select memakai string kosong untuk menghapus pilihan, jadi semua wahana pakai nilai khusus.
+// Nilai kosong berarti tampilkan semua wahana.
 const allWahanaValue = '__all_wahana__'
 const wahanaFilter = ref(allWahanaValue)
 const visitDateFilter = ref('')
 
-// Filter memakai field pesanan terbaru yang sudah tersedia di dashboard.
+// Filter memakai informasi yang sudah ada di data pesanan.
 const wahanaOptions = computed(() => [
   { label: 'Semua wahana', value: allWahanaValue },
   ...Array.from(new Set(props.orders.map(order => order.wahana_name)))
@@ -54,7 +54,7 @@ function formatDateTime(value: string): string {
   return time ? date + ' ' + time : date
 }
 
-// Tabel merangkum pesanan yang tercatat pada rentang dashboard.
+// Tampilkan pesanan dari rentang tanggal yang dipilih.
 const columns: TableColumn<DashboardRecentOrder>[] = [{
   accessorKey: 'id',
   header: 'ID',
@@ -88,7 +88,7 @@ const columns: TableColumn<DashboardRecentOrder>[] = [{
 </script>
 
 <template>
-  <!-- Tabel pesanan memakai permukaan yang sama dengan kartu Ringkasan lain. -->
+  <!-- Tabel memakai tampilan kartu yang sama dengan bagian Ringkasan. -->
   <UCard data-dashboard-card>
     <template #header>
       <h2 class="font-semibold text-highlighted">
@@ -96,11 +96,11 @@ const columns: TableColumn<DashboardRecentOrder>[] = [{
       </h2>
     </template>
 
-    <!-- Status loading tetap dibaca screen reader saat skeleton tampil. -->
+    <!-- Pembaca layar tetap tahu saat pesanan sedang dimuat. -->
     <div v-if="loading" class="sr-only" role="status">
       Memuat pemesanan…
     </div>
-    <!-- Kontrol terpisah dari ASCII reveal agar mengetik tidak mengulang animasi tabel. -->
+    <!-- Mengetik di filter tidak mengulang animasi tabel. -->
     <div
       v-if="orders.length"
       role="search"
@@ -140,7 +140,7 @@ const columns: TableColumn<DashboardRecentOrder>[] = [{
         @click="resetFilters"
       />
     </div>
-    <!-- Reveal mencakup isi kartu saat data selesai dimuat. -->
+    <!-- Animasi mencakup seluruh kartu setelah data siap. -->
     <AsciiReveal :loading="loading" origin="pointer">
       <template #skeleton>
         <div class="space-y-3" aria-hidden="true">
@@ -148,7 +148,7 @@ const columns: TableColumn<DashboardRecentOrder>[] = [{
           <div v-for="row in 4" :key="row" class="h-10 rounded-md bg-elevated/25" />
         </div>
       </template>
-      <!-- Keadaan kosong menjelaskan bahwa rentang tanggal bisa diganti. -->
+      <!-- Kalau belum ada pesanan, coba pilih rentang tanggal lain. -->
       <div v-if="!orders.length" class="text-sm text-muted">
         Belum ada pemesanan pada rentang tanggal ini. Coba pilih tanggal lain di atas.
       </div>
@@ -169,7 +169,7 @@ const columns: TableColumn<DashboardRecentOrder>[] = [{
               td: 'border-b border-default'
             }"
           >
-            <!-- Aksi baris membuka tiket yang sama pada halaman pesanan. -->
+            <!-- Tombol ini membuka tiket yang sama di halaman pesanan. -->
             <template #actions-cell="{ row }">
               <UButton
                 label="Lihat detail"
@@ -204,7 +204,7 @@ const columns: TableColumn<DashboardRecentOrder>[] = [{
                 {{ currencyFormat.format(order.total_price) }}
               </p>
             </div>
-            <!-- Aksi tetap tersedia saat tabel berubah menjadi daftar di layar kecil. -->
+            <!-- Tombol tetap tersedia saat tabel berubah menjadi daftar di HP. -->
             <div class="flex justify-end">
               <UButton
                 label="Lihat detail"

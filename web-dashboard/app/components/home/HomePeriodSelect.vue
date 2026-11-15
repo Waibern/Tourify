@@ -20,7 +20,7 @@ const periods = computed(() => {
     values = ['weekly', 'monthly']
   }
 
-  // Nilai enum tetap dipakai buat hitung chart, labelnya diterjemahkan di menu.
+  // Nilai periode dipakai untuk hitung grafik; menu menampilkan label bahasa Indonesia.
   const labels: Record<Period, string> = {
     daily: 'Harian',
     weekly: 'Mingguan',
@@ -30,7 +30,7 @@ const periods = computed(() => {
   return values.map(value => ({ label: labels[value], value }))
 })
 
-// Ensure the model value is always a valid period
+// Pastikan periode yang dipilih memang tersedia di menu.
 watch(periods, () => {
   const values = periods.value.map(period => period.value)
   if (!values.includes(model.value)) {

@@ -16,7 +16,7 @@ function dateLabel(value: string): string {
   return dateFormat.format(new Date(value + 'T12:00:00'))
 }
 
-// Tren ringkas hanya muncul saat jumlah pelanggan berubah.
+// Tampilkan tren pelanggan kalau jumlahnya berubah.
 function customerTrend(current: number, previous: number) {
   const difference = current - previous
 
@@ -37,7 +37,7 @@ function customerTrend(current: number, previous: number) {
   }
 }
 
-// Jumlah wahana berasal dari katalog dan tidak mengikuti rentang tanggal.
+// Jumlah wahana diambil dari katalog, bukan dari rentang tanggal.
 const metrics = [
   { key: 'checkins', title: 'Pengunjung masuk', icon: 'i-lucide-scan-line', to: '/checkins' },
   { key: 'tickets', title: 'Tiket', icon: 'i-lucide-ticket', to: '/orders' },
@@ -53,11 +53,11 @@ const cards = computed(() => metrics.map((metric) => {
     ...metric,
     value,
     previous,
-    // Perubahan pelanggan memakai selisih jumlah, bukan persentase.
+    // Tampilkan selisih jumlah pelanggan, bukan persentasenya.
     customerTrend: metric.key === 'new_customers' && value !== null && previous !== null
       ? customerTrend(value, previous)
       : null,
-    // Persentase tersedia untuk check-in dan jumlah tiket.
+    // Persentase hanya tersedia untuk check-in dan tiket.
     change: (metric.key === 'checkins' || metric.key === 'tickets') && value !== null && previous !== null
       ? analyticsChange(value, previous)
       : null,
@@ -72,7 +72,7 @@ const comparisonLabel = computed(() => props.comparison
   ? `${dateLabel(props.comparison.start)}–${dateLabel(props.comparison.end)}`
   : '')
 
-// Grafik kecil hanya muncul saat ada aktivitas, jadi keadaan kosong tetap ringkas.
+// Tampilkan grafik kecil kalau ada aktivitas.
 const checkinData = computed(() => props.series.map(point => ({
   date: point.date,
   value: point.checkin_count
@@ -81,13 +81,13 @@ const hasCheckins = computed(() => checkinData.value.some(point => point.value >
 </script>
 
 <template>
-  <!-- Kartu tetap berdampingan saat jendela separuh layar; baru ditumpuk di lebar HP. -->
-  <section class="grid gap-3 min-[900px]:grid-cols-2" aria-label="Ringkasan aktivitas" :aria-busy="loading">
+  <!-- Empat angka sejajar di desktop, dua kolom di tablet, dan satu kolom di HP. -->
+  <section class="grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Ringkasan aktivitas" :aria-busy="loading">
     <p v-if="loading" class="sr-only" role="status">
       Memuat ringkasan Tourify…
     </p>
 
-    <!-- Kartu kunjungan tetap menonjol lewat isi, tanpa garis tepi hijau. -->
+  <!-- Kartu pengunjung dibedakan lewat isinya, bukan garis hijau. -->
     <NuxtLink
       :to="featured.to"
       data-dashboard-card
@@ -98,48 +98,40 @@ const hasCheckins = computed(() => checkinData.value.some(point => point.value >
         <template #skeleton>
           <div class="h-44" aria-hidden="true" />
         </template>
-        <div class="flex min-h-44 flex-col justify-between gap-3 p-4 sm:p-5">
+        <div class="grid grid-rows-[minmax(1.5rem,auto)_2.5rem_minmax(2.5rem,auto)_2rem] gap-2 p-4 sm:p-5">
+          <!-- Samakan posisi judul, angka, dan keterangan di semua kartu. -->
           <div class="flex items-start justify-between gap-3">
-            <div>
-              <h2 class="flex items-center gap-2 text-base font-semibold text-highlighted">
-                <UIcon
-                  :name="featured.icon"
-                  data-ascii="fade"
-                  class="size-4 shrink-0 text-primary"
-                  aria-hidden="true"
-                />
-                <span>{{ featured.title }}</span>
-              </h2>
-              <p class="mt-1 text-sm text-muted">
-                Pada rentang tanggal terpilih
-              </p>
-            </div>
+            <h2 class="flex items-center gap-2 text-base font-semibold text-highlighted">
+              <UIcon
+                :name="featured.icon"
+                data-ascii="fade"
+                class="size-4 shrink-0 text-primary"
+                aria-hidden="true"
+              />
+              <span>{{ featured.title }}</span>
+            </h2>
             <UIcon name="i-lucide-arrow-up-right" class="size-5 shrink-0 text-primary transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" aria-hidden="true" />
           </div>
 
-          <div class="flex flex-wrap items-end justify-between gap-x-5 gap-y-2">
-            <div class="flex items-center gap-3">
-              <p class="text-4xl font-semibold tracking-tight text-highlighted tabular-nums">
-                {{ featured.value === null ? '—' : numberFormat.format(featured.value) }}
-              </p>
-              <UBadge
-                v-if="featured.change"
-                :color="featured.change.color"
-                variant="subtle"
-                size="sm"
-                class="rounded-full tabular-nums"
-                :title="`Dibandingkan ${comparisonLabel}`"
-              >
-                {{ featured.change.label }}
-              </UBadge>
-            </div>
-            <!-- Pembanding nol tidak perlu menambah teks di kartu. -->
-            <p v-if="featured.previous !== 0" class="text-sm text-muted">
+          <p class="text-4xl font-semibold leading-none tracking-tight text-highlighted tabular-nums">
+            {{ featured.value === null ? '—' : numberFormat.format(featured.value) }}
+          </p>
+
+          <!-- Tampilkan perubahan di bawah angka supaya posisi semua kartu sama. -->
+          <div class="text-sm leading-5">
+            <p
+              v-if="featured.change"
+              class="font-medium tabular-nums"
+              :class="featured.change.color === 'error' ? 'text-error' : featured.change.color === 'neutral' ? 'text-muted' : 'text-primary'"
+            >
+              {{ featured.change.label }}
+            </p>
+            <p class="text-muted">
               {{ featured.previous === null ? 'Data pembanding belum tersedia' : `vs ${numberFormat.format(featured.previous)} sebelumnya` }}
             </p>
           </div>
 
-          <div v-if="hasCheckins" class="h-[54px]" data-ascii-chart>
+          <div v-if="hasCheckins" class="h-8" data-ascii-chart>
             <UChart
               type="area"
               curve="monotone"
@@ -149,7 +141,7 @@ const hasCheckins = computed(() => checkinData.value.some(point => point.value >
               :x-axis="false"
               :y-axis="false"
               :grid="false"
-              :height="54"
+              :height="32"
               :initial-width="520"
               :format="(value: number) => numberFormat.format(value)"
               :aria-label="`Tren harian ${featured.title.toLowerCase()}`"
@@ -162,68 +154,57 @@ const hasCheckins = computed(() => checkinData.value.some(point => point.value >
       </AsciiReveal>
     </NuxtLink>
 
-    <!-- Tiga metrik memenuhi sisi ringkasan tanpa mengubah kartu utama. -->
-    <div class="grid gap-2">
-      <NuxtLink
-        v-for="card in secondary"
-        :key="card.key"
-        :to="card.to"
-        data-dashboard-card
-        class="group flex min-w-0 items-center rounded-xl border border-default bg-default px-4 py-3 transition-colors hover:border-white/35 hover:bg-elevated/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-400"
-        :aria-label="`${card.title}: ${card.value === null ? 'data belum tersedia' : numberFormat.format(card.value)}${card.customerTrend ? `. ${card.customerTrend.description}` : ''}. Buka detail`"
-      >
-        <AsciiReveal :loading="loading" origin="pointer" class="min-w-0 flex-1">
-          <template #skeleton>
-            <div class="h-10" aria-hidden="true" />
-          </template>
-          <div class="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
-            <div class="flex min-w-0 items-start gap-2">
-              <!-- Ikon ikut reveal dan diberi warna aksen sesuai jenis metrik. -->
+    <!-- Kartu angka lain dibuat setinggi kartu pengunjung supaya mudah dibandingkan. -->
+    <NuxtLink
+      v-for="card in secondary"
+      :key="card.key"
+      :to="card.to"
+      data-dashboard-card
+      class="group block min-w-0 overflow-hidden rounded-xl border border-default bg-default transition-colors hover:border-white/35 hover:bg-elevated/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-400"
+      :aria-label="`${card.title}: ${card.value === null ? 'data belum tersedia' : numberFormat.format(card.value)}${card.customerTrend ? `. ${card.customerTrend.description}` : ''}. Buka detail`"
+    >
+      <AsciiReveal :loading="loading" origin="pointer">
+        <template #skeleton>
+          <div class="h-44" aria-hidden="true" />
+        </template>
+        <div class="grid grid-rows-[minmax(1.5rem,auto)_2.5rem_minmax(2.5rem,auto)_2rem] gap-2 p-4 sm:p-5">
+          <div class="flex items-start justify-between gap-3">
+            <h2 class="flex items-center gap-2 text-base font-semibold text-highlighted">
               <UIcon
                 :name="card.icon"
                 data-ascii="fade"
-                class="mt-0.5 size-4 shrink-0 text-primary"
+                class="size-4 shrink-0 text-primary"
                 aria-hidden="true"
               />
-              <div class="min-w-0">
-                <h2 class="text-sm font-medium text-highlighted">
-                  {{ card.title }}
-                </h2>
-                <!-- Perubahan pelanggan dibuat tipis; selisih nol tidak ditampilkan. -->
-                <p
-                  v-if="card.customerTrend"
-                  class="text-xs leading-4"
-                  :class="card.customerTrend.color"
-                >
-                  <span>{{ card.customerTrend.label }}</span>
-                </p>
-                <!-- Tiket menampilkan persentase dan selisih dari periode pembanding. -->
-                <p
-                  v-else-if="card.key === 'tickets' && card.ticketDifference !== null"
-                  class="text-sm tabular-nums"
-                >
-                  <span
-                    class="font-medium"
-                    :class="card.change?.color === 'error' ? 'text-error' : card.change?.color === 'neutral' ? 'text-muted' : 'text-primary'"
-                  >
-                    {{ card.change?.label ?? (card.ticketDifference > 0 ? 'Baru' : '0%') }} ({{ numberFormat.format(Math.abs(card.ticketDifference)) }} tiket)
-                  </span>
-                  <span class="ms-1 text-muted">· vs {{ comparisonLabel || 'periode sebelumnya' }}</span>
-                </p>
-                <p v-else-if="card.key !== 'new_customers' && card.key !== 'wahana' && card.previous !== 0" class="text-sm text-muted">
-                  {{ card.previous === null ? 'Belum ada pembanding' : `vs ${numberFormat.format(card.previous)} sebelumnya` }}
-                </p>
-              </div>
-            </div>
-            <div class="flex shrink-0 items-center gap-2">
-              <p class="text-xl font-semibold text-highlighted tabular-nums">
-                {{ card.value === null ? '—' : numberFormat.format(card.value) }}
-              </p>
-              <UIcon name="i-lucide-arrow-up-right" class="size-4 text-muted transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" aria-hidden="true" />
-            </div>
+              <span>{{ card.title }}</span>
+            </h2>
+            <UIcon name="i-lucide-arrow-up-right" class="size-5 shrink-0 text-muted transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" aria-hidden="true" />
           </div>
-        </AsciiReveal>
-      </NuxtLink>
-    </div>
+
+          <p class="text-4xl font-semibold leading-none tracking-tight text-highlighted tabular-nums">
+            {{ card.value === null ? '—' : numberFormat.format(card.value) }}
+          </p>
+
+          <!-- Angka pembanding mengikuti jenis kartu dan rentang tanggal. -->
+          <div class="text-sm leading-5">
+            <p v-if="card.customerTrend" :class="card.customerTrend.color">
+              {{ card.customerTrend.label }}
+            </p>
+            <template v-else-if="card.key === 'tickets' && card.ticketDifference !== null">
+              <p
+                class="font-medium tabular-nums"
+                :class="card.change?.color === 'error' ? 'text-error' : card.change?.color === 'neutral' ? 'text-muted' : 'text-primary'"
+              >
+                {{ card.change?.label ?? (card.ticketDifference > 0 ? 'Baru' : '0%') }} ({{ numberFormat.format(Math.abs(card.ticketDifference)) }} tiket)
+              </p>
+              <p class="text-muted">vs {{ comparisonLabel || 'periode sebelumnya' }}</p>
+            </template>
+            <p v-else class="text-muted">
+              {{ card.key === 'wahana' ? 'Total wahana dalam katalog' : 'Pada rentang tanggal terpilih' }}
+            </p>
+          </div>
+        </div>
+      </AsciiReveal>
+    </NuxtLink>
   </section>
 </template>

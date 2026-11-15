@@ -3,7 +3,7 @@ import { createAsciiReveal, SKELETON_CSS } from 'ascii-reveal/core'
 import type { AsciiRevealController } from 'ascii-reveal/core'
 import { snapshotAsciiChart } from '~/utils/asciiChart'
 
-// Reveal ringkasan dibuat singkat agar data cepat terbaca setelah refresh.
+// Animasi ringkasan dibuat singkat supaya data cepat terlihat setelah dimuat.
 const props = withDefaults(defineProps<{
   loading: boolean
   origin?: 'center' | 'top-left' | 'pointer' | { x: number, y: number }
@@ -14,14 +14,14 @@ const props = withDefaults(defineProps<{
   speed: 1.2
 })
 const root = ref<HTMLElement | null>(null)
-// Kartu tetap kosong saat menunggu data; frame sudut digambar oleh efek surface.
+// Kartu tetap kosong saat memuat; animasi menggambar sudutnya setelah data siap.
 const phase = ref(props.loading ? 'outline' : 'idle')
 const reducedMotion = usePreferredReducedMotion()
 const { asciiAnimations } = useDashboardPreferences()
 let hasSkeleton = props.loading
 useHead({ style: [{ key: 'ascii-skeleton', innerHTML: SKELETON_CSS }] })
 
-// Teks, foto, dan grafik masuk bareng lewat satu efek ASCII.
+// Teks, foto, dan grafik muncul bareng lewat animasi ASCII.
 watch([() => props.loading, reducedMotion, asciiAnimations, root], async ([loading, motion, animations, element], _previous, onCleanup) => {
   let cancelled = false
   const effect: { controller?: AsciiRevealController } = {}
@@ -70,7 +70,7 @@ watch([() => props.loading, reducedMotion, asciiAnimations, root], async ([loadi
         if (cancelled) snapshot.remove()
         else snapshots.push(snapshot)
       } catch {
-        // Grafik asli tetap dipakai kalau snapshot gagal dibuat.
+        // Tetap pakai grafik asli kalau gambar sementara gagal dibuat.
       }
     })
   ))
@@ -79,7 +79,7 @@ watch([() => props.loading, reducedMotion, asciiAnimations, root], async ([loadi
   phase.value = 'revealing'
   await nextTick()
 
-  // Overlay harus di luar kartu agar sudut dan titik tetap terlihat saat kartunya transparan.
+  // Lapisan animasi ada di luar kartu supaya sudutnya tetap terlihat saat isi disembunyikan.
   const surface = element.closest<HTMLElement>('[data-dashboard-card]')
   const controller = createAsciiReveal(surface?.parentElement ?? element, {
     preset: 'decode',
@@ -88,14 +88,14 @@ watch([() => props.loading, reducedMotion, asciiAnimations, root], async ([loadi
     speed: props.speed,
     media: 'img, canvas[data-ascii-chart-snapshot]',
     lazy: false,
-    // Caller bisa memilih posisi cursor sebagai titik awal gelombang reveal.
+    // Pemanggil bisa memilih titik awal animasi dari posisi kursor.
     origin: props.origin ?? 'center'
   })
   effect.controller = controller
   try {
     await controller.reveal({ within: surface ?? element })
   } catch {
-    // Data tetap harus tampil kalau efek ASCII gagal.
+    // Tetap tampilkan data kalau animasi ASCII gagal.
   } finally {
     controller.destroy()
     removeSnapshots()

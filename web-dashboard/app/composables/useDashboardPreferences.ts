@@ -1,5 +1,5 @@
 export function useDashboardPreferences() {
-  // Cookie menjaga pilihan dashboard tetap ada setelah halaman dimuat ulang.
+  // Cookie menyimpan pilihan dashboard saat halaman dimuat ulang.
   const asciiAnimations = useCookie<boolean>('tourify-dashboard-ascii-animations', {
     default: () => true,
     maxAge: 60 * 60 * 24 * 365,

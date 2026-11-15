@@ -2,15 +2,15 @@ package com.example.tourify_v2.screen
 
 import com.example.tourify_v2.ui.theme.*
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -20,7 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,19 +29,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import com.example.tourify_v2.model.Wahana
 import com.example.tourify_v2.viewmodel.TourifyViewModel
 
 @Composable
@@ -49,7 +46,7 @@ fun DestinationsScreen(
     viewModel: TourifyViewModel,
     onDestinationClick: (Int) -> Unit
 ) {
-    // Simpan pencarian dan kategori pada daftar destinasi.
+    // Simpan pencarian dan kategori yang dipilih.
     val destinations = viewModel.wahana
     var searchQuery by remember {
         mutableStateOf("")
@@ -68,7 +65,7 @@ fun DestinationsScreen(
         }
     }
 
-    // Cocokkan nama dan deskripsi dengan pencarian serta kategori.
+    // Cari nama atau deskripsi, lalu cocokkan kategorinya.
     val filteredDestinations = destinations.filter { destination ->
         val query = searchQuery.trim()
         val matchesSearch = destination.name.contains(
@@ -95,28 +92,32 @@ fun DestinationsScreen(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        // Sisakan ruang gulir agar isi terakhir tidak tertutup navbar.
+        modifier = Modifier
+            .fillMaxSize()
+            .background(TourifyCanvas),
+        // Tambahkan ruang bawah supaya navbar nggak menutupi isi terakhir.
         contentPadding = PaddingValues(
-            start = 20.dp,
-            top = 14.dp,
-            end = 20.dp,
+            start = TourifySpacing.screen,
+            // Latar boleh melewati status bar, tapi judul tetap mulai di bawah ikon.
+            top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 32.dp,
+            end = TourifySpacing.screen,
             bottom = 104.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         ),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(TourifySpacing.control)
     ) {
         item {
             Column {
-                // Judul destinasi ikut gaya layar lain.
-                TourifyScreenTitle(
+                // TalkBack membaca judul ini sebagai heading.
+                Text(
                     text = "Destinasi",
+                    modifier = Modifier.semantics {
+                        heading()
+                    },
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = TourifyInk
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "${filteredDestinations.size} tempat untuk dikunjungi",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TourifyMuted
-                )
             }
         }
 
@@ -169,7 +170,7 @@ fun DestinationsScreen(
             item {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
+                    shape = TourifyShapes.card,
                     color = TourifySoftSurface
                 ) {
                     Text(
@@ -184,15 +185,24 @@ fun DestinationsScreen(
                 }
             }
         } else {
-            itemsIndexed(
+            items(
                 filteredDestinations,
-                key = { _, destination ->
+                key = { destination ->
                     destination.id
                 }
-            ) { index, destination ->
-                FadingDestinationCard(
-                    destination = destination,
-                    index = index,
+            ) { destination ->
+                // Kartu ikut bergerak saat daftar kategori berubah.
+                DestinationCard(
+                    wahana = destination,
+                    modifier = Modifier
+                        .animateItem(
+                            fadeInSpec = tween(TourifyMotion.standardMillis),
+                            placementSpec = tween(TourifyMotion.standardMillis),
+                            fadeOutSpec = tween(TourifyMotion.standardMillis)
+                        )
+                        .fillMaxWidth()
+                        .aspectRatio(1.65f),
+                    isFavorite = false,
                     onClick = {
                         onDestinationClick(destination.id)
                     }
@@ -202,55 +212,7 @@ fun DestinationsScreen(
     }
 }
 
-// Kartu destinasi muncul bertahap mengikuti urutannya.
-@Composable
-private fun FadingDestinationCard(
-    destination: Wahana,
-    index: Int,
-    onClick: () -> Unit
-) {
-    var visible by remember(destination.id) {
-        mutableStateOf(false)
-    }
-    LaunchedEffect(destination.id) {
-        visible = true
-    }
-
-    val alpha by animateFloatAsState(
-        targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(
-            durationMillis = 450,
-            delayMillis = index.coerceAtMost(4) * 70
-        ),
-        label = "destinationCardFade"
-    )
-    val offsetY by animateDpAsState(
-        targetValue = if (visible) 0.dp else 20.dp,
-        animationSpec = tween(
-            durationMillis = 450,
-            delayMillis = index.coerceAtMost(4) * 70
-        ),
-        label = "destinationCardSlide"
-    )
-    val density = LocalDensity.current
-
-    DestinationCard(
-        wahana = destination,
-        modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(1.8f)
-            .graphicsLayer {
-                this.alpha = alpha
-                translationY = with(density) {
-                    offsetY.toPx()
-                }
-            },
-        isFavorite = false,
-        onClick = onClick
-    )
-}
-
-// Letakkan status daftar di tengah area konten.
+// Tampilkan status daftar di tengah layar.
 @Composable
 private fun DestinationListMessage(content: @Composable ColumnScope.() -> Unit) {
     Box(

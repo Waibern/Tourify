@@ -3,7 +3,7 @@ require_once __DIR__ . '/common.php';
 require_once __DIR__ . '/dashboard_activity_feed.php';
 configureDashboardCors();
 header('Content-Type: application/json; charset=utf-8');
-// Feed harus membaca aktivitas terbaru dan tidak boleh disimpan oleh cache browser.
+// Selalu ambil aktivitas terbaru; jangan pakai cache browser.
 header('Cache-Control: no-store');
 requireMethod('GET');
 requireDashboardRole(['admin']);

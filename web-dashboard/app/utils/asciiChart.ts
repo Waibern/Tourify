@@ -1,4 +1,4 @@
-// Snapshot sementara supaya grafik SVG bisa melewati tahap reveal ASCII kedua.
+// Simpan gambar sementara supaya grafik bisa ikut animasi ASCII.
 export async function snapshotAsciiChart(svg: SVGSVGElement): Promise<{ remove: () => void } | null> {
   const bounds = svg.getBoundingClientRect()
   const parent = svg.parentElement

@@ -2,11 +2,7 @@ package com.example.tourify_v2.screen
 
 import com.example.tourify_v2.ui.theme.*
 
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -59,13 +55,11 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,16 +69,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -99,10 +90,11 @@ import androidx.compose.ui.unit.sp
 import com.example.tourify_v2.model.ChatHistoryItem
 import com.example.tourify_v2.model.ChatBookingProposal
 import com.example.tourify_v2.model.ChatResponse
+import com.example.tourify_v2.model.Ticket
 import com.example.tourify_v2.model.Wahana
-import androidx.core.view.WindowInsetsControllerCompat
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
 import java.util.Locale
@@ -113,10 +105,10 @@ private val ChatCanvas = TourifyCanvas
 private val ChatInk = TourifyInk
 private val ChatMuted = TourifyMuted
 private val ChatBubble = TourifySoftSurface
-private val ChatYellow = TourifyAccent
+// Tombol Asisten pakai hijau utama supaya warnanya konsisten.
 private val ChatGreen = TourifyForest
 
-// Tombol sparkle jadi pintu masuk chat dari halaman utama.
+// Tombol ini membuka chat dari halaman utama.
 @Composable
 internal fun ChatbotFloatingButton(
     onClick: () -> Unit,
@@ -133,7 +125,7 @@ internal fun ChatbotFloatingButton(
         label = "Tekanan tombol chat"
     )
 
-    // Tombol memberi respons kecil saat ditekan sebelum layar terbuka.
+    // Tombol mengecil sebentar saat ditekan, lalu chat terbuka.
     Surface(
         modifier = modifier
             .size(68.dp)
@@ -159,8 +151,8 @@ internal fun ChatbotFloatingButton(
                 contentDescription = "Buka Asisten Tourify"
             },
         shape = CircleShape,
-        color = Color.White,
-        shadowElevation = 8.dp,
+        color = TourifySurface,
+        shadowElevation = TourifyElevation.floating,
         tonalElevation = 0.dp
     ) {
         Box(
@@ -170,12 +162,12 @@ internal fun ChatbotFloatingButton(
             Surface(
                 modifier = Modifier.fillMaxSize(),
                 shape = CircleShape,
-                color = ChatYellow
+                color = ChatGreen
             ) {
                 Box(
                     contentAlignment = Alignment.Center
                 ) {
-                    ChatSparkle(
+                    ChatBrandMark(
                         modifier = Modifier.size(30.dp)
                     )
                 }
@@ -184,7 +176,7 @@ internal fun ChatbotFloatingButton(
     }
 }
 
-// Lingkaran reveal dimulai dari tengah tombol dan menutup seluruh layar.
+// Efek buka chat dimulai dari tombol lalu menutupi layar.
 internal fun Modifier.chatbotCircleReveal(
     progress: Float,
     origin: Offset
@@ -227,7 +219,7 @@ internal fun Modifier.chatbotCircleReveal(
     }
 }
 
-// Layar chat menampilkan panduan hanya sebelum percakapan dimulai.
+// Tampilkan panduan sebelum chat dimulai.
 @Composable
 internal fun ChatbotAssistantScreen(
     currentUser: String,
@@ -244,41 +236,21 @@ internal fun ChatbotAssistantScreen(
     ) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
-    availableWahana: List<Wahana> = emptyList()
+    availableWahana: List<Wahana> = emptyList(),
+    userTickets: List<Ticket> = emptyList(),
+    conversationState: ChatbotConversationState? = null,
+    onOpenTickets: () -> Unit = {}
 ) {
-    // Simpan percakapan dan draf selama layar asisten terbuka.
-    val messages = remember {
-        mutableStateListOf<ChatMessage>()
+    // Pakai percakapan dari layar utama kalau ada, supaya chat nggak hilang saat panel ditutup.
+    val localConversationState = remember {
+        ChatbotConversationState()
     }
-    var draft by rememberSaveable {
-        mutableStateOf("")
-    }
+    val activeConversationState = conversationState ?: localConversationState
+    val messages = activeConversationState.messages
+    var draft by activeConversationState.draft
     val messageListState = rememberLazyListState()
-    val view = LocalView.current
 
-    // Ikon status bar dibuat gelap selama layar chat berlatar terang terbuka.
-    DisposableEffect(view) {
-        var context: Context = view.context
-        while (context is ContextWrapper && context !is Activity) {
-            context = context.baseContext
-        }
-        val window = (context as? Activity)?.window
-        val controller = window?.let {
-            WindowInsetsControllerCompat(
-                it,
-                view
-            )
-        }
-        val previous = controller?.isAppearanceLightStatusBars
-        controller?.isAppearanceLightStatusBars = true
-        onDispose {
-            if (previous != null) {
-                controller.isAppearanceLightStatusBars = previous
-            }
-        }
-    }
-
-    // Konfirmasi mengirim draft melalui endpoint tiket setelah tombol pengguna ditekan.
+    // Tombol konfirmasi mengirim draf pesanan ke server.
     fun confirmBooking(
         index: Int,
         proposal: ChatBookingProposal
@@ -310,7 +282,7 @@ internal fun ChatbotAssistantScreen(
         }
     }
 
-    // Ubah menutup draft tanpa membuat pesanan dan meminta detail penggantinya.
+    // Tombol Ubah membatalkan draf dan meminta detail baru.
     fun editProposal(index: Int) {
         val message = messages.getOrNull(index) ?: return
         if (message.proposalStatus != BookingProposalStatus.PENDING) return
@@ -321,12 +293,12 @@ internal fun ChatbotAssistantScreen(
         )
     }
 
-    // Pertanyaan dari saran dan input memakai alur API yang sama.
+    // Saran dan pertanyaan yang diketik memakai alur yang sama.
     fun sendQuestion(rawQuestion: String) {
         val question = rawQuestion.trim()
         if (question.isEmpty() || isSending || isBooking) return
 
-        // Pertanyaan baru membatalkan draf lama agar tombolnya tidak memesan detail usang.
+        // Pertanyaan baru membatalkan draf yang masih menunggu konfirmasi.
         messages.indices.forEach { index ->
             val pendingMessage = messages[index]
             if (pendingMessage.proposalStatus == BookingProposalStatus.PENDING) {
@@ -348,6 +320,13 @@ internal fun ChatbotAssistantScreen(
                 )
             }
             .takeLast(10)
+
+        // Jawab jadwal terdekat dari tiket akun yang sama supaya tanggalnya akurat.
+        val nearestTicketReply = buildNearestTicketReply(
+            question = question,
+            history = history,
+            tickets = userTickets
+        )
         messages.add(
             ChatMessage(
                 fromUser = true,
@@ -356,14 +335,23 @@ internal fun ChatbotAssistantScreen(
         )
         draft = ""
 
-        // Jawaban atas pertanyaan klarifikasi dirangkai jadi draf tanpa dikirim lagi ke FAQ server.
+        if (nearestTicketReply != null) {
+            messages.add(
+                ChatMessage(
+                    fromUser = false,
+                    text = nearestTicketReply
+                )
+            )
+            return
+        }
+
+        // Pakai jawaban pengguna untuk melengkapi draf tanpa bertanya lagi ke server.
         val lastAssistantReply = history.lastOrNull {
             it.role == "assistant"
         }?.text.orEmpty()
         val hasPreviousBookingRequest = history.any { item ->
             item.role == "user" &&
-                Regex("(?:pesan|pesenin|pesankan|beli)\\s+(?:kan\\s+)?tiket|booking")
-                    .containsMatchIn(item.text.lowercase(Locale.ROOT))
+                bookingIntentPattern.containsMatchIn(item.text)
         }
         val wasClarifyingBooking = hasPreviousBookingRequest && (
             lastAssistantReply.startsWith("Bisa, aku bantu pesan tiket") ||
@@ -415,7 +403,7 @@ internal fun ChatbotAssistantScreen(
                 val serverAnswer = response.answer?.takeIf(String::isNotBlank)
                     ?: response.message
                     ?: "Asisten gagal menjawab. Coba lagi nanti."
-                // Respons server yang belum bisa membuat draf dialihkan ke klarifikasi yang terarah.
+                // Kalau server belum menyiapkan draf, minta detail yang masih kurang.
                 val localBookingReply = if (response.bookingProposal == null) {
                     buildBookingReply(
                         question = question,
@@ -449,7 +437,7 @@ internal fun ChatbotAssistantScreen(
         }
     }
 
-    // Gulir lagi setelah indikator menunggu berubah menjadi jawaban.
+    // Gulir ke jawaban baru setelah indikator memuat selesai.
     LaunchedEffect(
         messages.size,
         messages.lastOrNull()?.isLoading
@@ -467,7 +455,7 @@ internal fun ChatbotAssistantScreen(
             .navigationBarsPadding()
             .imePadding()
     ) {
-        // Satu tombol kembali cukup; chat baru tersedia setelah ada pesan.
+        // Tombol chat baru muncul setelah pengguna mengirim pesan.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -484,7 +472,7 @@ internal fun ChatbotAssistantScreen(
                 onClick = onClose
             ) {
                 Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = null
                 )
             }
@@ -506,7 +494,7 @@ internal fun ChatbotAssistantScreen(
                     }
                 ) {
                     Icon(
-                        Icons.Filled.Edit,
+                        imageVector = Icons.Filled.Edit,
                         contentDescription = null
                     )
                 }
@@ -521,10 +509,10 @@ internal fun ChatbotAssistantScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp),
             shape = RoundedCornerShape(
-                topStart = 30.dp,
-                topEnd = 30.dp
+                topStart = 28.dp,
+                topEnd = 28.dp
             ),
-            color = Color.White
+            color = TourifySurface
         ) {
             LazyColumn(
                 modifier = Modifier
@@ -540,6 +528,7 @@ internal fun ChatbotAssistantScreen(
                 if (messages.isEmpty()) {
                     item {
                         ChatEmptyState(
+                            modifier = Modifier.fillParentMaxHeight(),
                             onSuggestionClick = ::sendQuestion
                         )
                     }
@@ -548,7 +537,14 @@ internal fun ChatbotAssistantScreen(
                     ChatBubble(
                         message = message,
                         isBooking = isBooking,
+                        isSending = isSending,
                         canConfirmBooking = currentUser.isNotBlank(),
+                        showBookingAction = index == messages.lastIndex &&
+                            shouldShowBookingAction(message),
+                        onOpenTickets = onOpenTickets,
+                        onStartBooking = {
+                            sendQuestion("Iya, aku mau pesan tiket")
+                        },
                         onConfirmBooking = { proposal ->
                             confirmBooking(
                                 index,
@@ -581,13 +577,21 @@ private data class BookingReply(
     val proposal: ChatBookingProposal? = null
 )
 
+// Ucapan seperti "mau pesen tiket" tetap dikenali.
+private val bookingIntentPattern = Regex(
+    "(?:pesan(?:kan|in)?|pesen(?:in|kan)?|memesan|beli|belikan)\\s+(?:kan\\s+)?tiket" +
+        "|(?:mau|ingin|tolong)\\s+(?:pesan(?:kan|in)?|pesen(?:in|kan)?|memesan|booking|beli)" +
+        "|booking|book\\s+(?:ticket|me)",
+    RegexOption.IGNORE_CASE
+)
+
 private fun buildBookingReply(
     question: String,
     history: List<ChatHistoryItem>,
     availableWahana: List<Wahana>,
     answer: String? = null
 ): BookingReply? {
-    // Hanya ambil alih jawaban server saat ia belum berhasil menyiapkan draft pesanan.
+    // Pakai jawaban lokal hanya kalau server belum menyiapkan draf.
     if (answer != null) {
         val normalizedAnswer = answer.lowercase(Locale.ROOT)
         val asksForMissingBookingDetails =
@@ -606,6 +610,7 @@ private fun buildBookingReply(
         if (!asksForMissingBookingDetails) return null
     }
 
+    // Gabungkan pesan pengguna supaya detail chat sebelumnya ikut terbaca.
     val userContext = (history.filter {
         it.role == "user"
     }.map {
@@ -613,10 +618,9 @@ private fun buildBookingReply(
     } + question)
         .joinToString(" ")
         .lowercase(Locale.ROOT)
-    val bookingIntent = Regex("(?:pesan|pesenin|pesankan|beli)\\s+(?:kan\\s+)?tiket|booking")
-    if (!bookingIntent.containsMatchIn(userContext)) return null
+    if (!bookingIntentPattern.containsMatchIn(userContext)) return null
 
-    // Cocokkan wahana dengan katalog yang sudah dimuat agar penyebutan nama tetap akurat.
+    // Cocokkan nama wahana dengan katalog yang sudah dimuat.
     fun findWahana(text: String) = availableWahana
         .sortedByDescending {
             it.name.length
@@ -635,6 +639,7 @@ private fun buildBookingReply(
         } + question)
             .asReversed()
             .firstNotNullOfOrNull(::extractRequestedWahana)
+    // Angka seperti "5" dihitung sebagai jumlah hanya setelah bot menanyakannya.
     val quantityWasRequested = history.any { item ->
         item.role == "assistant" &&
             (item.text.contains(
@@ -646,6 +651,7 @@ private fun buildBookingReply(
                     ignoreCase = true
                 ))
     }
+    // Ambil tanggal, jumlah tiket, dan cara bayar dari chat.
     val visitDate = parseVisitDate(userContext)
     val quantity = parseTicketQuantity(
         userContext,
@@ -668,6 +674,7 @@ private fun buildBookingReply(
             }
     }
 
+    // Tanyakan data yang belum ada sebelum membuat draf.
     val missing = buildList {
         if (wahana == null) add("Wahana apa yang ingin kamu kunjungi?")
         if (visitDate == null) add("Tanggal kunjungannya kapan? Contoh: 27 Oktober.")
@@ -685,6 +692,7 @@ private fun buildBookingReply(
         )
     }
 
+    // Kalau data sudah lengkap, siapkan draf untuk dikonfirmasi.
     val selectedWahana = requireNotNull(wahana)
     val selectedDate = requireNotNull(visitDate)
     val selectedQuantity = requireNotNull(quantity)
@@ -703,7 +711,7 @@ private fun buildBookingReply(
     )
 }
 
-// Ambil nama wahana sederhana kalau daftar katalog belum tersedia di perangkat.
+// Ambil nama wahana dari pesan kalau katalog belum dimuat.
 private fun extractRequestedWahana(question: String): String? {
     val match = Regex(
         "\\b(?:ke|untuk)\\s+([\\p{L}][\\p{L}0-9 ]{1,40}?)(?=\\s+(?:tanggal|tgl|besok|lusa|sebanyak|jumlah|pakai|metode|pembayaran|dong|ya|pls|please)\\b|[,?.!]|$)",
@@ -725,6 +733,7 @@ private fun parseVisitDate(
     text: String,
     today: LocalDate = LocalDate.now()
 ): LocalDate? {
+    // Terima tanggal lengkap dengan format tahun-bulan-hari.
     val isoDate = Regex("\\b(20\\d{2})-(\\d{1,2})-(\\d{1,2})\\b").find(text)
     if (isoDate != null) {
         return runCatching {
@@ -736,6 +745,7 @@ private fun parseVisitDate(
         }.getOrNull()
     }
 
+    // Nama bulan boleh ditulis dengan atau tanpa tahun.
     val monthNumbers = mapOf(
         "januari" to 1,
         "februari" to 2,
@@ -765,6 +775,7 @@ private fun parseVisitDate(
         return if (yearText.isBlank() && date.isBefore(today)) date.plusYears(1) else date
     }
 
+    // Baca angka sebagai tanggal/bulan, sesuai kebiasaan di Indonesia.
     val numericDate = Regex("\\b(\\d{1,2})[/-](\\d{1,2})(?:[/-](20\\d{2}))?\\b").find(text)
     if (numericDate != null) {
         val year = numericDate.groupValues[3].toIntOrNull() ?: today.year
@@ -782,6 +793,7 @@ private fun parseVisitDate(
         }
     }
 
+    // Cocokkan sebutan hari dengan minggu ini atau minggu depan.
     val nextWeekDay = Regex(
         "\\b(senin|selasa|rabu|kamis|jumat|sabtu|minggu)(?:\\s+minggu)?\\s+depan\\b|\\bminggu depan\\s+(senin|selasa|rabu|kamis|jumat|sabtu|minggu)\\b"
     ).find(text)
@@ -807,6 +819,7 @@ private fun parseVisitDate(
         return today.with(TemporalAdjusters.next(day))
     }
 
+    // Pahami kata waktu singkat seperti "besok" tanpa tanggal lengkap.
     return when {
         Regex("\\bbesok\\b").containsMatchIn(text) -> today.plusDays(1)
         Regex("\\blusa\\b").containsMatchIn(text) -> today.plusDays(2)
@@ -830,7 +843,7 @@ private fun parseTicketQuantity(
     latestAnswer: String,
     quantityWasRequested: Boolean
 ): Int? {
-    // Baca jumlah dalam bentuk tiket/orang, termasuk jawaban santai seperti "orangnya 5".
+    // Baca jumlah dari ucapan seperti "5 tiket" atau "orangnya 5".
     val digitQuantity = Regex(
         "\\b(\\d{1,2})\\s*(?:tiket|orang|pengunjung)\\b|\\b(?:tiket|orang|pengunjung)(?:\\s*nya)?\\s*(?:jumlah|sebanyak)?\\s*(\\d{1,2})\\b"
     ).find(fullContext)
@@ -843,6 +856,7 @@ private fun parseTicketQuantity(
         it in 1..20
     }
 
+    // Ubah kata angka seperti "dua" menjadi jumlah tiket.
     val numberWords = mapOf(
         "satu" to 1,
         "dua" to 2,
@@ -878,6 +892,7 @@ private fun parseTicketQuantity(
         ?.let(numberWords::get)
     if (wordCount != null) return wordCount
 
+    // Angka tunggal dihitung sebagai jumlah hanya setelah bot menanyakannya.
     if (quantityWasRequested) {
         val shortAnswer = latestAnswer.trim().lowercase(Locale.ROOT)
         shortAnswer.toIntOrNull()?.let {
@@ -889,7 +904,7 @@ private fun parseTicketQuantity(
             return it
         }
 
-        // Kalau jumlah dijawab bersama tanggal dan metode, abaikan angka yang jadi bagian tanggal.
+        // Kalau jawaban berisi tanggal dan jumlah, abaikan angka di dalam tanggal.
         val withoutDates = shortAnswer
             .replace(
                 Regex("\\b\\d{1,2}\\s+(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)(?:\\s+20\\d{2})?\\b"),
@@ -926,32 +941,98 @@ private fun parsePaymentMethod(text: String): String? = when {
     else -> null
 }
 
-// Saran awal langsung mengirim pertanyaan agar setiap pilihan punya hasil nyata.
+// Pilih tiket aktif terdekat dari daftar akun yang sudah dimuat di aplikasi.
+private fun buildNearestTicketReply(
+    question: String,
+    history: List<ChatHistoryItem>,
+    tickets: List<Ticket>
+): String? {
+    if (tickets.isEmpty()) return null
+
+    val userConversation = (
+        history.filter {
+            it.role == "user"
+        }.map {
+            it.text
+        } + question
+        ).joinToString(" ")
+        .lowercase(Locale.ROOT)
+    val asksForNearestVisit = Regex("\\b(terdekat|berikutnya|selanjutnya|mendatang)\\b")
+        .containsMatchIn(userConversation)
+    val mentionsUserTicket = Regex("\\b(tiket|kunjungan|pesanan)\\b")
+        .containsMatchIn(userConversation)
+    if (!asksForNearestVisit || !mentionsUserTicket) return null
+
+    // Samakan batas hari dengan server yang memakai zona waktu Jakarta.
+    val today = LocalDate.now(ZoneId.of("Asia/Jakarta"))
+    val nextTicket = tickets
+        .asSequence()
+        .filter {
+            it.status.equals("Active", ignoreCase = true) &&
+                it.checkedInQuantity < it.quantity
+        }
+        .mapNotNull { ticket ->
+            runCatching {
+                LocalDate.parse(ticket.visitDate)
+            }.getOrNull()?.let { visitDate ->
+                ticket to visitDate
+            }
+        }
+        .filter { (_, visitDate) ->
+            !visitDate.isBefore(today)
+        }
+        .minByOrNull { (_, visitDate) ->
+            visitDate
+        }
+
+    if (nextTicket == null) {
+        return "Belum ada tiket aktif untuk kunjungan hari ini atau setelahnya. Cek riwayat lengkapnya di menu Tiket Saya."
+    }
+
+    val (ticket, visitDate) = nextTicket
+    val formattedDate = visitDate.format(
+        DateTimeFormatter.ofPattern(
+            "dd MMM yyyy",
+            Locale.forLanguageTag("id-ID")
+        )
+    )
+    val formattedPrice = NumberFormat.getIntegerInstance(
+        Locale.forLanguageTag("id-ID")
+    ).format(ticket.totalPrice)
+    val payment = ticket.paymentMethod.takeIf(String::isNotBlank)?.let {
+        " Pembayaran via $it."
+    }.orEmpty()
+    return "Kunjungan terdekatmu adalah ${ticket.wahanaName} pada $formattedDate: ${ticket.quantity} tiket, total Rp $formattedPrice.$payment"
+}
+
+// Saran awal langsung mengirim pertanyaan yang dipilih.
 @Composable
-private fun ChatEmptyState(onSuggestionClick: (String) -> Unit) {
+private fun ChatEmptyState(
+    modifier: Modifier = Modifier,
+    onSuggestionClick: (String) -> Unit
+) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .padding(
-                top = 36.dp,
-                bottom = 18.dp
-            ),
-        horizontalAlignment = Alignment.Start
+            .padding(vertical = 20.dp),
+        horizontalAlignment = Alignment.Start,
+        // Seimbangkan ruang kosong di atas dan bawah welcome screen.
+        verticalArrangement = Arrangement.Center
     ) {
         Surface(
-            modifier = Modifier.size(56.dp),
-            shape = CircleShape,
-            color = ChatYellow
+            modifier = Modifier.size(48.dp),
+            shape = RoundedCornerShape(16.dp),
+            color = ChatGreen
         ) {
             Box(
                 contentAlignment = Alignment.Center
             ) {
-                ChatSparkle(
-                    modifier = Modifier.size(29.dp)
+                ChatBrandMark(
+                    modifier = Modifier.size(28.dp)
                 )
             }
         }
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = "Mau tahu apa tentang Tourify?",
             color = ChatInk,
@@ -966,7 +1047,7 @@ private fun ChatEmptyState(onSuggestionClick: (String) -> Unit) {
             fontSize = 16.sp,
             lineHeight = 24.sp
         )
-        Spacer(modifier = Modifier.height(34.dp))
+        Spacer(modifier = Modifier.height(24.dp))
         listOf(
             "Ada wahana apa saja?",
             "Bagaimana cara pesan tiket?",
@@ -1004,7 +1085,7 @@ private fun ChatEmptyState(onSuggestionClick: (String) -> Unit) {
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Icon(
-                        Icons.AutoMirrored.Filled.Send,
+                        imageVector = Icons.AutoMirrored.Filled.Send,
                         contentDescription = null,
                         tint = ChatGreen,
                         modifier = Modifier.size(17.dp)
@@ -1015,12 +1096,16 @@ private fun ChatEmptyState(onSuggestionClick: (String) -> Unit) {
     }
 }
 
-// Balon chat membedakan pesan pengunjung dan jawaban asisten.
+// Bedakan pesan pengguna dan jawaban asisten.
 @Composable
 private fun ChatBubble(
     message: ChatMessage,
     isBooking: Boolean,
+    isSending: Boolean,
     canConfirmBooking: Boolean,
+    showBookingAction: Boolean,
+    onOpenTickets: () -> Unit,
+    onStartBooking: () -> Unit,
     onConfirmBooking: (ChatBookingProposal) -> Unit,
     onEditProposal: () -> Unit
 ) {
@@ -1031,7 +1116,7 @@ private fun ChatBubble(
         visible = true
     }
 
-    // Pesan baru masuk pelan agar arah percakapan mudah diikuti.
+    // Pesan baru muncul perlahan supaya alur chat gampang diikuti.
     AnimatedVisibility(
         visible = visible,
         enter = fadeIn(tween(220)) + slideInVertically(
@@ -1055,7 +1140,7 @@ private fun ChatBubble(
                         )
                         .size(30.dp),
                     shape = CircleShape,
-                    // Ikon asisten pakai permukaan kaca yang sama dengan navbar.
+                    // Logo putih tetap terlihat di latar gelap.
                     color = TourifyGlassSurface,
                     border = BorderStroke(
                         1.dp,
@@ -1065,8 +1150,9 @@ private fun ChatBubble(
                     Box(
                         contentAlignment = Alignment.Center
                     ) {
-                        ChatSparkle(
-                            modifier = Modifier.size(18.dp)
+                        ChatBrandMark(
+                            modifier = Modifier.size(18.dp),
+                            color = Color.White
                         )
                     }
                 }
@@ -1080,7 +1166,7 @@ private fun ChatBubble(
                 color = if (message.fromUser) TourifyMint else ChatBubble
             ) {
                 Column {
-                    // Pergantian status menunggu ke jawaban muncul halus tanpa loncatan ukuran.
+                    // Indikator memuat berubah jadi jawaban tanpa menggeser tampilan.
                     AnimatedContent(
                         targetState = message.isLoading,
                         transitionSpec = {
@@ -1121,13 +1207,42 @@ private fun ChatBubble(
                                     )
                                 )
                             } else {
-                                // Jawaban asisten dirender per baris agar judul dan daftar mudah dipindai.
+                                // Tampilkan jawaban per baris supaya judul dan daftar gampang dibaca.
                                 ChatFormattedAnswer(
                                     text = message.text,
                                     modifier = Modifier.padding(
                                         horizontal = 16.dp,
                                         vertical = 14.dp
                                     )
+                                )
+                            }
+                        }
+                    }
+                    // Tampilkan bantuan pesan tiket hanya di jawaban terakhir tentang pembayaran.
+                    if (showBookingAction) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    start = 12.dp,
+                                    end = 12.dp,
+                                    bottom = 12.dp
+                                ),
+                            horizontalArrangement = Arrangement.Start
+                        ) {
+                            Button(
+                                onClick = onStartBooking,
+                                enabled = !isSending && !isBooking,
+                                modifier = Modifier
+                                    .heightIn(min = 48.dp)
+                                    .testTag("chat_start_booking"),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = ChatGreen,
+                                    contentColor = Color.White
+                                )
+                            ) {
+                                Text(
+                                    text = "Iya"
                                 )
                             }
                         }
@@ -1140,6 +1255,7 @@ private fun ChatBubble(
                             status = proposalStatus,
                             isBooking = isBooking,
                             canConfirmBooking = canConfirmBooking,
+                            onOpenTickets = onOpenTickets,
                             onConfirm = {
                                 onConfirmBooking(proposal)
                             },
@@ -1152,12 +1268,29 @@ private fun ChatBubble(
     }
 }
 
+// Kenali jawaban cara bayar supaya tombol nggak muncul di FAQ lain.
+private fun shouldShowBookingAction(message: ChatMessage): Boolean {
+    if (
+        message.fromUser ||
+            message.isLoading ||
+            message.bookingProposal != null
+    ) {
+        return false
+    }
+
+    val answer = message.text.lowercase(Locale.ROOT)
+    return answer.contains("form pemesanan") &&
+        answer.contains("bank") &&
+        answer.contains("qris") &&
+        answer.contains("e-wallet")
+}
+
 @Composable
 private fun ChatFormattedAnswer(
     text: String,
     modifier: Modifier = Modifier
 ) {
-    // Markdown ringan menjaga jawaban API tetap terstruktur tanpa menambah dependensi.
+    // Pakai Markdown sederhana supaya jawaban API rapi tanpa paket tambahan.
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(5.dp)
@@ -1222,7 +1355,7 @@ private fun ChatFormattedAnswer(
 }
 
 private fun formatChatInline(text: String) = buildAnnotatedString {
-    // Tebalkan, miringkan, dan tandai kode sebaris sambil menghapus pembungkus Markdown.
+    // Ubah teks tebal, miring, dan kode sebaris sebelum ditampilkan.
     val tokens = Regex("(\\*\\*.+?\\*\\*|__.+?__|\\*.+?\\*|_.+?_|`[^`]+`)")
     var cursor = 0
     tokens.findAll(text).forEach { match ->
@@ -1255,13 +1388,14 @@ private fun formatChatInline(text: String) = buildAnnotatedString {
     append(text.substring(cursor))
 }
 
-// Kartu menampilkan detail sebelum booking dikirim ke endpoint tiket.
+// Tampilkan isi draf sebelum pengguna mengonfirmasi pesanan.
 @Composable
 private fun ChatBookingProposalCard(
     proposal: ChatBookingProposal,
     status: BookingProposalStatus,
     isBooking: Boolean,
     canConfirmBooking: Boolean,
+    onOpenTickets: () -> Unit,
     onConfirm: () -> Unit,
     onEdit: () -> Unit
 ) {
@@ -1291,8 +1425,8 @@ private fun ChatBookingProposalCard(
                 bottom = 12.dp
             )
             .animateContentSize(animationSpec = tween(240)),
-        shape = RoundedCornerShape(18.dp),
-        color = Color.White,
+        shape = TourifyShapes.card,
+        color = TourifySurface,
         border = BorderStroke(
             1.dp,
             TourifyBorder
@@ -1446,16 +1580,25 @@ private fun ChatBookingProposalCard(
                 BookingProposalStatus.FAILED -> {
                     Text(
                         "Cek menu Tiket sebelum mencoba lagi.",
-                        color = Color(0xFF8A5A16),
+                        color = TourifyWarning,
                         fontSize = 14.sp
                     )
+                    // Muat status pesanan dulu sebelum pengguna mencoba lagi.
+                    OutlinedButton(
+                        onClick = onOpenTickets,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                    ) {
+                        Text("Buka Tiket")
+                    }
                 }
             }
         }
     }
 }
 
-// Detail dipasangkan agar ringkasan mudah dipindai sebelum konfirmasi.
+// Tampilkan detail berpasangan supaya mudah dicek sebelum konfirmasi.
 @Composable
 private fun BookingDetailRow(
     label: String,
@@ -1482,7 +1625,7 @@ private fun BookingDetailRow(
     }
 }
 
-// Composer menerima pertanyaan dan menampilkan kontrol kirim yang mudah disentuh.
+// Kolom chat dipakai untuk mengetik dan mengirim pertanyaan.
 @Composable
 private fun ChatComposer(
     draft: String,
@@ -1494,12 +1637,12 @@ private fun ChatComposer(
         mutableStateOf(false)
     }
     val borderColor by animateColorAsState(
-        targetValue = if (hasFocus) ChatGreen else TourifyBorder,
-        animationSpec = tween(220),
+        targetValue = if (hasFocus) ChatGreen else TourifyOutline,
+        animationSpec = tween(TourifyMotion.standardMillis),
         label = "Fokus kolom chat"
     )
 
-    // Input tetap ringkas; fokus dan kesiapan kirim terlihat jelas.
+    // Kolom tetap ringkas, dan tombol kirim terlihat jelas.
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -1507,8 +1650,8 @@ private fun ChatComposer(
                 horizontal = 14.dp,
                 vertical = 12.dp
             ),
-        shape = RoundedCornerShape(22.dp),
-        color = Color.White,
+        shape = TourifyShapes.card,
+        color = TourifySurface,
         border = BorderStroke(
             1.dp,
             borderColor
@@ -1538,7 +1681,10 @@ private fun ChatComposer(
                     .onFocusChanged {
                         hasFocus = it.isFocused
                     }
-                    .testTag("chat_message_input"),
+                    .testTag("chat_message_input")
+                    .semantics {
+                        contentDescription = "Tulis pesan tentang wahana, tiket, atau pemesanan"
+                    },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                 keyboardActions = KeyboardActions(
                     onSend = {
@@ -1547,7 +1693,7 @@ private fun ChatComposer(
                 ),
                 textStyle = TextStyle(
                     color = ChatInk,
-                    // Ukuran input disamakan dengan teks percakapan biar lebih nyaman dibaca.
+                    // Samakan ukuran input dengan teks chat supaya mudah dibaca.
                     fontSize = 16.sp,
                     lineHeight = 24.sp
                 ),
@@ -1591,9 +1737,13 @@ private fun ChatComposer(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        Icons.AutoMirrored.Filled.Send,
+                        imageVector = Icons.AutoMirrored.Filled.Send,
                         contentDescription = null,
-                        tint = if (draft.isNotBlank() && !isSending) Color.White else ChatMuted,
+                        tint = if (draft.isNotBlank() && !isSending) {
+                            Color.White
+                        } else {
+                            ChatMuted.copy(alpha = TourifyInteraction.disabledContentAlpha)
+                        },
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -1602,7 +1752,7 @@ private fun ChatComposer(
     }
 }
 
-// Tombol header punya label yang jelas untuk TalkBack.
+// TalkBack membaca label tombol ini.
 @Composable
 private fun ChatHeaderButton(
     iconDescription: String,
@@ -1631,93 +1781,31 @@ private fun ChatHeaderButton(
     }
 }
 
-// Ikon garis sparkle mengikuti referensi tombol chatbot.
+// Monogram putih ini jadi tanda asisten Tourify yang lebih mudah dikenali.
 @Composable
-private fun ChatSparkle(modifier: Modifier = Modifier) {
-    Canvas(
-        modifier = modifier
-    ) {
-        val centerX = size.width * 0.46f
-        val centerY = size.height * 0.54f
-        val radius = size.minDimension * 0.39f
-        val sparkle = Path().apply {
-            moveTo(
-                centerX,
-                centerY - radius
-            )
-            cubicTo(
-                centerX + radius * 0.08f,
-                centerY - radius * 0.25f,
-                centerX + radius * 0.25f,
-                centerY - radius * 0.08f,
-                centerX + radius,
-                centerY
-            )
-            cubicTo(
-                centerX + radius * 0.25f,
-                centerY + radius * 0.08f,
-                centerX + radius * 0.08f,
-                centerY + radius * 0.25f,
-                centerX,
-                centerY + radius
-            )
-            cubicTo(
-                centerX - radius * 0.08f,
-                centerY + radius * 0.25f,
-                centerX - radius * 0.25f,
-                centerY + radius * 0.08f,
-                centerX - radius,
-                centerY
-            )
-            cubicTo(
-                centerX - radius * 0.25f,
-                centerY - radius * 0.08f,
-                centerX - radius * 0.08f,
-                centerY - radius * 0.25f,
-                centerX,
-                centerY - radius
-            )
-            close()
-        }
-        drawPath(
-            path = sparkle,
-            color = ChatInk,
-            style = Stroke(
-                width = 1.8.dp.toPx(),
-                cap = StrokeCap.Round,
-                join = StrokeJoin.Round
-            )
-        )
-        drawLine(
-            color = ChatInk,
-            start = Offset(
-                size.width * 0.78f,
-                size.height * 0.13f
-            ),
-            end = Offset(
-                size.width * 0.78f,
-                size.height * 0.31f
-            ),
-            strokeWidth = 1.5.dp.toPx(),
-            cap = StrokeCap.Round
-        )
-        drawLine(
-            color = ChatInk,
-            start = Offset(
-                size.width * 0.69f,
-                size.height * 0.22f
-            ),
-            end = Offset(
-                size.width * 0.87f,
-                size.height * 0.22f
-            ),
-            strokeWidth = 1.5.dp.toPx(),
-            cap = StrokeCap.Round
-        )
-    }
+private fun ChatBrandMark(
+    modifier: Modifier = Modifier,
+    color: Color = Color.White
+) {
+    Text(
+        text = "T",
+        color = color,
+        fontSize = 18.sp,
+        lineHeight = 20.sp,
+        fontWeight = FontWeight.ExtraBold,
+        fontFamily = FontFamily.SansSerif,
+        textAlign = TextAlign.Center,
+        modifier = modifier.clearAndSetSemantics { }
+    )
 }
 
-private data class ChatMessage(
+// Riwayat dan draf tetap ada saat panel ditutup sampai pengguna mulai chat baru.
+internal class ChatbotConversationState {
+    val messages = mutableStateListOf<ChatMessage>()
+    val draft = mutableStateOf("")
+}
+
+internal data class ChatMessage(
     val fromUser: Boolean,
     val text: String,
     val isLoading: Boolean = false,
@@ -1725,7 +1813,7 @@ private data class ChatMessage(
     val proposalStatus: BookingProposalStatus? = null
 )
 
-private enum class BookingProposalStatus {
+internal enum class BookingProposalStatus {
     PENDING,
     PROCESSING,
     CONFIRMED,
@@ -1733,7 +1821,7 @@ private enum class BookingProposalStatus {
     FAILED
 }
 
-// Riwayat memuat rincian draf agar AI paham saat pengguna meminta perubahan.
+// Sertakan detail draf di riwayat supaya AI paham saat pengguna minta perubahan.
 private fun ChatMessage.asHistoryText(): String = buildString {
     append(text)
     bookingProposal?.let { proposal ->

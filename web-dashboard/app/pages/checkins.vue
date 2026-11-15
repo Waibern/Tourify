@@ -6,8 +6,15 @@ import { wahanaImages } from '~/utils/wahana-images'
 const api = useTourifyApi()
 const route = useRoute()
 const router = useRouter()
-// Filter tiket dari detail pesanan tetap tepat walau ID lain mengandung angka yang sama.
-const ticketId = computed(() => typeof route.query.ticket === 'string' && /^[1-9]\d{0,9}$/.test(route.query.ticket) ? route.query.ticket : '')
+// Pakai ID tiket persis dari pesanan supaya hasil scan tidak tertukar.
+const ticketId = computed(() => {
+  const ticketQuery = route.query.ticket
+  if (typeof ticketQuery !== 'string' || !/^[1-9]\d{0,9}$/.test(ticketQuery)) {
+    return ''
+  }
+
+  return ticketQuery
+})
 const rows = ref<DashboardCheckin[]>([])
 const search = ref('')
 const query = refDebounced(search, 300)
@@ -18,13 +25,25 @@ const perPage = ref(20)
 const summaryStats = ref<DashboardCheckinsApiResponse['stats'] | null>(null)
 const loading = ref(true)
 const errorMessage = ref('')
+// Kartu dan tabel memakai pesan kosong yang sama.
+const emptyCheckinsMessage = computed(() => {
+  if (search.value || date.value) {
+    return 'Tidak ada riwayat sesuai filter.'
+  }
+
+  if (ticketId.value) {
+    return `Belum ada pengunjung masuk untuk tiket #${ticketId.value}.`
+  }
+
+  return 'Riwayat check-in akan tampil setelah tiket dipindai.'
+})
 let requestId = 0
 const table = useTemplateRef('table')
 const columnVisibility = ref()
-// Daftar jadi tampilan awal; kartu ringkas tetap bisa dipilih dari menu.
+// Tampilkan daftar dulu; kartu ringkas bisa dipilih lewat menu Tampilan.
 const viewMode = ref<'compact' | 'list'>('list')
 
-// Polling memperbarui riwayat tanpa mengosongkan tabel atau mengubah filter petugas.
+// Pembaruan otomatis tidak mengosongkan tabel atau mengubah filter petugas.
 async function loadRows(background = false) {
   const request = ++requestId
   if (!background) {
@@ -32,7 +51,12 @@ async function loadRows(background = false) {
     errorMessage.value = ''
   }
   try {
-    const params = new URLSearchParams({ q: query.value.trim(), date: date.value, page: String(page.value), ticket_id: ticketId.value })
+    const params = new URLSearchParams({
+      q: query.value.trim(),
+      date: date.value,
+      page: String(page.value),
+      ticket_id: ticketId.value
+    })
     const response = await api.get<DashboardCheckinsApiResponse>(`dashboard_checkins.php?${params}`)
     if (request !== requestId) return
     rows.value = response.checkins
@@ -48,7 +72,7 @@ async function loadRows(background = false) {
   }
 }
 
-// Filter baru dimulai dari halaman pertama agar hasil tidak terlewat.
+// Mulai dari halaman pertama setelah filter berubah.
 watch([query, date, ticketId], () => {
   if (page.value !== 1) page.value = 1
   else loadRows()
@@ -57,7 +81,7 @@ watch(page, () => loadRows())
 onMounted(() => loadRows())
 useDashboardAutoRefresh(() => loadRows(true), () => loading.value)
 
-// Petugas bisa kembali ke semua riwayat tanpa menyisakan filter tersembunyi.
+// Tombol reset menghapus semua filter riwayat check-in.
 function resetFilters() {
   search.value = ''
   date.value = ''
@@ -99,7 +123,7 @@ const summaryCards = computed(() => [
   }
 ])
 
-// Identitas tiket selalu ada supaya tautan detail tidak hilang dari tampilan petugas.
+// Nomor tiket tetap tampil supaya petugas bisa membuka pesanan terkait.
 const columns: TableColumn<DashboardCheckin>[] = [
   { accessorKey: 'ticket_id', header: 'Tiket / pelanggan', enableHiding: false, cell: ({ row }) => `#${row.original.ticket_id}` },
   { accessorKey: 'scanned_at', header: 'Waktu masuk (WIB)', cell: ({ row }) => formatDate(row.original.scanned_at, true) },
@@ -107,12 +131,12 @@ const columns: TableColumn<DashboardCheckin>[] = [
   { accessorKey: 'staff_username', header: 'Petugas' }
 ]
 
-// Daftar di layar kecil mengikuti kolom yang dipilih petugas.
+// Di layar kecil, tampilkan kolom yang dipilih petugas.
 function isCheckinColumnVisible(id: string): boolean {
   return columnVisibility.value?.[id] !== false
 }
 
-// Menu Tampilan mengatur mode riwayat dan kolom tabel saat mode daftar aktif.
+// Menu Tampilan mengatur kartu, daftar, dan kolom tabel.
 const displayItems = computed(() => {
   const items = [
     { label: 'Tampilan riwayat', type: 'label' as const },
@@ -179,7 +203,7 @@ const displayItems = computed(() => {
       <div class="flex min-h-0 flex-1 flex-col gap-4">
         <DashboardSummaryCards :cards="summaryCards" :loading="loading" />
 
-        <!-- Arti tiap kejadian dan tanggal dibuat jelas tanpa menambah panel dekoratif. -->
+        <!-- Ringkasan ini menjelaskan arti check-in dan tanggalnya. -->
         <p class="text-sm text-muted">
           Satu baris mencatat satu pengunjung masuk. Klik nomor tiket untuk melihat pesanan.
         </p>
@@ -264,9 +288,9 @@ const displayItems = computed(() => {
           }"
         >
           <template #empty>
-            {{ search || date ? 'Tidak ada riwayat sesuai filter.' : ticketId ? `Belum ada pengunjung masuk untuk tiket #${ticketId}.` : 'Riwayat check-in akan tampil setelah tiket dipindai.' }}
+            {{ emptyCheckinsMessage }}
           </template>
-          <!-- Waktu scan dan identitas tetap memakai data riwayat Tourify. -->
+          <!-- Tampilkan waktu scan dan nomor tiket dari riwayat. -->
           <template #scanned_at-cell="{ row }">
             <div>
               <p class="font-medium tabular-nums text-highlighted">
@@ -290,13 +314,13 @@ const displayItems = computed(() => {
           </template>
         </UTable>
 
-        <!-- Kartu ringkas tetap memperlihatkan waktu, wahana, dan petugas. -->
+        <!-- Kartu menampilkan waktu, wahana, dan petugas yang memindai. -->
         <div v-if="viewMode === 'compact'" class="space-y-3">
           <p v-if="loading && !rows.length" role="status" class="py-6 text-center text-sm text-muted">
             Memuat riwayat check-in…
           </p>
           <p v-else-if="!rows.length" class="py-6 text-center text-sm text-muted">
-            {{ search || date ? 'Tidak ada riwayat sesuai filter.' : ticketId ? `Belum ada pengunjung masuk untuk tiket #${ticketId}.` : 'Riwayat check-in akan tampil setelah tiket dipindai.' }}
+            {{ emptyCheckinsMessage }}
           </p>
           <article
             v-for="checkin in rows"
@@ -346,7 +370,7 @@ const displayItems = computed(() => {
           </article>
         </div>
 
-        <!-- Daftar satu baris memadatkan riwayat pada layar kecil. -->
+        <!-- Di layar kecil, tiap check-in tampil sebagai satu baris ringkas. -->
         <section
           v-if="viewMode === 'list'"
           aria-label="Daftar riwayat check-in"
@@ -356,7 +380,7 @@ const displayItems = computed(() => {
             Memuat riwayat check-in…
           </p>
           <p v-else-if="!rows.length" class="py-6 text-center text-sm text-muted">
-            {{ search || date ? 'Tidak ada riwayat sesuai filter.' : ticketId ? `Belum ada pengunjung masuk untuk tiket #${ticketId}.` : 'Riwayat check-in akan tampil setelah tiket dipindai.' }}
+            {{ emptyCheckinsMessage }}
           </p>
           <article
             v-for="checkin in rows"

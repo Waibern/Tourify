@@ -1,6 +1,6 @@
 <?php
 
-// Konfigurasi rahasia disimpan di luar folder publik dan repo.
+// Simpan konfigurasi dan rahasia di luar folder publik dan repo.
 function getDatabaseConnection(): PDO
 {
     $configPath = getenv('TOURIFY_DB_CONFIG') ?: '/etc/tourify/database.php';

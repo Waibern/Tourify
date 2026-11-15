@@ -8,8 +8,15 @@ import type { AsciiRevealController } from 'ascii-reveal/core'
 const api = useTourifyApi()
 const route = useRoute()
 const router = useRouter()
-// Tautan dari riwayat membatasi hasil ke satu tiket, bukan pencarian ID yang mirip.
-const ticketId = computed(() => typeof route.query.ticket === 'string' && /^[1-9]\d{0,9}$/.test(route.query.ticket) ? route.query.ticket : '')
+// Tautan riwayat memfilter pesanan ke ID tiket yang dipilih.
+const ticketId = computed(() => {
+  const ticketQuery = route.query.ticket
+  if (typeof ticketQuery !== 'string' || !/^[1-9]\d{0,9}$/.test(ticketQuery)) {
+    return ''
+  }
+
+  return ticketQuery
+})
 let openedTicketId = ''
 const rows = ref<DashboardOrder[]>([])
 const search = ref('')
@@ -22,7 +29,7 @@ const summaryStats = ref<DashboardOrdersApiResponse['stats'] | null>(null)
 const orderTrend = ref<DashboardOrderTrendPoint[]>([])
 const loading = ref(true)
 const errorMessage = ref('')
-// Daftar ringkas tampil pertama; kartu bergambar tetap bisa dipilih dari Tampilan.
+// Tampilkan daftar dulu; kartu bergambar bisa dipilih lewat menu Tampilan.
 const viewMode = ref<'cards' | 'list'>('list')
 let requestId = 0
 const status = ref('all')
@@ -41,6 +48,18 @@ const statusItems = [
   { label: 'Terpakai', value: 'Used' },
   { label: 'Kedaluwarsa', value: 'Expire' }
 ]
+// Tabel dan kartu memakai pesan kosong yang sama.
+const emptyOrdersMessage = computed(() => {
+  if (search.value || date.value || status.value !== 'all') {
+    return 'Tidak ada pesanan sesuai filter.'
+  }
+
+  if (ticketId.value) {
+    return `Tiket #${ticketId.value} tidak ditemukan.`
+  }
+
+  return 'Pesanan akan tampil setelah tiket dipesan.'
+})
 
 // Detail memakai pesanan dari tabel yang sedang ditampilkan.
 function showDetail(order: DashboardOrder) {
@@ -48,7 +67,7 @@ function showDetail(order: DashboardOrder) {
   detailOpen.value = true
 }
 
-// Detail bergerak dengan ASCII saat dibuka dan menyelesaikan efeknya sebelum ditutup.
+// Saat dialog dibuka, animasinya selesai dulu sebelum bisa ditutup.
 async function revealOrderDetail() {
   if (reducedMotion.value === 'reduce' || !asciiAnimations.value) return
 
@@ -68,7 +87,7 @@ async function revealOrderDetail() {
   try {
     await controller.reveal({ within: surface })
   } catch {
-    // Detail tetap terbaca kalau efek ASCII gagal.
+    // Tetap tampilkan detail kalau animasi gagal.
     if (detailReveal === controller) {
       controller.destroy()
       detailReveal = null
@@ -85,7 +104,7 @@ async function closeOrderDetail() {
   try {
     if (controller && asciiAnimations.value) await controller.hide(surface ? { within: surface } : {})
   } catch {
-    // Modal tetap ditutup kalau efek ASCII gagal.
+    // Tetap tutup dialog kalau animasi gagal.
   }
   if (detailReveal === controller) {
     controller?.destroy()
@@ -105,20 +124,20 @@ function handleDetailOpenChange(open: boolean) {
   void closeOrderDetail()
 }
 
-// Controller dilepas kalau halaman pesanan ditinggalkan saat dialog masih terbuka.
+// Hentikan animasi saat meninggalkan halaman dengan dialog yang masih terbuka.
 onBeforeUnmount(() => {
   detailReveal?.destroy()
   detailReveal = null
 })
 
-// Hentikan detail yang sedang bergerak kalau efek ASCII dimatikan dari tab lain.
+// Hentikan animasi detail kalau pengguna mematikannya di tab lain.
 watch(asciiAnimations, (enabled) => {
   if (enabled) return
   detailReveal?.destroy()
   detailReveal = null
 })
 
-// Reset menghapus semua pembatas, termasuk tiket yang dibuka dari halaman riwayat.
+// Reset menghapus semua filter, termasuk ID dari tautan riwayat.
 function resetFilters() {
   search.value = ''
   date.value = ''
@@ -126,7 +145,7 @@ function resetFilters() {
   void router.replace({ query: { ...route.query, ticket: undefined } })
 }
 
-// Polling tidak menyalakan loading; respons lama tetap diabaikan saat filter berubah.
+// Pembaruan otomatis tidak mengosongkan daftar; hasil lama diabaikan saat filter berubah.
 async function loadRows(background = false) {
   const request = ++requestId
   if (!background) {
@@ -134,7 +153,13 @@ async function loadRows(background = false) {
     errorMessage.value = ''
   }
   try {
-    const params = new URLSearchParams({ q: query.value.trim(), date: date.value, page: String(page.value), status: status.value === 'all' ? '' : status.value, ticket_id: ticketId.value })
+    const params = new URLSearchParams({
+      q: query.value.trim(),
+      date: date.value,
+      page: String(page.value),
+      status: status.value === 'all' ? '' : status.value,
+      ticket_id: ticketId.value
+    })
     const response = await api.get<DashboardOrdersApiResponse>(`dashboard_orders.php?${params}`)
     if (request !== requestId) return
     rows.value = response.orders
@@ -144,11 +169,11 @@ async function loadRows(background = false) {
     orderTrend.value = response.order_trend ?? []
     page.value = response.page
     errorMessage.value = ''
-    // Detail terbuka ikut mendapat status check-in terbaru dari pesanan yang sama.
+    // Perbarui status check-in di detail bersama daftar pesanan.
     if (detailOpen.value && selected.value) {
       selected.value = response.orders.find(order => order.id === selected.value?.id) ?? selected.value
     }
-    // Detail tautan tiket dibuka sekali; menutup modal tidak memunculkannya lagi saat refresh data.
+    // Buka detail dari tautan sekali saja; pembaruan data tidak membukanya lagi.
     const linkedOrder = response.orders.find(order => order.id === ticketId.value)
     if (linkedOrder && openedTicketId !== ticketId.value) {
       openedTicketId = ticketId.value
@@ -161,7 +186,7 @@ async function loadRows(background = false) {
   }
 }
 
-// Filter baru dimulai dari halaman pertama agar hasil tidak terlewat.
+// Mulai dari halaman pertama setelah filter berubah.
 watch(ticketId, () => {
   openedTicketId = ''
 })
@@ -178,7 +203,7 @@ function formatDate(value: string, withTime = false): string {
   const formatted = (day ?? '').split('-').reverse().join('-')
   return withTime ? `${formatted} ${(time ?? '').slice(0, 8)}` : formatted
 }
-// Nilai uang diformat dari total tersimpan, bukan dihitung ulang dari harga wahana terbaru.
+// Gunakan total yang tersimpan supaya perubahan harga wahana tidak mengubah riwayat.
 function formatRupiah(value: number): string {
   return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(value)
 }
@@ -190,7 +215,7 @@ const summaryCards = computed(() => [
     value: summaryStats.value ? numberFormat.format(summaryStats.value.orders) : '—',
     hint: 'Semua pesanan',
     icon: 'i-lucide-receipt',
-    // Nilai total tetap sepanjang waktu; grafik menunjukkan aktivitas 14 hari terakhir.
+    // Total pesanan dihitung sepanjang waktu, sementara grafik menampilkan 14 hari terakhir.
     trend: orderTrend.value.map(point => ({ date: point.date, value: point.order_count })),
     trendLabel: 'Pesanan per hari · 14 hari terakhir'
   },
@@ -212,7 +237,7 @@ function statusLabel(value: DashboardOrder['status']): string {
   return { Active: 'Aktif', Used: 'Terpakai', Expire: 'Kedaluwarsa' }[value]
 }
 
-// Daftar ringkas mengikuti kolom yang dipilih lewat menu Tampilan.
+// Tampilkan kolom yang dipilih lewat menu Tampilan.
 function isOrderColumnVisible(id: string): boolean {
   return columnVisibility.value?.[id] !== false
 }
@@ -227,7 +252,7 @@ const columns: TableColumn<DashboardOrder>[] = [
   { id: 'actions', header: 'Detail', enableHiding: false }
 ]
 
-// Pilihan kartu dan daftar tinggal di menu yang sama dengan pengaturan kolom.
+// Pilihan kartu, daftar, dan kolom ada di menu Tampilan yang sama.
 const displayItems = computed(() => {
   const items = [
     { label: 'Tampilan pesanan', type: 'label' as const },
@@ -294,7 +319,7 @@ const displayItems = computed(() => {
       <div class="flex min-h-0 flex-1 flex-col gap-4">
         <DashboardSummaryCards :cards="summaryCards" :loading="loading" />
 
-        <!-- Label tetap terlihat supaya tanggal kunjungan tidak tertukar dengan tanggal pemesanan. -->
+        <!-- Bedakan tanggal kunjungan dari tanggal pemesanan. -->
         <div class="flex flex-wrap items-end gap-3">
           <UFormField label="Cari pesanan" class="w-full sm:min-w-64 sm:flex-1">
             <UInput
@@ -360,7 +385,7 @@ const displayItems = computed(() => {
           :description="errorMessage"
           :actions="[{ label: 'Coba lagi', onClick: () => loadRows() }]"
         />
-        <!-- Nomor tiket tetap terlihat saat tabel digeser dan bisa langsung membuka detail. -->
+        <!-- Nomor tiket tetap terlihat saat tabel digeser dan bisa membuka detail. -->
         <UTable
           ref="table"
           v-model:column-visibility="columnVisibility"
@@ -378,9 +403,9 @@ const displayItems = computed(() => {
           }"
         >
           <template #empty>
-            {{ search || date || status !== 'all' ? 'Tidak ada pesanan sesuai filter.' : ticketId ? `Tiket #${ticketId} tidak ditemukan.` : 'Pesanan akan tampil setelah tiket dipesan.' }}
+            {{ emptyOrdersMessage }}
           </template>
-          <!-- Detail di tiap baris tetap memakai data tiket Tourify. -->
+          <!-- Detail menampilkan data dari tiket yang dipilih. -->
           <template #id-cell="{ row }">
             <div class="min-w-0">
               <button
@@ -438,13 +463,13 @@ const displayItems = computed(() => {
           </template>
         </UTable>
 
-        <!-- Ringkas tiap tiket supaya data dan aksi utama muat di layar sentuh. -->
+        <!-- Kartu menampilkan ringkasan tiket dan tombol utamanya. -->
         <div v-if="viewMode === 'cards'" class="space-y-3">
           <p v-if="loading && !rows.length" role="status" class="py-6 text-center text-sm text-muted">
             Memuat pesanan…
           </p>
           <p v-else-if="!rows.length" class="py-6 text-center text-sm text-muted">
-            {{ search || date || status !== 'all' ? 'Tidak ada pesanan sesuai filter.' : ticketId ? `Tiket #${ticketId} tidak ditemukan.` : 'Pesanan akan tampil setelah tiket dipesan.' }}
+            {{ emptyOrdersMessage }}
           </p>
           <article
             v-for="order in rows"
@@ -531,7 +556,7 @@ const displayItems = computed(() => {
           </article>
         </div>
 
-        <!-- Daftar ringkas tetap satu kolom dan tidak memakai banner foto. -->
+        <!-- Tampilan HP memakai satu kolom tanpa banner foto. -->
         <section
           v-if="viewMode === 'list'"
           aria-label="Daftar pesanan"
@@ -541,7 +566,7 @@ const displayItems = computed(() => {
             Memuat pesanan…
           </p>
           <p v-else-if="!rows.length" class="py-6 text-center text-sm text-muted">
-            {{ search || date || status !== 'all' ? 'Tidak ada pesanan sesuai filter.' : ticketId ? `Tiket #${ticketId} tidak ditemukan.` : 'Pesanan akan tampil setelah tiket dipesan.' }}
+            {{ emptyOrdersMessage }}
           </p>
           <article
             v-for="order in rows"
@@ -634,7 +659,7 @@ const displayItems = computed(() => {
           />
         </div>
       </div>
-      <!-- Detail punya gradasi tipis dan reveal ASCII saat buka-tutup. -->
+      <!-- Dialog detail memakai animasi saat dibuka dan ditutup. -->
       <UModal
         :open="detailOpen"
         :title="selected ? `Pesanan #${selected.id}` : 'Detail pesanan'"
@@ -646,7 +671,7 @@ const displayItems = computed(() => {
         @update:open="handleDetailOpenChange"
         @after:enter="revealOrderDetail"
       >
-        <!-- Nama tombol tutup tetap bahasa Indonesia untuk pembaca layar. -->
+        <!-- Label tombol tutup dibaca dalam bahasa Indonesia. -->
         <template #close="{ ui }">
           <UButton
             icon="i-lucide-x"
@@ -658,7 +683,7 @@ const displayItems = computed(() => {
         </template>
         <template #body>
           <div v-if="selected" class="space-y-5 text-sm">
-            <!-- Foto wahana ikut tampil di detail tiket. -->
+            <!-- Tampilkan foto wahana di detail tiket. -->
             <div class="relative h-40 overflow-hidden rounded-xl sm:h-48">
               <img
                 :src="wahanaImage(selected.wahana_id)"

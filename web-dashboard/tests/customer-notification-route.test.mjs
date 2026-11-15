@@ -6,7 +6,7 @@ import ts from 'typescript'
 import { parse } from 'vue/compiler-sfc'
 import { computed, effectScope, nextTick, reactive, ref, watch } from 'vue'
 
-// Jalankan filter halaman asli agar ID dari notifikasi diuji tanpa data server palsu.
+// Pakai filter halaman asli untuk memastikan ID notifikasi cocok tanpa server.
 const { descriptor } = parse(readFileSync(new URL('../app/pages/customers.vue', import.meta.url), 'utf8'))
 const source = ts.createSourceFile('customers.ts', descriptor.scriptSetup.content, ts.ScriptTarget.Latest, true)
 const script = source.statements.filter(node => !ts.isImportDeclaration(node)).map(node => node.getText(source)).join('\n')

@@ -2,6 +2,12 @@
 
 ## Tipografi
 
+- Gunakan **Plus Jakarta Sans** untuk headline dan teks isi.
+- Gunakan **Inter** untuk label.
+- **Primary:** `#059669` untuk aksi utama dan elemen brand.
+- **Secondary:** `#10B981` untuk aksen dan sorotan pendukung.
+- **Tertiary:** `#047857` untuk variasi hijau yang lebih dalam.
+- **Neutral:** `#0F172A` untuk teks utama dan elemen netral gelap.
 - Pastikan teks nyaman dibaca di layar ponsel; jangan memakai ukuran yang terlalu kecil.
 - Gunakan ukuran sekitar 16 sp untuk teks isi dan minimal 14 sp untuk label atau teks pendukung.
 - Hindari ukuran di bawah 14 sp. Kalau benar-benar diperlukan, pastikan teks tetap terbaca dan bukan untuk informasi penting.

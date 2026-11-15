@@ -1,4 +1,4 @@
--- Skema dasar Tourify tanpa data pengguna.
+-- Struktur tabel Tourify; file ini tidak berisi data pengguna.
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS=0;
 

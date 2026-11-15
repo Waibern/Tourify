@@ -1,6 +1,6 @@
 <?php
 
-// Kedua penanda harus lengkap supaya koneksi ulang tidak menganggap data lama sebagai kejadian baru.
+// Perlu dua penanda supaya polling tidak mengulang aktivitas lama.
 function dashboardActivityCursor(array $query): ?array
 {
     if (!array_key_exists('after_order', $query) && !array_key_exists('after_customer', $query)) {
@@ -19,7 +19,7 @@ function dashboardActivityCursor(array $query): ?array
     return $cursor;
 }
 
-// Polling pertama hanya mengambil patokan; notifikasi dimulai dari aktivitas sesudahnya.
+// Polling pertama menyimpan titik awal; notifikasi mulai dari aktivitas berikutnya.
 function loadDashboardActivity(PDO $pdo, ?array $cursor): array
 {
     if ($cursor === null) {
@@ -30,7 +30,7 @@ function loadDashboardActivity(PDO $pdo, ?array $cursor): array
         return ['cursor' => array_map('strval', $row), 'events' => []];
     }
 
-    // Ambil bertahap berdasarkan ID agar beberapa aktivitas dalam satu detik tetap terbaca.
+    // Ambil aktivitas bertahap lewat ID supaya data dengan waktu sama tidak terlewat.
     $orders = $pdo->prepare(
         'SELECT t.id, u.username, w.name AS wahana_name, t.quantity, t.total_price, t.booking_date '
         . 'FROM tickets t INNER JOIN users u ON u.id = t.user_id '
@@ -54,7 +54,7 @@ function loadDashboardActivity(PDO $pdo, ?array $cursor): array
         ];
     }
 
-    // Akun admin dan gate tidak masuk ke notifikasi pendaftaran pelanggan.
+    // Notifikasi pelanggan hanya muncul untuk akun customer baru.
     $customers = $pdo->prepare(
         "SELECT id, username, created_at FROM users WHERE role = 'customer' "
         . 'AND id > :after_id ORDER BY id ASC LIMIT 20'
@@ -72,7 +72,7 @@ function loadDashboardActivity(PDO $pdo, ?array $cursor): array
         ];
     }
 
-    // Pesanan dan pendaftaran ditampilkan mengikuti urutan waktu, dengan ID sebagai pembeda.
+    // Urutkan pesanan dan akun baru berdasarkan waktu, lalu ID kalau waktunya sama.
     usort($events, static fn (array $a, array $b): int =>
         strcmp($a['occurred_at'], $b['occurred_at']) ?: strcmp($a['id'], $b['id'])
     );

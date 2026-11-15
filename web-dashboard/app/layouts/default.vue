@@ -1,50 +1,20 @@
 <script setup lang="ts">
-import { createAsciiReveal } from 'ascii-reveal/core'
 import type { NavigationMenuItem } from '@nuxt/ui'
 
 const auth = useDashboardAuth()
 const route = useRoute()
 
-// Aktivitas baru tetap terpantau di seluruh halaman admin.
+// Notifikasi baru tetap masuk saat admin pindah halaman.
 const { newOrderCount, newCustomerCount } = useDashboardActivity()
 
 const open = ref(false)
-const ghostHost = ref<HTMLElement | null>(null)
-const reducedMotion = usePreferredReducedMotion()
-const { asciiAnimations } = useDashboardPreferences()
 
-// Hantu tampil sebentar setiap kali sidebar dibuka, lalu canvas-nya dibersihkan.
-watch([ghostHost, reducedMotion, asciiAnimations], ([host, motion, animations], _previous, onCleanup) => {
-  if (!host || motion === 'reduce' || !animations) return
-
-  const reveal = createAsciiReveal(host, { mascot: '/logo-putih.svg' })
-  let destroyed = false
-  let destroyTimer: ReturnType<typeof window.setTimeout> | undefined
-  const destroyReveal = () => {
-    if (destroyed) return
-    destroyed = true
-    reveal.destroy()
-  }
-
-  reveal.shimmer(true)
-  const hideTimer = window.setTimeout(() => {
-    reveal.shimmer(false)
-    destroyTimer = window.setTimeout(destroyReveal, 300)
-  }, 1600)
-
-  onCleanup(() => {
-    window.clearTimeout(hideTimer)
-    if (destroyTimer) window.clearTimeout(destroyTimer)
-    destroyReveal()
-  })
-}, { flush: 'post' })
-
-// Menu samping ditutup setelah halaman dipilih.
+// Tutup menu samping setelah halaman dipilih.
 function closeSidebar() {
   open.value = false
 }
 
-// Tutup menu HP saat sidebar menetap agar overlay tidak menyisakan kunci fokus.
+// Tutup menu HP saat sidebar terbuka di layar lebar.
 const sidebarVisible = useMediaQuery('(min-width: 768px)')
 watch(sidebarVisible, (visible) => {
   if (visible) {
@@ -52,7 +22,7 @@ watch(sidebarVisible, (visible) => {
   }
 })
 
-// Tiap halaman pengaturan punya tautan sendiri seperti di template dashboard.
+// Setiap halaman pengaturan punya tautan sendiri di menu.
 const settingsLinks = computed<NavigationMenuItem[]>(() => {
   const items: NavigationMenuItem[] = [{
     label: 'Umum',
@@ -86,7 +56,7 @@ const settingsLinks = computed<NavigationMenuItem[]>(() => {
   return items
 })
 
-// Menu utama hanya menampilkan halaman yang bisa dibuka role saat ini.
+  // Tampilkan halaman yang boleh dibuka oleh peran akun ini.
 const links = computed<NavigationMenuItem[]>(() => {
   const isAdmin = auth.user.value?.role === 'admin'
   const primary: NavigationMenuItem[] = []
@@ -96,7 +66,7 @@ const links = computed<NavigationMenuItem[]>(() => {
       label: 'Overview',
       icon: 'i-lucide-chart-no-axes-combined',
       to: '/',
-      // Isi aktif dan lapisan hover memakai bentuk kapsul yang sama.
+      // Menu aktif dan menu yang disorot memakai bentuk kapsul yang sama.
       class: route.path === '/'
         ? 'rounded-full before:rounded-full bg-[linear-gradient(90deg,rgba(255,255,255,0.14)_0%,rgba(255,255,255,0.025)_24%,rgba(255,255,255,0.025)_76%,rgba(255,255,255,0.14)_100%)] ring-1 ring-inset ring-white/10'
         : undefined,
@@ -153,7 +123,7 @@ const links = computed<NavigationMenuItem[]>(() => {
     })
   }
 
-  // Ikon gear mengikuti template; pengaturan dibuka sebagai daftar halaman.
+  // Ikon roda gigi membuka daftar halaman pengaturan.
   primary.push({
     label: 'Pengaturan',
     icon: 'i-lucide-settings',
@@ -163,7 +133,7 @@ const links = computed<NavigationMenuItem[]>(() => {
     children: settingsLinks.value
   })
 
-  // Nama tautan tetap terbaca saat sidebar hanya menampilkan ikon.
+  // Label menu tetap tersedia saat sidebar hanya menampilkan ikon.
   return primary.map(item => ({
     ...item,
     ...{ 'aria-label': item.label },
@@ -174,7 +144,7 @@ const links = computed<NavigationMenuItem[]>(() => {
   }))
 })
 
-// Palette memakai menu yang tersedia untuk role saat ini.
+// Pencarian hanya menampilkan menu yang boleh dibuka akun ini.
 const searchGroups = computed(() => [{
   id: 'navigation',
   label: 'Menu dashboard',
@@ -208,7 +178,7 @@ const searchGroups = computed(() => [{
           class="bg-transparent ring-default"
         />
 
-        <!-- Jarak antar tautan dibuat lega supaya navigasi mudah dipindai. -->
+        <!-- Jarak menu dibuat lega supaya tiap pilihan mudah dibaca. -->
         <UNavigationMenu
           :collapsed="collapsed"
           :items="links"
@@ -218,12 +188,6 @@ const searchGroups = computed(() => [{
           popover
         />
 
-        <div
-          v-if="!collapsed && asciiAnimations"
-          ref="ghostHost"
-          aria-hidden="true"
-          class="relative mt-8 h-36 shrink-0 overflow-hidden text-primary min-[768px]:h-80"
-        />
       </template>
 
       <template #footer="{ collapsed }">

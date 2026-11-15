@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+   Contoh aturan backup dan pemindahan data. Ubah kalau diperlukan.
+   Baca https://developer.android.com/about/versions/12/backup-restore#xml-changes
+   untuk detailnya.
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
+        <!-- TODO: Pakai <include> dan <exclude> untuk memilih data yang ikut di-backup.
         <include .../>
         <exclude .../>
         -->
     </cloud-backup>
-    <!--
+    <!-- Atur data yang ikut saat pindah perangkat di bagian ini.
     <device-transfer>
         <include .../>
         <exclude .../>

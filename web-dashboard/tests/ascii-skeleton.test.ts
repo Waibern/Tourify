@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { asciiSkeletonHTML } from 'ascii-reveal/core'
 
-// API core harus bisa dirender tanpa window, dengan pola stabil untuk SSR dan hydration.
+// Komponen bisa dirender di server tanpa window dan hasilnya tetap sama di browser.
 for (const rows of [2, 3, 8]) {
   const options = { variant: 'dither' as const, rows, css: false }
   const html = asciiSkeletonHTML(options)

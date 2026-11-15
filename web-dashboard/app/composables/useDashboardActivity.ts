@@ -5,12 +5,12 @@ export interface DashboardActivityNotification {
   unread: boolean
 }
 
-// Panel lonceng memakai feed yang sama dengan notifikasi aktivitas langsung.
+// Lonceng menampilkan notifikasi yang sama dengan aktivitas dashboard.
 export function useDashboardActivityFeed() {
   return useState<DashboardActivityNotification[]>('tourify-dashboard-activity-feed', () => [])
 }
 
-// Monitor tinggal di layout agar berpindah halaman tidak mengulang patokan atau notifikasi.
+// Pantau aktivitas dari layout supaya pindah halaman tidak mengulang hitungan.
 export function useDashboardActivity() {
   const api = useTourifyApi()
   const { user } = useDashboardAuth()
@@ -20,10 +20,10 @@ export function useDashboardActivity() {
   const notificationFeed = useDashboardActivityFeed()
   const newOrderCount = ref(0)
   const newCustomerCount = ref(0)
-  let cursor: DashboardActivityCursor | null = null
-  let busy = false
-  let generation = 0
-  let disposed = false
+  let activityCursor: DashboardActivityCursor | null = null
+  let isPolling = false
+  let accountGeneration = 0
+  let isDisposed = false
   const adminId = computed(() => user.value?.role === 'admin' ? user.value.id : null)
 
   function dismissActivity() {
@@ -33,50 +33,50 @@ export function useDashboardActivity() {
   }
 
   async function poll() {
-    if (adminId.value === null || busy || disposed) return
-    const requestGeneration = generation
-    busy = true
+    if (adminId.value === null || isPolling || isDisposed) return
+    const requestGeneration = accountGeneration
+    isPolling = true
     try {
-      const params = cursor
-        ? `?${new URLSearchParams({ after_order: cursor.order_id, after_customer: cursor.customer_id })}`
+      const params = activityCursor
+        ? `?${new URLSearchParams({ after_order: activityCursor.order_id, after_customer: activityCursor.customer_id })}`
         : ''
       const response = await api.get<DashboardActivityApiResponse>(`dashboard_activity.php${params}`)
-      if (disposed || requestGeneration !== generation || !response.success) return
+      if (isDisposed || requestGeneration !== accountGeneration || !response.success) return
 
-      // Patokan baru disimpan setelah request berhasil; kegagalan jaringan dicoba lagi nanti.
-      const previous = cursor
-      cursor = response.cursor
-      if (!previous) return
-      const delivered = new Set<string>()
+      // Simpan penanda setelah permintaan berhasil supaya bisa dicoba lagi kalau jaringan bermasalah.
+      const previousCursor = activityCursor
+      activityCursor = response.cursor
+      if (!previousCursor) return
+      const deliveredEventIds = new Set<string>()
       for (const event of response.events) {
-        const after = event.type === 'order' ? previous.order_id : previous.customer_id
-        if (BigInt(event.entity_id) <= BigInt(after) || delivered.has(event.id)) continue
-        delivered.add(event.id)
-        // Badge hanya menghitung aktivitas baru pada menu yang belum dibuka.
+        const previousId = event.type === 'order' ? previousCursor.order_id : previousCursor.customer_id
+        if (BigInt(event.entity_id) <= BigInt(previousId) || deliveredEventIds.has(event.id)) continue
+        deliveredEventIds.add(event.id)
+        // Hitung aktivitas yang belum dilihat pada halamannya.
         if (event.type === 'order' && route.path !== '/orders') newOrderCount.value++
         if (event.type === 'customer' && route.path !== '/customers') newCustomerCount.value++
         const id = notify(event)
         if (!id) continue
         notificationFeed.value.unshift({ activity: event, unread: true })
         if (notificationFeed.value.length > 30) notificationFeed.value.length = 30
-        // Nuxt memasang toast pada tick berikutnya; batalkan juga antreannya bila akun sudah keluar.
+        // Setelah notifikasi muncul, cek lagi apakah admin masih login.
         await nextTick()
-        if (disposed || requestGeneration !== generation) {
+        if (isDisposed || requestGeneration !== accountGeneration) {
           toast.remove(id)
           break
         }
       }
     } catch {
-      // Gangguan sementara tidak menimpa data dashboard atau memunculkan toast error berulang.
+      // Gangguan sementara tidak menghapus data atau memunculkan pesan error terus-menerus.
     } finally {
-      busy = false
+      isPolling = false
     }
   }
 
-  // Ganti akun membuang patokan lama dan respons yang masih berjalan.
+  // Saat akun berubah, reset penanda dan abaikan permintaan yang masih berjalan.
   watch(adminId, () => {
-    generation++
-    cursor = null
+    accountGeneration++
+    activityCursor = null
     newOrderCount.value = 0
     newCustomerCount.value = 0
     notificationFeed.value = []
@@ -87,10 +87,10 @@ export function useDashboardActivity() {
     if (path === '/orders') newOrderCount.value = 0
     if (path === '/customers') newCustomerCount.value = 0
   }, { immediate: true })
-  useDashboardAutoRefresh(poll, () => busy || adminId.value === null)
+  useDashboardAutoRefresh(poll, () => isPolling || adminId.value === null)
   onBeforeUnmount(() => {
-    disposed = true
-    generation++
+    isDisposed = true
+    accountGeneration++
     dismissActivity()
   })
 

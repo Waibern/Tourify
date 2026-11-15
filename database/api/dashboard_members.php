@@ -3,7 +3,7 @@ require_once __DIR__ . '/common.php';
 configureDashboardCors();
 header('Content-Type: application/json; charset=utf-8');
 
-// Pengelolaan akun dashboard hanya boleh dilakukan admin.
+// Hanya admin yang boleh mengelola akun dashboard.
 $dashboardUser = requireDashboardRole(['admin']);
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 if (!in_array($method, ['GET', 'POST', 'PUT', 'DELETE'], true)) {
@@ -32,6 +32,7 @@ try {
         respond(200, ['success' => true, 'members' => $members]);
     }
 
+    // Buat akun baru setelah username, password, dan perannya lolos pemeriksaan.
     if ($method === 'POST') {
         $input = readJsonInput();
         $username = $input['username'] ?? '';
@@ -101,6 +102,7 @@ try {
             respond(400, ['success' => false, 'message' => 'Peran akun dashboard tidak valid.']);
         }
 
+        // Kunci daftar admin supaya dua perubahan bersamaan tidak menurunkan admin terakhir.
         $pdo->beginTransaction();
         $adminIds = $pdo->query(
             "SELECT id FROM users WHERE role = 'admin' ORDER BY id FOR UPDATE"
@@ -136,6 +138,7 @@ try {
         ]);
     }
 
+    // Hapus anggota hanya kalau bukan admin terakhir dan belum punya riwayat.
     $pdo->beginTransaction();
     $adminIds = $pdo->query(
         "SELECT id FROM users WHERE role = 'admin' ORDER BY id FOR UPDATE"

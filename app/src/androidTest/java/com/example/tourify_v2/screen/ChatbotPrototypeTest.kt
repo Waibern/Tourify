@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.graphics.Bitmap
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -31,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Icon
@@ -47,13 +47,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
@@ -87,7 +82,7 @@ private val ChatMuted = Color(0xFF777873)
 private val ChatBubble = Color(0xFFF1F1EF)
 private val ChatYellow = Color(0xFFFFDF58)
 
-// Tes ini merender tombol sparkle dan layar chat pratinjau yang belum memanggil API.
+// Tes ini menampilkan tombol Asisten dan chat contoh tanpa memanggil API.
 @RunWith(AndroidJUnit4::class)
 class ChatbotPrototypeTest {
     @get:Rule
@@ -130,7 +125,7 @@ class ChatbotPrototypeTest {
             .assertIsDisplayed()
     }
 
-    // Screenshot tes disimpan supaya susunan chat bisa dicek di emulator.
+    // Simpan screenshot supaya susunan chat bisa dicek di emulator.
     private fun capture(name: String) {
         compose.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -142,13 +137,14 @@ class ChatbotPrototypeTest {
     }
 }
 
-// Layar beranda tiruan menjaga uji fokus ke posisi tombol mengambang.
+// Beranda contoh ini dipakai untuk mengecek posisi tombol Asisten.
+// Chat contoh memakai ikon yang sama dengan aplikasi.
 @Composable
 private fun ChatbotPrototype(startInChat: Boolean = false) {
     var isChatOpen by rememberSaveable { mutableStateOf(startInChat) }
     val view = LocalView.current
 
-    // Ikon status bar dibuat gelap agar terbaca di atas latar terang prototipe.
+    // Ikon status bar dibuat gelap supaya terlihat di latar terang.
     SideEffect {
         view.context.findHostActivity()?.window?.let { window ->
             WindowInsetsControllerCompat(window, view).apply {
@@ -211,7 +207,7 @@ private fun ChatbotPrototype(startInChat: Boolean = false) {
                 }
             }
 
-            // Tombol kuning dengan ikon sparkle mengikuti gambar referensi.
+            // Tombol kuning dan ikon Asisten mengikuti desain contoh.
             Surface(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
@@ -251,7 +247,7 @@ private fun ChatbotPrototype(startInChat: Boolean = false) {
     }
 }
 
-// Layar percakapan memakai bubble abu terang dan composer dengan aksen kuning.
+// Chat contoh memakai balon abu terang dan kolom input beraksen kuning.
 @Composable
 private fun ChatbotPreviewScreen(onClose: () -> Unit) {
     val messages = remember {
@@ -279,7 +275,7 @@ private fun ChatbotPreviewScreen(onClose: () -> Unit) {
             .statusBarsPadding()
             .imePadding()
     ) {
-        // Header menyediakan tombol kembali, mulai chat baru, dan tutup layar.
+        // Header punya tombol kembali, chat baru, dan tutup.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -292,7 +288,10 @@ private fun ChatbotPreviewScreen(onClose: () -> Unit) {
                 iconDescription = "Kembali ke beranda",
                 onClick = onClose
             ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = null
+                )
             }
             Text(
                 text = "Asisten Tourify",
@@ -315,13 +314,19 @@ private fun ChatbotPreviewScreen(onClose: () -> Unit) {
                         )
                     }
                 ) {
-                    Icon(Icons.Filled.Edit, contentDescription = null)
+                    Icon(
+                        imageVector = Icons.Filled.Edit,
+                        contentDescription = null
+                    )
                 }
                 PreviewHeaderButton(
                     iconDescription = "Tutup chat",
                     onClick = onClose
                 ) {
-                    Icon(Icons.Filled.Close, contentDescription = null)
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = null
+                    )
                 }
             }
         }
@@ -374,7 +379,7 @@ private fun ChatbotPreviewScreen(onClose: () -> Unit) {
     }
 }
 
-// Bubble pesan dibedakan lewat posisi dan warna, tanpa menambah ornamen berlebih.
+// Posisi dan warna membedakan pesan pengguna dari balasan asisten.
 @Composable
 private fun ChatPreviewBubble(message: ChatPreviewMessage) {
     Row(
@@ -412,7 +417,7 @@ private fun ChatPreviewBubble(message: ChatPreviewMessage) {
     }
 }
 
-// Composer menyimpan draft dan menambahkan jawaban lokal untuk menguji alur tampilan.
+// Kolom input menyimpan draf dan menambahkan balasan contoh untuk tes tampilan.
 @Composable
 private fun ChatPreviewComposer(
     draft: String,
@@ -481,7 +486,7 @@ private fun ChatPreviewComposer(
                             modifier = Modifier.size(40.dp)
                         ) {
                             Icon(
-                                Icons.Filled.Add,
+                                imageVector = Icons.Filled.Add,
                                 contentDescription = "Isi contoh pertanyaan",
                                 tint = ChatMuted
                             )
@@ -518,7 +523,7 @@ private fun ChatPreviewComposer(
                             fontWeight = FontWeight.SemiBold
                         )
                         Icon(
-                            Icons.AutoMirrored.Filled.Send,
+                            imageVector = Icons.AutoMirrored.Filled.Send,
                             contentDescription = "Kirim pesan",
                             tint = ChatInk,
                             modifier = Modifier.size(16.dp)
@@ -530,7 +535,7 @@ private fun ChatPreviewComposer(
     }
 }
 
-// Tombol header memakai lingkaran lembut seperti kontrol pada screenshot.
+// Tombol header berbentuk bulat seperti di gambar contoh.
 @Composable
 private fun PreviewHeaderButton(
     iconDescription: String,
@@ -557,54 +562,24 @@ private fun PreviewHeaderButton(
     }
 }
 
-// Ikon custom menggambar sparkle garis tipis seperti ikon pada tombol referensi.
+// Chat contoh memakai ikon Asisten yang sama dengan navbar.
 @Composable
 private fun SparkleMark(modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier) {
-        val centerX = size.width * 0.46f
-        val centerY = size.height * 0.54f
-        val radius = size.minDimension * 0.39f
-        val sparkle = Path().apply {
-            moveTo(centerX, centerY - radius)
-            cubicTo(centerX + radius * 0.08f, centerY - radius * 0.25f, centerX + radius * 0.25f, centerY - radius * 0.08f, centerX + radius, centerY)
-            cubicTo(centerX + radius * 0.25f, centerY + radius * 0.08f, centerX + radius * 0.08f, centerY + radius * 0.25f, centerX, centerY + radius)
-            cubicTo(centerX - radius * 0.08f, centerY + radius * 0.25f, centerX - radius * 0.25f, centerY + radius * 0.08f, centerX - radius, centerY)
-            cubicTo(centerX - radius * 0.25f, centerY - radius * 0.08f, centerX - radius * 0.08f, centerY - radius * 0.25f, centerX, centerY - radius)
-            close()
-        }
-        drawPath(
-            path = sparkle,
-            color = ChatInk,
-            style = Stroke(
-                width = 1.8.dp.toPx(),
-                cap = StrokeCap.Round,
-                join = StrokeJoin.Round
-            )
-        )
-        drawLine(
-            color = ChatInk,
-            start = Offset(size.width * 0.78f, size.height * 0.13f),
-            end = Offset(size.width * 0.78f, size.height * 0.31f),
-            strokeWidth = 1.5.dp.toPx(),
-            cap = StrokeCap.Round
-        )
-        drawLine(
-            color = ChatInk,
-            start = Offset(size.width * 0.69f, size.height * 0.22f),
-            end = Offset(size.width * 0.87f, size.height * 0.22f),
-            strokeWidth = 1.5.dp.toPx(),
-            cap = StrokeCap.Round
-        )
-    }
+    Icon(
+        imageVector = Icons.Filled.AutoAwesome,
+        contentDescription = null,
+        tint = ChatInk,
+        modifier = modifier
+    )
 }
 
-// Model kecil untuk percakapan statis di tes UI.
+// Data sederhana untuk isi chat di tes UI.
 private data class ChatPreviewMessage(
     val fromUser: Boolean,
     val text: String
 )
 
-// Context wrapper pada Compose test dibuka sampai activity host untuk atur system bar.
+// Ambil activity host dari context supaya tes bisa mengatur system bar.
 private tailrec fun Context.findHostActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findHostActivity()

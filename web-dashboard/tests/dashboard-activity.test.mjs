@@ -5,7 +5,7 @@ import vm from 'node:vm'
 import ts from 'typescript'
 import { computed, effectScope, nextTick, ref, shallowRef, watch } from 'vue'
 
-// Jalankan composable asli dengan API dan toast terkendali, tanpa menambah data ke server.
+// Uji composable asli dengan API dan notifikasi tiruan tanpa mengubah data server.
 function compileComposable(name) {
   const source = ts.createSourceFile(`${name}.ts`, readFileSync(new URL(`../app/composables/${name}.ts`, import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true)
   const owner = source.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name)
@@ -165,7 +165,7 @@ test('toast yang masih mengantre tidak muncul lagi setelah logout', async (t) =>
     }
     return { success: true, cursor: { order_id: '11', customer_id: '6' }, events: [order, customer] }
   }, 'admin', ({ toast, toasts, user }) => {
-    // Modelkan antrean Nuxt yang baru menambah toast setelah flush perubahan akun.
+    // Simulasikan notifikasi yang muncul setelah akun berubah.
     user.value = null
     void nextTick(() => toasts.value.push(toast))
   })

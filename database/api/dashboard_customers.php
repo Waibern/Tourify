@@ -13,12 +13,12 @@ if (!in_array($method, ['GET', 'DELETE'], true)) {
 try {
     $pdo = getDatabaseConnection();
 
-    // Pelanggan online adalah akun customer yang mengirim heartbeat dalam 5 menit terakhir.
+    // Pelanggan dianggap online kalau aplikasinya aktif dalam 5 menit terakhir.
     $onlineCount = (int) $pdo->query(
         "SELECT COUNT(*) FROM users WHERE role = 'customer' AND last_seen_at >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 5 MINUTE)"
     )->fetchColumn();
 
-    // Hapus dilakukan sekaligus dan ditolak kalau akun punya riwayat transaksi.
+    // Akun yang punya riwayat transaksi tidak bisa dihapus.
     if ($method === 'DELETE') {
         $input = readJsonInput();
         $ids = $input['ids'] ?? null;
@@ -69,7 +69,7 @@ try {
         respond(200, ['success' => true, 'deleted_count' => $deletedCount]);
     }
 
-    // Pelanggan berasal dari akun customer dan membawa path foto profil.
+    // Ambil data pelanggan dari akun customer, termasuk foto profilnya.
     $statement = $pdo->query(
         'SELECT u.id, u.username, u.profile_image, u.created_at, COUNT(t.id) AS order_count, '
         . 'COALESCE(SUM(t.quantity), 0) AS ticket_count, '

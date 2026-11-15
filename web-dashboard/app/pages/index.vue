@@ -9,7 +9,7 @@ const { isNotificationsSlideoverOpen } = useDashboard()
 const notificationFeed = useDashboardActivityFeed()
 const hasUnreadNotifications = computed(() => notificationFeed.value.some(item => item.unread))
 const { showTestNotification, showCustomerTestNotification, testActive, testLoading } = useDashboardNotifications()
-// Tes pesanan dan pelanggan tetap tersedia dari menu tambah seperti di template.
+// Menu tambah tetap menyediakan notifikasi uji pesanan dan pelanggan.
 const testNotificationItems = computed<DropdownMenuItem[][]>(() => [[{
   label: 'Tes pesanan baru',
   icon: 'i-lucide-receipt-text',
@@ -31,7 +31,7 @@ const loading = ref(true)
 const errorMessage = ref('')
 let requestId = 0
 
-// Tanggal dikirim sebagai tanggal lokal supaya filter tetap sesuai kalender pengguna.
+// Kirim tanggal lokal supaya hasilnya mengikuti kalender pengguna.
 function toDateKey(date: Date): string {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -39,7 +39,7 @@ function toDateKey(date: Date): string {
   return year + '-' + month + '-' + day
 }
 
-// Polling menjaga data dan loading tetap utuh agar ASCII hanya berjalan saat muat biasa.
+// Pembaruan otomatis tidak mengosongkan data atau memutar animasi muat lagi.
 async function loadAnalytics(background = false) {
   const request = ++requestId
   if (!background) {
@@ -62,7 +62,7 @@ async function loadAnalytics(background = false) {
       throw new Error(response.message || 'Data analytics belum tersedia.')
     }
 
-    // Respons yang sama tidak perlu menggambar ulang grafik setiap lima detik.
+    // Grafik tidak perlu digambar ulang kalau datanya belum berubah.
     if (JSON.stringify(analytics.value) !== JSON.stringify(response.analytics)) {
       analytics.value = response.analytics
     }
@@ -87,7 +87,7 @@ watch(
 <template>
   <UDashboardPanel id="home">
     <template #header>
-      <!-- Judul menyebut produk; filter tanggal di bawahnya tetap jadi konteks data. -->
+      <!-- Filter tanggal memberi konteks untuk angka di dashboard. -->
       <UDashboardNavbar title="Aktivitas Tourify" :ui="{ right: 'gap-3' }">
         <template #leading>
           <UDashboardSidebarCollapse />
@@ -154,7 +154,7 @@ watch(
           />
         </div>
 
-        <!-- Peringkat dan rincian chart mengikuti rentang tanggal yang dipilih. -->
+        <!-- Peringkat wahana dan grafik mengikuti rentang tanggal yang dipilih. -->
         <HomeTopWahana
           v-if="analytics || loading"
           :wahana="analytics?.top_wahana ?? null"
@@ -170,12 +170,19 @@ watch(
           :comparison="analytics?.comparison ?? null"
           :loading="loading"
         />
-        <HomeChart
-          :series="analytics?.series ?? []"
-          :previous-value="analytics?.previous_stats.booking_value ?? null"
-          :period="period"
-          :loading="loading"
-        />
+        <!-- Grafik omzet mendapat ruang lebih lebar dari grafik hari tersibuk. -->
+        <div class="grid min-w-0 grid-cols-1 items-stretch gap-4 lg:grid-cols-[minmax(0,4fr)_minmax(10rem,1fr)]">
+          <HomeChart
+            :series="analytics?.series ?? []"
+            :previous-value="analytics?.previous_stats.booking_value ?? null"
+            :period="period"
+            :loading="loading"
+          />
+          <HomeBusiestDay
+            :series="analytics?.series ?? []"
+            :loading="loading"
+          />
+        </div>
         <HomeSales
           :orders="analytics?.recent_orders ?? []"
           :loading="loading"

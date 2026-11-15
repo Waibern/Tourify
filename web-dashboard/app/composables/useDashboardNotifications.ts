@@ -2,13 +2,13 @@ import { h } from 'vue'
 import DashboardActivityNotice from '~/components/DashboardActivityNotice.vue'
 import type { DashboardActivityEvent, DashboardCustomersApiResponse } from '~/types/tourify'
 
-// Nomor urut berada di level modul supaya toast tetap unik setelah halaman dibuka ulang.
+// Simpan nomor urut di luar fungsi supaya ID tiap notifikasi tetap unik.
 let successNoticeSequence = 0
 let notificationAudioContext: AudioContext | null = null
 let notificationAudioUnlockRegistered = false
 let lastNotificationSoundAt = 0
 
-// Browser membuka audio setelah ada interaksi pengguna supaya bunyi tidak diblokir.
+// Browser baru mengizinkan suara setelah pengguna berinteraksi.
 function unlockNotificationSound() {
   if (typeof window === 'undefined' || !window.AudioContext) return
 
@@ -56,7 +56,7 @@ function scheduleNotificationChime(context: AudioContext) {
   }
 }
 
-// Notifikasi yang datang beruntun hanya membunyikan satu chime pendek.
+// Notifikasi yang datang berdekatan hanya memutar satu bunyi pendek.
 function playNotificationSound(enabled: boolean) {
   const context = notificationAudioContext
   const now = Date.now()
@@ -76,7 +76,7 @@ function playNotificationSound(enabled: boolean) {
   scheduleNotificationChime(context)
 }
 
-// Notifikasi asli dan tombol tes memakai kartu serta siklus animasi yang sama.
+// Notifikasi asli dan tombol tes memakai tampilan yang sama.
 export function useDashboardNotifications() {
   prepareNotificationSound()
   const {
@@ -92,7 +92,7 @@ export function useDashboardNotifications() {
   const testActive = computed(() => toast.toasts.value.some(item => item.id === testId))
   const testLoading = ref(false)
 
-  // Satu wadah menjaga aktivitas dan pesan sukses memakai siklus ASCII yang sama.
+  // Aktivitas dan pesan sukses ditampilkan di daftar notifikasi yang sama.
   function addNotice(id: string, content: {
     activity?: DashboardActivityEvent
     title?: string
@@ -102,7 +102,7 @@ export function useDashboardNotifications() {
   }) {
     const notice = shallowRef<InstanceType<typeof DashboardActivityNotice> | null>(null)
     const paused = ref(false)
-    // Escape dan swipe menunggu unreveal yang sama dengan tombol tutup.
+    // Escape dan geser menutup notifikasi setelah animasinya selesai.
     const requestDismiss = (event: Event) => {
       if (event.defaultPrevented) return
       event.preventDefault()
@@ -114,7 +114,7 @@ export function useDashboardNotifications() {
       title: () => h(DashboardActivityNotice, { ref: notice, ...content, paused: paused.value, onDismiss: () => toast.remove(id) }),
       color: 'neutral',
       type: 'background',
-      // Timer tetap di isi kartu agar toast menunggu unreveal sebelum dilepas.
+      // Notifikasi tidak hilang sebelum animasi penutup selesai.
       duration: 0,
       progress: false,
       close: false,
@@ -122,7 +122,7 @@ export function useDashboardNotifications() {
       onResume: () => { paused.value = false },
       onEscapeKeyDown: requestDismiss,
       onSwipeEnd: requestDismiss,
-      // Host tetap transparan; permukaan kartu dan sudutnya diungkap oleh isi notifikasi.
+      // Latar notifikasi tetap transparan; kartu muncul bersama isinya.
       class: 'dashboard-activity-toast overflow-visible rounded-xl bg-transparent p-0 ring-0 shadow-none',
       ui: { title: 'font-normal', actions: 'mt-0' }
     })
@@ -167,7 +167,7 @@ export function useDashboardNotifications() {
     }
   }
 
-  // Simpan wahana memakai kartu sukses dan ASCII reveal yang sama dengan aktivitas.
+  // Tampilkan pesan sukses dengan kartu dan animasi yang sama.
   function notifySuccess(title: string, description: string) {
     return addNotice(`dashboard-wahana-save:${++successNoticeSequence}`, {
       title,
@@ -176,7 +176,7 @@ export function useDashboardNotifications() {
     })
   }
 
-  // Data contoh hanya ada di browser; klik berulang tidak menumpuk kartu yang sama.
+  // Notifikasi uji hanya ada di browser; klik berulang tidak menambah kartu yang sama.
   function showTestNotification() {
     if (testActive.value || testLoading.value) return
     return notify({
@@ -191,7 +191,7 @@ export function useDashboardNotifications() {
     }, true)
   }
 
-  // Ambil pelanggan yang sudah ada supaya tombol uji membuka akun asli tanpa membuat akun baru.
+  // Pakai pelanggan yang sudah ada supaya notifikasi uji tidak membuat akun baru.
   async function showCustomerTestNotification() {
     if (testActive.value || testLoading.value) return
     const userId = user.value?.id
@@ -213,7 +213,7 @@ export function useDashboardNotifications() {
         occurred_at: new Date().toISOString()
       }, true)
     } catch (error) {
-      // Respons permintaan lama tidak boleh memunculkan pesan setelah pengguna keluar.
+      // Jangan tampilkan pesan kalau admin sudah keluar saat permintaan berjalan.
       if (user.value?.id === userId) {
         toast.add({ title: 'Tes akun baru gagal', description: getTourifyErrorMessage(error, 'Data pelanggan gagal dimuat. Coba lagi.'), color: 'error' })
       }

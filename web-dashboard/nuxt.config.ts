@@ -26,7 +26,7 @@ export default defineNuxtConfig({
 
   compatibilityDate: '2026-06-30',
 
-  // API PHP diproxy agar URL localhost dan cookie login tetap satu origin di HP.
+  // Arahkan permintaan PHP lewat Nuxt supaya alamat API dan sesi login tetap sama di HP.
   nitro: {
     devProxy: {
       '/tourify-api': {

@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -29,7 +31,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -42,14 +43,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
 
-// form daftar akun
+// Form daftar akun.
 @Composable
 fun RegisterScreen(
     authViewModel: AuthViewModel,
     onRegisterSuccess: () -> Unit,
     onBackToLogin: () -> Unit
 ) {
-    // Simpan isian form dan pesan validasi sebelum membuat akun.
+    // Simpan isian form dan pesan validasi.
     var username by remember {
         mutableStateOf("")
     }
@@ -71,19 +72,23 @@ fun RegisterScreen(
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val fieldColors = OutlinedTextFieldDefaults.colors(
-        unfocusedBorderColor = Color.LightGray,
-        focusedBorderColor = Color.Gray
+        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+        focusedBorderColor = MaterialTheme.colorScheme.primary,
+        focusedLabelColor = MaterialTheme.colorScheme.primary,
+        cursorColor = MaterialTheme.colorScheme.primary,
+        errorBorderColor = MaterialTheme.colorScheme.error
     )
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White)
-            .padding(24.dp),
+            .background(TourifyCanvas)
+            .verticalScroll(rememberScrollState())
+            .padding(TourifySpacing.screen),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // logo di atas form
+        // Logo di atas form.
         Image(
             painter = painterResource(id = R.drawable.logo),
             contentDescription = "Tourify Logo",
@@ -92,7 +97,7 @@ fun RegisterScreen(
         )
         Spacer(modifier = Modifier.height(30.dp))
 
-        // Label input di form daftar.
+        // Label input form daftar.
         OutlinedTextField(
             value = username,
             onValueChange = {
@@ -105,7 +110,7 @@ fun RegisterScreen(
                     "Nama pengguna"
                 )
             },
-            // Enter pindah ke kolom password berikutnya.
+            // Enter pindah ke kolom password.
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
             keyboardActions = KeyboardActions(
                 onNext = {
@@ -113,12 +118,12 @@ fun RegisterScreen(
                 }
             ),
             colors = fieldColors,
-            shape = RoundedCornerShape(12.dp),
+            shape = TourifyShapes.input,
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(16.dp))
 
-        // password dan tombol lihat/sembunyikan
+        // Input password dan tombol lihat/sembunyikan.
         OutlinedTextField(
             value = password,
             onValueChange = {
@@ -136,7 +141,7 @@ fun RegisterScreen(
             } else {
                 PasswordVisualTransformation()
             },
-            // Enter di password pindah ke kolom konfirmasi.
+            // Enter di password pindah ke konfirmasi password.
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Password,
                 imeAction = ImeAction.Next
@@ -154,8 +159,11 @@ fun RegisterScreen(
                 ) {
                     Icon(
                         painter = painterResource(
-                            if (passwordVisible) android.R.drawable.ic_menu_close_clear_cancel
-                            else android.R.drawable.ic_menu_view
+                            id = if (passwordVisible) {
+                                android.R.drawable.ic_menu_close_clear_cancel
+                            } else {
+                                android.R.drawable.ic_menu_view
+                            }
                         ),
                         contentDescription = if (passwordVisible) {
                             "Sembunyikan kata sandi"
@@ -166,12 +174,12 @@ fun RegisterScreen(
                 }
             },
             colors = fieldColors,
-            shape = RoundedCornerShape(12.dp),
+            shape = TourifyShapes.input,
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(16.dp))
 
-        // ulangi password buat konfirmasi
+        // Pakai ikon mata yang sama untuk konfirmasi password.
         OutlinedTextField(
             value = confirmPassword,
             onValueChange = {
@@ -188,7 +196,7 @@ fun RegisterScreen(
             } else {
                 PasswordVisualTransformation()
             },
-            // Tombol Done menutup keyboard setelah semua kolom selesai.
+        // Tombol Done menutup keyboard setelah kolom terakhir.
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Password,
                 imeAction = ImeAction.Done
@@ -206,8 +214,11 @@ fun RegisterScreen(
                 ) {
                     Icon(
                         painter = painterResource(
-                            if (confirmVisible) android.R.drawable.ic_menu_close_clear_cancel
-                            else android.R.drawable.ic_menu_view
+                            id = if (confirmVisible) {
+                                android.R.drawable.ic_menu_close_clear_cancel
+                            } else {
+                                android.R.drawable.ic_menu_view
+                            }
                         ),
                         contentDescription = if (confirmVisible) {
                             "Sembunyikan kata sandi"
@@ -218,12 +229,12 @@ fun RegisterScreen(
                 }
             },
             colors = fieldColors,
-            shape = RoundedCornerShape(12.dp),
+            shape = TourifyShapes.input,
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(20.dp))
 
-        // cek input sesuai aturan API lalu bikin akun
+        // Cek isian sesuai aturan API sebelum membuat akun.
         Button(
             onClick = {
                 if (username.isEmpty() || password.isEmpty()) {
@@ -256,7 +267,7 @@ fun RegisterScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Kembali ke layar masuk.
+        // Kembali ke layar login.
         TextButton(
             onClick = onBackToLogin
         ) {
@@ -265,7 +276,7 @@ fun RegisterScreen(
             )
         }
 
-        // pesan kalau daftar akun gagal
+        // Pesan kalau pendaftaran gagal.
         if (errorMessage.isNotEmpty() || authViewModel.errorMessage.isNotEmpty()) {
             Spacer(modifier = Modifier.height(10.dp))
             Text(
@@ -278,7 +289,7 @@ fun RegisterScreen(
     }
 }
 
-// Contoh form daftar akun untuk preview Compose.
+// Preview form daftar akun.
 @Preview(showBackground = true)
 @Composable
 fun RegisterScreenPreview() {

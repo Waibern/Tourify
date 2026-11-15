@@ -8,7 +8,9 @@ const df = new DateFormatter('id-ID', {
 
 const selected = defineModel<Range>({ required: true })
 
-// Preset pakai hitungan inklusif, jadi tujuh hari berarti tujuh tanggal kalender.
+type PresetRange = { days?: number, months?: number, years?: number }
+
+// Hitung hari ini sebagai salah satu dari tujuh tanggal pada pilihan tujuh hari.
 const ranges = [
   { label: '7 hari terakhir', days: 7 },
   { label: '14 hari terakhir', days: 14 },
@@ -39,27 +41,8 @@ const calendarRange = computed({
   }
 })
 
-const isRangeSelected = (range: { days?: number, months?: number, years?: number }) => {
-  if (!selected.value.start || !selected.value.end) return false
-
-  const currentDate = today(getLocalTimeZone())
-  let startDate = currentDate.copy()
-
-  if (range.days) {
-    startDate = startDate.subtract({ days: range.days - 1 })
-  } else if (range.months) {
-    startDate = startDate.subtract({ months: range.months })
-  } else if (range.years) {
-    startDate = startDate.subtract({ years: range.years })
-  }
-
-  const selectedStart = toCalendarDate(selected.value.start)
-  const selectedEnd = toCalendarDate(selected.value.end)
-
-  return selectedStart.compare(startDate) === 0 && selectedEnd.compare(currentDate) === 0
-}
-
-const selectRange = (range: { days?: number, months?: number, years?: number }) => {
+// Pakai batas tanggal yang sama saat menampilkan dan memilih preset.
+const getRangeDates = (range: PresetRange) => {
   const endDate = today(getLocalTimeZone())
   let startDate = endDate.copy()
 
@@ -71,6 +54,21 @@ const selectRange = (range: { days?: number, months?: number, years?: number }) 
     startDate = startDate.subtract({ years: range.years })
   }
 
+  return { startDate, endDate }
+}
+
+const isRangeSelected = (range: PresetRange) => {
+  if (!selected.value.start || !selected.value.end) return false
+
+  const { startDate, endDate } = getRangeDates(range)
+  const selectedStart = toCalendarDate(selected.value.start)
+  const selectedEnd = toCalendarDate(selected.value.end)
+
+  return selectedStart.compare(startDate) === 0 && selectedEnd.compare(endDate) === 0
+}
+
+const selectRange = (range: PresetRange) => {
+  const { startDate, endDate } = getRangeDates(range)
   selected.value = {
     start: startDate.toDate(getLocalTimeZone()),
     end: endDate.toDate(getLocalTimeZone())

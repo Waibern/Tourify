@@ -20,7 +20,7 @@ const currencyFormat = new Intl.NumberFormat('id-ID', {
   maximumFractionDigits: 0
 })
 
-// Chart mengambil tiga wahana teratas dan tetap mendukung respons API lama.
+// Tampilkan tiga wahana teratas dan tetap dukung format API lama.
 const rankedWahana = computed(() => props.topWahanaDistribution.length > 0
   ? props.topWahanaDistribution.slice(0, 3)
   : props.wahana ? [props.wahana] : [])
@@ -36,7 +36,7 @@ type TicketShareItem = {
   color: string
 }
 
-// Baris wahana lainnya hanya muncul kalau masih ada tiket di luar tiga teratas.
+// Tampilkan sisa tiket di baris Wahana lainnya jika ada.
 const ticketShareLegend = computed<TicketShareItem[]>(() => rankedWahana.value.length > 0
   ? [
       ...rankedWahana.value.map((item, index) => ({
@@ -57,16 +57,16 @@ const ticketShareLegend = computed<TicketShareItem[]>(() => rankedWahana.value.l
   : [])
 const ticketShare = computed(() => ticketShareLegend.value.map(({ label, value }) => ({ label, value })))
 const ticketShareColors = computed(() => ticketShareLegend.value.map(item => item.color))
-// Pusat donut menyebut total yang dibagi; persentase per wahana muncul di legenda.
+// Jumlah semua tiket ada di tengah grafik, sedangkan rinciannya ada di legenda.
 const ticketShareCenterLabel = 'total tiket'
 const ticketShareGroupLabel = computed(() => 'Distribusi ' + numberFormat.format(totalTicketCount.value) + ' tiket terjual per wahana')
 
-// Persentase memakai total tiket pada rentang tanggal yang dipilih.
+// Hitung persentase dari total tiket pada tanggal yang dipilih.
 function formatTicketShare(value: number): string {
   return percentFormat.format(totalTicketCount.value > 0 ? value / totalTicketCount.value : 0)
 }
 
-// Rincian ini dipakai tooltip chart dan legenda yang bisa difokuskan dengan keyboard.
+// Keterangan di atas grafik menampilkan rincian; legenda bisa dipilih dengan keyboard.
 function ticketShareDetails(label: string) {
   const item = ticketShareLegend.value.find(entry => entry.label === label)
   if (!item) return label
@@ -82,7 +82,7 @@ function ticketShareTooltip(label: string) {
   return item ? item.label + '. ' + ticketShareDetails(label) + '.' : label
 }
 
-// Deskripsi aksesibel menyebut total dan porsi setiap wahana.
+// Pembaca layar mendapat jumlah total dan persentase tiap wahana.
 const ticketShareDescription = computed(() => 'Total tiket terjual: ' + numberFormat.format(totalTicketCount.value) + '. ' + ticketShareLegend.value.map(item => ticketShareTooltip(item.label)).join(' '))
 </script>
 
@@ -96,11 +96,11 @@ const ticketShareDescription = computed(() => 'Total tiket terjual: ' + numberFo
       <template #skeleton>
         <div data-wahana-hero class="relative flex min-h-[24rem] flex-col justify-between gap-6 p-5 sm:min-h-[22rem] sm:p-6 md:min-h-56 md:gap-8 md:p-8" role="status">
           <div class="space-y-3">
-            <!-- Skeleton mengikuti hierarki judul yang baru. -->
+            <!-- Isi sementara mengikuti posisi judul dan subjudul. -->
             <USkeleton class="h-9 w-52 sm:h-10" aria-hidden="true" />
             <USkeleton class="h-6 w-3/5" aria-hidden="true" />
           </div>
-          <!-- Sisakan tempat chart agar isi kartu tidak bergeser setelah data siap. -->
+          <!-- Sisakan tempat grafik supaya isi kartu tidak bergeser saat data siap. -->
           <div data-wahana-chart class="relative z-10 order-3 flex w-full items-center gap-2.5 rounded-xl bg-black/45 p-3 shadow-xl shadow-black/40 backdrop-blur-md sm:gap-3" aria-hidden="true">
             <USkeleton class="size-32 shrink-0 rounded-full" />
             <div class="grid min-w-0 flex-1 gap-2 sm:w-52 sm:flex-none">
@@ -126,7 +126,7 @@ const ticketShareDescription = computed(() => 'Total tiket terjual: ' + numberFo
               </div>
             </div>
           </div>
-          <!-- Kerangka memakai susunan rapat yang sama saat data dimuat. -->
+          <!-- Isi sementara mengikuti susunan kartu sebenarnya. -->
           <dl class="order-2 grid grid-cols-2 gap-4 sm:w-fit sm:grid-cols-[max-content_max-content_max-content] sm:gap-x-12">
             <div class="space-y-2">
               <USkeleton class="h-4 w-24" aria-hidden="true" />
@@ -155,7 +155,7 @@ const ticketShareDescription = computed(() => 'Total tiket terjual: ' + numberFo
         <div class="absolute inset-0 z-0 bg-gradient-to-b from-black/30 via-transparent to-black/75" />
 
         <div class="relative z-10 order-1 min-w-0">
-          <!-- Nama wahana menjadi teks pendamping judul utama. -->
+          <!-- Tampilkan nama wahana di bawah judul. -->
           <h2 class="text-3xl font-semibold leading-tight tracking-tight text-white sm:text-4xl">
             Wahana terlaris
           </h2>
@@ -164,7 +164,7 @@ const ticketShareDescription = computed(() => 'Total tiket terjual: ' + numberFo
           </p>
         </div>
 
-        <!-- Panel baru mengambang saat lebar kartu cukup; ruang sempit tetap memberi satu baris penuh. -->
+        <!-- Di layar lebar, grafik di kanan; di layar sempit, lebarnya penuh. -->
         <div
           v-if="totalTicketCount > 0 && ticketShare.length > 0"
           data-wahana-chart
@@ -172,9 +172,9 @@ const ticketShareDescription = computed(() => 'Total tiket terjual: ' + numberFo
           role="group"
           :aria-label="ticketShareGroupLabel"
         >
-          <!-- Penanda ini memasukkan donut ke snapshot ASCII reveal. -->
+          <!-- Grafik ini ikut tampil dalam animasi ASCII. -->
           <div class="relative size-32 shrink-0" data-ascii-chart>
-            <!-- Tooltip chart menampilkan nama, peringkat, jumlah, dan porsi tiap irisan. -->
+            <!-- Keterangan di atas grafik menampilkan nama, peringkat, jumlah, dan persentase wahana. -->
             <UChart
               type="donut"
               :data="ticketShare"
@@ -226,7 +226,7 @@ const ticketShareDescription = computed(() => 'Total tiket terjual: ' + numberFo
                   tabindex="0"
                   :aria-label="ticketShareTooltip(item.label)"
                 >
-                  <!-- SVG swatch disnapshot agar blok warna ikut menjadi glyph ASCII. -->
+                  <!-- Warna grafik ikut ditangkap supaya animasinya tetap utuh. -->
                   <div
                     v-if="item.rank"
                     class="relative size-5 shrink-0"
@@ -281,7 +281,7 @@ const ticketShareDescription = computed(() => 'Total tiket terjual: ' + numberFo
           </div>
         </div>
 
-        <!-- Angka dikelompokkan rapat agar mudah dibandingkan. -->
+        <!-- Angka ditampilkan berdekatan supaya mudah dibandingkan. -->
         <dl class="relative z-10 order-2 grid grid-cols-2 gap-x-4 gap-y-5 sm:w-fit sm:grid-cols-[max-content_max-content_max-content] sm:gap-x-12">
           <div>
             <dt class="text-sm text-white/80">
@@ -312,7 +312,7 @@ const ticketShareDescription = computed(() => 'Total tiket terjual: ' + numberFo
 
       <div v-else class="flex min-h-36 items-center px-5 py-6 sm:px-8">
         <div>
-          <!-- Judul tetap menonjol saat belum ada wahana terlaris. -->
+          <!-- Judul tetap terlihat saat belum ada wahana terlaris. -->
           <h2 class="text-2xl font-semibold text-highlighted">
             Wahana terlaris
           </h2>
@@ -326,7 +326,7 @@ const ticketShareDescription = computed(() => 'Total tiket terjual: ' + numberFo
 </template>
 
 <style scoped>
-/* Ukur lebar kartu supaya chart hanya mengambang saat isi masih punya ruang. */
+/* Letakkan grafik di samping hanya kalau kartu cukup lebar. */
 [data-wahana-hero] {
   container-type: inline-size;
 }

@@ -1,11 +1,11 @@
 import type { DashboardApiResponse, DashboardUser } from '~/types/tourify'
 
-// Sesi dashboard dipakai bareng oleh login, middleware, dan menu akun.
+// Login, pemeriksaan halaman, dan menu akun memakai sesi yang sama.
 export function useDashboardAuth() {
   const api = useTourifyApi()
   const user = useState<DashboardUser | null>('dashboard-user', () => null)
 
-  // Foto menu akun dimuat dari profil yang tersimpan di server.
+  // Ambil foto menu akun dari profil yang tersimpan di server.
   async function attachProfileImage(dashboardUser: DashboardUser): Promise<DashboardUser> {
     try {
       const response = await api.get<DashboardApiResponse>('profile.php')
@@ -15,7 +15,7 @@ export function useDashboardAuth() {
     }
   }
 
-  // Role dibaca ulang agar perubahan izin langsung memperbarui menu dashboard.
+  // Baca peran terbaru supaya menu langsung mengikuti izin akun.
   async function loadSession(): Promise<DashboardUser | null> {
     const cachedUser = user.value
     try {

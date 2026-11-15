@@ -11,7 +11,7 @@ const colorModeOptions = [
   { label: 'Gelap', value: 'dark' }
 ]
 
-// Paletnya sama dengan pilihan tema yang sebelumnya ada di menu akun.
+// Pilihan warna ini dulu ada di menu akun.
 const primaryColors = ['red', 'orange', 'amber', 'yellow', 'lime', 'green', 'emerald', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'violet', 'purple', 'fuchsia', 'pink', 'rose']
 const neutralColors = ['slate', 'gray', 'zinc', 'neutral', 'stone', 'taupe', 'mauve', 'mist', 'olive']
 
@@ -62,7 +62,7 @@ function updateColorMode(value: string | number) {
 }
 
 function updateAsciiAnimations(enabled: boolean) {
-  // Preferensi ini menghentikan semua efek ASCII di dashboard.
+  // Pengaturan ini mematikan animasi ASCII di seluruh dashboard.
   asciiAnimations.value = enabled
 }
 </script>

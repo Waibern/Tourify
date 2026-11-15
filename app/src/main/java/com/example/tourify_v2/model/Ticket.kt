@@ -12,12 +12,12 @@ data class Ticket(
     @SerializedName("total_price") val totalPrice: Int,
     @SerializedName("payment_method") val paymentMethod: String,
     @SerializedName("username") val username: String = "",
-    // Status ikut memuat tiket yang sudah habis check-in.
+    // Status juga menghitung pengunjung yang sudah check-in.
     @SerializedName("status") val status: String = "Active",
     @SerializedName("checked_in_quantity") val checkedInQuantity: Int = 0
 )
 
-// Identitas akun tidak dikirim di body; server membacanya dari token.
+// Server membaca akun dari token, jadi ID akun nggak perlu dikirim di body.
 data class TicketBookingRequest(
     @SerializedName("wahana_id") val wahanaId: Int,
     @SerializedName("visit_date") val visitDate: String,

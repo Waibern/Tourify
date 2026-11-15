@@ -13,7 +13,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
 
-// Login, sesi akun, dan foto profil.
+// Atur login, sesi akun, dan foto profil.
 class AuthViewModel : ViewModel() {
     var isLoading by mutableStateOf(false)
         private set
@@ -34,7 +34,7 @@ class AuthViewModel : ViewModel() {
         errorMessage = ""
     }
 
-    // Gagal kirim presensi jangan sampai mengganggu login.
+    // Kalau presensi gagal, login tetap lanjut.
     suspend fun updateCustomerPresence() {
         val token = currentAccessToken
         if (token.isBlank()) return
@@ -51,11 +51,16 @@ class AuthViewModel : ViewModel() {
             errorMessage = ""
             try {
                 val response = ApiClient.service.register(CredentialsRequest(username, password))
-                val result = response.body()
-                if (response.isSuccessful && result?.success == true) {
+                val registrationResult = response.body()
+                // Buat akun hanya setelah server menyatakan pendaftaran berhasil.
+                if (
+                    response.isSuccessful &&
+                    registrationResult?.success == true
+                ) {
                     onSuccess()
                 } else {
-                    errorMessage = result?.message ?: "Pendaftaran gagal. Periksa koneksi server."
+                    errorMessage = registrationResult?.message
+                        ?: "Pendaftaran gagal. Periksa koneksi server."
                 }
             } catch (exception: Exception) {
                 errorMessage = "Server atau database sedang offline. Periksa koneksi lalu coba lagi."
@@ -72,14 +77,19 @@ class AuthViewModel : ViewModel() {
             profileImageError = ""
             try {
                 val response = ApiClient.service.login(CredentialsRequest(username, password))
-                val result = response.body()
-                if (response.isSuccessful && result?.success == true && result.user != null) {
-                    currentUsername = result.user.username
-                    currentAccessToken = result.accessToken.orEmpty()
-                    profileImageUrl = ApiClient.profileImageUrl(result.user.profileImage)
+                val loginResult = response.body()
+                // Simpan sesi setelah server mengembalikan akun yang valid.
+                if (
+                    response.isSuccessful &&
+                    loginResult?.success == true &&
+                    loginResult.user != null
+                ) {
+                    currentUsername = loginResult.user.username
+                    currentAccessToken = loginResult.accessToken.orEmpty()
+                    profileImageUrl = ApiClient.profileImageUrl(loginResult.user.profileImage)
                     onSuccess(currentUsername)
                 } else {
-                    errorMessage = result?.message ?: "Login gagal. Periksa username dan password."
+                    errorMessage = loginResult?.message ?: "Login gagal. Periksa username dan password."
                 }
             } catch (exception: Exception) {
                 errorMessage = "Server atau database sedang offline. Periksa koneksi lalu coba lagi."
@@ -89,7 +99,7 @@ class AuthViewModel : ViewModel() {
         }
     }
 
-    // Ambil path terbaru supaya foto yang diganti dari dashboard ikut tampil di aplikasi.
+    // Ambil path terbaru supaya foto dari dashboard ikut tampil di aplikasi.
     fun loadProfileImage() {
         val token = currentAccessToken
         if (token.isBlank()) {
@@ -100,15 +110,19 @@ class AuthViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val response = ApiClient.service.getProfile("Bearer $token")
-                val result = response.body()
-                if (response.isSuccessful && result?.success == true) {
-                    profileImageUrl = ApiClient.profileImageUrl(result.profile?.profileImage)
+                val profileResult = response.body()
+                // Ganti foto hanya setelah profil terbaru berhasil dimuat.
+                if (
+                    response.isSuccessful &&
+                    profileResult?.success == true
+                ) {
+                    profileImageUrl = ApiClient.profileImageUrl(profileResult.profile?.profileImage)
                     profileImageError = ""
                 } else {
                     profileImageError = if (response.code() == 401) {
                         "Sesi login habis. Keluar lalu login kembali untuk memuat foto."
                     } else {
-                        result?.message ?: "Foto profil gagal dimuat."
+                        profileResult?.message ?: "Foto profil gagal dimuat."
                     }
                 }
             } catch (exception: Exception) {
@@ -117,7 +131,7 @@ class AuthViewModel : ViewModel() {
         }
     }
 
-    // Upload memakai token hasil login agar akun lain tidak bisa ditimpa lewat username.
+    // Pakai token login supaya foto akun lain nggak bisa diganti lewat username.
     fun uploadProfileImage(imageBytes: ByteArray, mimeType: String) {
         val token = currentAccessToken
         if (token.isBlank()) {
@@ -149,14 +163,19 @@ class AuthViewModel : ViewModel() {
                     authorization = "Bearer $token",
                     image = imagePart
                 )
-                val result: ProfileResponse? = response.body()
-                if (response.isSuccessful && result?.success == true && result.profile != null) {
-                    profileImageUrl = ApiClient.profileImageUrl(result.profile.profileImage)
+                val uploadResult: ProfileResponse? = response.body()
+                // Pakai path foto baru setelah server menyatakan unggahan berhasil.
+                if (
+                    response.isSuccessful &&
+                    uploadResult?.success == true &&
+                    uploadResult.profile != null
+                ) {
+                    profileImageUrl = ApiClient.profileImageUrl(uploadResult.profile.profileImage)
                 } else {
                     profileImageError = if (response.code() == 401) {
                         "Sesi login habis. Keluar lalu login kembali untuk mengunggah foto."
                     } else {
-                        result?.message ?: "Foto profil gagal disimpan."
+                        uploadResult?.message ?: "Foto profil gagal disimpan."
                     }
                 }
             } catch (exception: Exception) {

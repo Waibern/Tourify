@@ -17,7 +17,7 @@ if ($username === '' || $password === '') {
 if (mb_strlen($username) > 50) {
     respond(400, ['success' => false, 'message' => 'Username maksimal 50 karakter.']);
 }
-// Akun baru perlu kata sandi yang cukup panjang untuk akses API publik.
+// Minta password yang cukup panjang untuk akun baru.
 if (mb_strlen($password, 'UTF-8') < 8) {
     respond(400, ['success' => false, 'message' => 'Password minimal 8 karakter.']);
 }

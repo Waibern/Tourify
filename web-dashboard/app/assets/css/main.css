@@ -4,6 +4,16 @@
 @theme static {
   --font-sans: 'Public Sans', sans-serif;
 
+  /* Sudut komponen dibuat sedikit lebih bulat. */
+  --radius-xs: 0.15625rem;
+  --radius-sm: 0.3125rem;
+  --radius-md: 0.46875rem;
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.9375rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.875rem;
+  --radius-4xl: 2.5rem;
+
   --color-green-50: #EFFDF5;
   --color-green-100: #D9FBE8;
   --color-green-200: #B3F5D1;
@@ -17,7 +27,16 @@
   --color-green-950: #052E16;
 }
 
-/* Permukaan dan bayangan halus memisahkan kartu dari latar gelap. */
+/* Lengkung squircle N=3 ini bikin sudutnya mirip contoh. */
+@supports (corner-shape: superellipse(1.585)) {
+  *,
+  *::before,
+  *::after {
+    corner-shape: superellipse(1.585);
+  }
+}
+
+/* Latar dan bayangan ini memisahkan kartu dari latar gelap. */
 .dark [data-dashboard-card],
 .dark [data-wahana-card],
 .dark [data-notification-card] {
@@ -32,7 +51,7 @@
   box-shadow: 0 8px 24px rgb(0 0 0 / 20%);
 }
 
-/* Sebelum data siap, sembunyikan kartu; sudut dan titik nanti diatur native surface reveal. */
+/* Sembunyikan kartu saat memuat; animasi menampilkan sudutnya setelah data siap. */
 [data-dashboard-card]:has([data-ascii-phase='outline']) {
   background-color: transparent;
   background-image: none;
@@ -44,12 +63,12 @@
   opacity: 0;
 }
 
-/* SVG Pengunjung bisa diganti saat render ulang; grafik asli menunggu reveal selesai. */
+/* Sembunyikan grafik sementara sampai animasi selesai. */
 [data-ascii-phase='revealing'] [data-ascii-chart] svg {
   visibility: hidden !important;
 }
 
-/* Kartu menunggu reveal tanpa permukaan atau bayangan yang bocor. */
+/* Jangan tampilkan latar atau bayangan kartu saat masih memuat. */
 [data-notification-card]:has([data-activity-reveal='waiting']) {
   background-color: transparent;
   background-image: none;
@@ -61,25 +80,25 @@
   opacity: 0;
 }
 
-/* Sesudah sudut terakhir hilang, destroy tidak boleh menampilkan permukaan kartu lagi. */
+/* Setelah sudut hilang, kartu jangan muncul lagi saat animasi dihentikan. */
 [data-notification-card]:has([data-activity-reveal='hidden']) {
   visibility: hidden;
 }
 
-/* Surface menangani masuk dan keluar di tempat yang sama, termasuk bingkai sudutnya. */
+/* Kartu punya animasi sendiri, jadi matikan animasi bawaan toast. */
 .dashboard-activity-toast[data-state='open'],
 .dashboard-activity-toast[data-state='closed'] {
   animation: none;
 }
 
-/* Isi tetap terukur dan tersembunyi saat giliran kartu serta sudut di-unreveal. */
+/* Sembunyikan isi saat animasi menutup kartu dan bingkainya. */
 [data-activity-reveal='waiting'] > *,
 [data-activity-reveal='unrevealing-surface'] > *,
 [data-activity-reveal='hidden'] > * {
   visibility: hidden;
 }
 
-/* Preferensi gerak ringan memakai fade pendek tanpa slide atau ASCII. */
+/* Saat pengguna memilih gerakan ringan, pakai efek pudar singkat. */
 @media (prefers-reduced-motion: reduce) {
   .dashboard-activity-toast[data-state='open'] {
     animation: dashboard-activity-fade 100ms ease-out both;

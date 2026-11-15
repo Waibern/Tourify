@@ -61,7 +61,7 @@ function actions(member: DashboardMember): DropdownMenuItem[] {
         </div>
       </div>
 
-      <!-- Kontrol turun ke baris kedua di ponsel supaya username tetap terbaca. -->
+      <!-- Di HP, tombol pindah ke baris bawah supaya nama akun tetap terbaca. -->
       <div class="flex items-center gap-3 self-end sm:self-auto">
         <USelect
           :model-value="member.role"

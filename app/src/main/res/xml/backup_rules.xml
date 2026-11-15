@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
+   Contoh aturan backup. Buka komentar dan ubah kalau perlu.
+   Baca https://developer.android.com/guide/topics/data/autobackup
+   untuk panduannya.
+   File ini tidak dipakai di perangkat dengan API di bawah 31.
+   Lihat https://developer.android.com/about/versions/12/backup-restore
 -->
 <full-backup-content>
     <!--
+   Contoh: cadangkan semua Shared Preferences, kecuali device.xml.
    <include domain="sharedpref" path="."/>
    <exclude domain="sharedpref" path="device.xml"/>
 -->

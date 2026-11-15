@@ -9,7 +9,7 @@ import android.net.Uri
 import com.example.tourify_v2.model.Ticket
 import java.util.Locale
 
-// PDF satu halaman memakai payload QR dan detail tiket dari layar yang sama.
+// Buat PDF satu halaman dari data tiket dan QR yang sama dengan layar.
 internal fun writeTicketPdf(
     context: Context,
     uri: Uri,
@@ -17,10 +17,10 @@ internal fun writeTicketPdf(
 ) {
     val document = PdfDocument()
     try {
-        // Aturan masuk sama dengan layar, termasuk tiket lama yang tanggalnya sudah lewat.
-        val available = canShowTicketQr(ticket)
+        // PDF mengikuti aturan layar, termasuk untuk tiket lama yang tanggalnya sudah lewat.
+        val canShowQrCode = canShowTicketQr(ticket)
         val statusLabel = ticketStatusLabel(ticket).uppercase(Locale.forLanguageTag("id-ID"))
-        // Siapkan ukuran halaman, warna, dan kuas untuk menggambar tiket.
+        // Siapkan ukuran halaman dan kuas untuk menggambar PDF.
         val pageInfo = PdfDocument.PageInfo.Builder(
             595,
             842,
@@ -73,7 +73,7 @@ internal fun writeTicketPdf(
             style = PdfPaint.Style.FILL
         }
 
-        // Gambar identitas tiket sebelum rincian pesanan dan QR.
+        // Gambar info tiket dulu, lalu rincian pesanan dan QR.
         canvas.drawColor(white)
         canvas.drawRoundRect(
             RectF(
@@ -188,8 +188,8 @@ internal fun writeTicketPdf(
             499f
         )
 
-        // Riwayat tetap bisa disimpan, tetapi tidak memberi QR atau instruksi masuk.
-        if (available) {
+        // Tiket riwayat tetap bisa disimpan, tapi QR dan petunjuk masuk tidak ditampilkan.
+        if (canShowQrCode) {
             val qrBitmap = generateQrCode(ticketQrPayload(ticket))
             val qrPaint = PdfPaint(PdfPaint.ANTI_ALIAS_FLAG or PdfPaint.FILTER_BITMAP_FLAG)
             canvas.drawBitmap(
@@ -236,7 +236,7 @@ internal fun writeTicketPdf(
             19f,
             19f,
             PdfPaint(PdfPaint.ANTI_ALIAS_FLAG).apply {
-                color = if (available) {
+                color = if (canShowQrCode) {
                     android.graphics.Color.rgb(
                         231,
                         241,
@@ -257,14 +257,14 @@ internal fun writeTicketPdf(
             297.5f,
             749f,
             pdfTextPaint(
-                if (available) forest else ink,
+                if (canShowQrCode) forest else ink,
                 13f,
                 bold = true,
                 align = PdfPaint.Align.CENTER
             )
         )
         canvas.drawText(
-            if (available) {
+            if (canShowQrCode) {
                 "Simpan tiket ini dan tunjukkan QR saat kunjungan."
             } else {
                 "Dokumen ini hanya sebagai riwayat pemesanan."
@@ -279,7 +279,7 @@ internal fun writeTicketPdf(
         )
         document.finishPage(page)
 
-        // Timpa seluruh file agar ekspor riwayat tidak menyisakan QR dari PDF sebelumnya.
+        // Tulis ulang seluruh file supaya QR dari PDF lama nggak tertinggal.
         val output = requireNotNull(
             context.contentResolver.openOutputStream(
                 uri,
@@ -296,7 +296,7 @@ internal fun writeTicketPdf(
     }
 }
 
-// Tulis label dan nilainya supaya detail gampang dibaca di PDF.
+// Gambar label dan nilainya supaya detail tiket gampang dibaca.
 private fun drawPdfField(
     canvas: android.graphics.Canvas,
     label: String,
@@ -339,7 +339,7 @@ private fun drawPdfField(
     )
 }
 
-// Garis tipis misahin identitas tiket dari detail kunjungan.
+// Garis tipis memisahkan identitas tiket dan info kunjungan.
 private fun drawPdfDivider(
     canvas: android.graphics.Canvas,
     color: Int,
@@ -360,7 +360,7 @@ private fun drawPdfDivider(
     )
 }
 
-// Atur warna, ukuran, dan ketebalan teks PDF di satu tempat.
+// Atur warna dan ukuran teks PDF di sini.
 private fun pdfTextPaint(
     color: Int,
     textSize: Float,
@@ -378,7 +378,7 @@ private fun pdfTextPaint(
     }
 }
 
-// Potong teks panjang supaya tetap muat di halaman PDF.
+// Potong teks panjang supaya muat di halaman PDF.
 private fun fitPdfText(
     value: String,
     paint: PdfPaint,

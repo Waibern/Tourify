@@ -19,7 +19,7 @@ useHead({
   }
 })
 
-// Metadata menyesuaikan dashboard admin dan gate Tourify.
+// Judul dan warna browser mengikuti dashboard admin dan petugas.
 const title = 'Tourify | Dashboard'
 const description = 'Dashboard admin Tourify untuk mengelola wahana dan memindai tiket pengunjung.'
 
@@ -33,7 +33,7 @@ useSeoMeta({
 </script>
 
 <template>
-  <!-- Label bawaan, termasuk Notifikasi (F8), mengikuti bahasa Indonesia. -->
+  <!-- Label bawaan aplikasi, termasuk Notifikasi (F8), ditampilkan dalam bahasa Indonesia. -->
   <UApp :locale="id" :toaster="{ position: 'bottom-right', max: 3 }">
     <NuxtLoadingIndicator />
 

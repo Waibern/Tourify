@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 api, php = Path(sys.argv[1]).resolve(), sys.argv[2]
 with tempfile.TemporaryDirectory() as sessions:
     def request(endpoint, params=None, role='admin', method='GET'):
-        # Sesi hanya dibuat di folder sementara agar login browser tidak tersentuh.
+        # Simpan sesi tes di folder sementara supaya login browser tetap aman.
         wrapper = '''
         session_save_path($argv[1]); session_start(); $_SESSION = [];
         $role = $argv[2];

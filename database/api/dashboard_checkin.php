@@ -16,7 +16,7 @@ try {
     $today = (new DateTimeImmutable('now', new DateTimeZone('Asia/Jakarta')))->format('Y-m-d');
     $pdo->beginTransaction();
 
-    // Kunci satu tiket agar scan bersamaan tidak melewati jumlah yang dibeli.
+    // Kunci pesanan saat scan supaya jumlah check-in tidak melebihi tiket yang dibeli.
     $statement = $pdo->prepare(
         'SELECT t.id, t.visit_date, t.quantity, t.checked_in_quantity, w.name AS wahana_name '
         . 'FROM tickets t INNER JOIN wahana w ON w.id = t.wahana_id '
@@ -43,7 +43,7 @@ try {
 
     $checkedIn++;
     $status = $checkedIn >= $quantity ? 'Used' : 'Active';
-    // Status baru dipindah ke terpakai setelah semua orang di pesanan sudah masuk.
+    // Tandai pesanan terpakai setelah semua tiketnya sudah discan.
     $statement = $pdo->prepare(
         'UPDATE tickets SET checked_in_quantity = :checked_in_quantity, status = :status WHERE id = :id'
     );

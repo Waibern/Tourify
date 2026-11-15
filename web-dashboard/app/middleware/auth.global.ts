@@ -1,4 +1,4 @@
-// Pengaturan bisa dibuka admin dan petugas; halaman anggota hanya untuk admin.
+// Admin dan petugas boleh membuka pengaturan; menu anggota khusus admin.
 export default defineNuxtRouteMiddleware(async (to) => {
   if (import.meta.server) {
     if (to.path !== '/login') {
@@ -8,13 +8,13 @@ export default defineNuxtRouteMiddleware(async (to) => {
     return
   }
 
-  // Login dirender dulu agar layout tidak berubah saat hidrasi browser.
+  // Tampilkan login dulu supaya tampilannya tidak berubah saat halaman dimuat.
   if (useNuxtApp().isHydrating && to.path === '/login') {
     return
   }
 
   const auth = useDashboardAuth()
-  // Refresh izin server di setiap pindah halaman supaya submenu ikut role terbaru.
+  // Cek izin lagi setiap pindah halaman supaya menu mengikuti peran terbaru.
   const user = await auth.loadSession()
 
   if (!user) {
@@ -26,19 +26,26 @@ export default defineNuxtRouteMiddleware(async (to) => {
   }
 
   const isSettingsRoute = to.path === '/settings' || to.path.startsWith('/settings/')
-  if (user.role === 'gate' && isSettingsRoute && to.path !== '/settings/members') {
+  // Petugas boleh membuka pengaturan umum, tapi tidak bisa membuka menu anggota.
+  if (user.role === 'gate') {
+    if (to.path === '/settings/members') {
+      return navigateTo('/settings')
+    }
+
+    if (isSettingsRoute) {
+      return
+    }
+
+    if (to.path !== '/scanner') {
+      return navigateTo('/scanner')
+    }
+
     return
   }
 
-  if (user.role === 'gate' && to.path === '/settings/members') {
-    return navigateTo('/settings')
-  }
-
-  if (user.role === 'gate' && to.path !== '/scanner') {
-    return navigateTo('/scanner')
-  }
-
-  if (user.role === 'admin' && !['/', '/customers', '/scanner', '/wahana', '/orders', '/checkins'].includes(to.path) && !isSettingsRoute) {
+  const adminPages = ['/', '/customers', '/scanner', '/wahana', '/orders', '/checkins']
+  const canOpenAdminPage = adminPages.includes(to.path) || isSettingsRoute
+  if (!canOpenAdminPage) {
     return navigateTo('/')
   }
 })

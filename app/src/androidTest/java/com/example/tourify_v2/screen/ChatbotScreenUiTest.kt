@@ -23,7 +23,7 @@ class ChatbotScreenUiTest {
     fun suggestionSendsAndShowsAnswer() {
         var sentQuestion = ""
 
-        // Render layar produksi supaya saran dan balasan diuji tanpa akun atau server.
+        // Tampilkan layar chat asli tanpa perlu akun atau server.
         compose.setContent {
             Tourify_v2Theme {
                 ChatbotAssistantScreen(
@@ -56,7 +56,7 @@ class ChatbotScreenUiTest {
         capture("chatbot-redesign-answer")
     }
 
-    // Simpan dua keadaan layar untuk pemeriksaan visual di emulator.
+    // Simpan dua tampilan layar untuk dicek di emulator.
     private fun capture(name: String) {
         compose.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()

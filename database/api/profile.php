@@ -10,7 +10,7 @@ try {
         || ($method === 'POST' && array_key_exists('username', $_POST));
     $dashboardUser = null;
     if ($hasUsername) {
-        // Username hanya bisa diubah dari sesi dashboard admin atau petugas.
+        // Username hanya bisa diubah oleh admin atau petugas yang login.
         $dashboardUser = requireDashboardRole(['admin', 'gate']);
         $userId = (int) $dashboardUser['id'];
     } else {
@@ -69,23 +69,26 @@ try {
         }
     }
 
-    $image = $_FILES['image'] ?? null;
-    if (!is_array($image) && $username === null) {
+    $uploadedImage = $_FILES['image'] ?? null;
+    if (!is_array($uploadedImage) && $username === null) {
         respond(400, ['success' => false, 'message' => 'Pilih foto profil terlebih dahulu.']);
     }
-    $uploadError = is_array($image) ? ($image['error'] ?? UPLOAD_ERR_NO_FILE) : UPLOAD_ERR_NO_FILE;
+    $uploadError = is_array($uploadedImage)
+        ? ($uploadedImage['error'] ?? UPLOAD_ERR_NO_FILE)
+        : UPLOAD_ERR_NO_FILE;
     if ($uploadError === UPLOAD_ERR_NO_FILE) {
         if ($username === null) {
             respond(400, ['success' => false, 'message' => 'Pilih foto profil terlebih dahulu.']);
         }
-        $image = null;
-    } elseif (!is_array($image)) {
+        $uploadedImage = null;
+    } elseif (!is_array($uploadedImage)) {
         respond(400, ['success' => false, 'message' => 'Foto profil tidak valid.']);
     }
     $temporaryPath = null;
     $fileName = null;
     $storedPath = null;
-    if ($image !== null && $uploadError !== UPLOAD_ERR_NO_FILE) {
+    // Pindahkan foto ke folder profil setelah semua pengecekan lolos.
+    if ($uploadedImage !== null && $uploadError !== UPLOAD_ERR_NO_FILE) {
         if (in_array($uploadError, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)) {
             respond(413, ['success' => false, 'message' => 'Ukuran foto maksimal 5 MB.']);
         }
@@ -93,8 +96,8 @@ try {
             respond(400, ['success' => false, 'message' => 'Foto gagal diterima server. Coba pilih ulang.']);
         }
 
-        // Pastikan file berasal dari unggahan HTTP yang sedang diproses.
-        $temporaryPath = $image['tmp_name'] ?? '';
+        // Pastikan file ini benar-benar berasal dari unggahan request ini.
+        $temporaryPath = $uploadedImage['tmp_name'] ?? '';
         if (!is_string($temporaryPath) || $temporaryPath === '' || !is_uploaded_file($temporaryPath)) {
             respond(400, ['success' => false, 'message' => 'Foto unggahan tidak valid.']);
         }
@@ -135,7 +138,7 @@ try {
         }
     }
 
-    // Username dan foto disimpan bersama agar tombol profil tidak membuat update setengah jalan.
+    // Simpan username dan foto sekaligus supaya profil tidak berubah setengah jalan.
     try {
         if ($username !== null && $storedPath !== null) {
             $update = $pdo->prepare(

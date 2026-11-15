@@ -1,6 +1,6 @@
 export type DashboardRole = 'admin' | 'gate'
 
-// ID berbentuk teks agar penanda polling tetap sama dengan ID dari PHP.
+// ID dibuat teks supaya bentuknya sama dengan yang dikirim PHP.
 export interface DashboardActivityCursor {
   order_id: string
   customer_id: string
@@ -30,7 +30,7 @@ export interface DashboardUser {
   id: number
   username: string
   role: DashboardRole
-  // Path foto akun ikut sesi supaya avatar menu bisa langsung tampil.
+  // Sesi menyimpan alamat foto supaya avatar langsung muncul di menu.
   profile_image?: string | null
 }
 
@@ -80,14 +80,14 @@ export interface WahanaUpdateApiResponse {
   wahana?: TourifyWahana
 }
 
-// Bentuk data analytics dan pelanggan mengikuti tabel yang benar-benar ada di API.
+// Tipe ini mengikuti data pelanggan dan grafik yang dikirim API.
 export interface DashboardAnalyticsStats {
   booking_value: number
   new_customers: number
   orders: number
   tickets: number
   checkins: number
-  // Jumlah wahana katalog tidak terikat ke rentang tanggal.
+  // Jumlah wahana diambil dari katalog, bukan dari rentang tanggal.
   wahana: number
 }
 
@@ -125,7 +125,7 @@ export interface DashboardAnalytics {
   series: DashboardAnalyticsPoint[]
   recent_orders: DashboardRecentOrder[]
   top_wahana: DashboardTopWahana | null
-  // Tiga wahana teratas untuk rincian chart di banner.
+  // Tiga wahana teratas untuk grafik di banner.
   top_wahana_distribution: DashboardTopWahana[]
 }
 
@@ -138,7 +138,7 @@ export interface DashboardAnalyticsApiResponse {
 export interface DashboardCustomer {
   id: number
   username: string
-  // Path foto relatif supaya daftar pelanggan memakai base URL API yang sama.
+  // Foto memakai alamat relatif supaya URL API tetap sama.
   profile_image: string | null
   created_at: string
   order_count: number
@@ -153,7 +153,7 @@ export interface DashboardCustomersApiResponse {
   customers?: DashboardCustomer[]
 }
 
-// Daftar admin dibatasi per halaman oleh server.
+// Server mengirim daftar admin per halaman.
 export interface DashboardOrder extends DashboardRecentOrder {
   wahana_id: number
   checked_in_quantity: number
@@ -162,7 +162,7 @@ export interface DashboardOrder extends DashboardRecentOrder {
   status: 'Active' | 'Expire' | 'Used'
 }
 
-// Titik grafik pesanan memakai jumlah harian selama 14 hari terakhir.
+// Grafik menampilkan jumlah pesanan harian selama 14 hari terakhir.
 export interface DashboardOrderTrendPoint {
   date: string
   order_count: number

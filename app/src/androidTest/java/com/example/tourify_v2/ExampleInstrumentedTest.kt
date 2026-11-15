@@ -9,15 +9,15 @@ import org.junit.runner.RunWith
 import org.junit.Assert.*
 
 /**
- * Instrumented test, which will execute on an Android device.
+ * Contoh tes yang berjalan di perangkat Android.
  *
- * See [testing documentation](http://d.android.com/tools/testing).
+ * Lihat [panduan tes](http://d.android.com/tools/testing) untuk detailnya.
  */
 @RunWith(AndroidJUnit4::class)
 class ExampleInstrumentedTest {
     @Test
     fun useAppContext() {
-        // Context of the app under test.
+        // Ambil context aplikasi yang sedang diuji.
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
         assertEquals("com.example.tourify_v2", appContext.packageName)
     }

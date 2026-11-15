@@ -18,17 +18,43 @@ const phase = ref<'waiting' | 'revealing' | 'idle' | 'unrevealing' | 'unrevealin
 const closing = ref(false)
 const reducedMotion = usePreferredReducedMotion()
 const { asciiAnimations } = useDashboardPreferences()
-// Kartu ini menampilkan aktivitas dashboard atau pesan sukses dengan reveal yang sama.
+// Kartu ini dipakai untuk notifikasi aktivitas dan pesan sukses.
 const isOrder = computed(() => props.activity?.type === 'order')
-const title = computed(() => props.title ?? (props.test ? (isOrder.value ? 'Notifikasi uji' : 'Uji akun baru') : isOrder.value ? 'Pesanan baru' : 'Akun baru'))
+// Pilih judul khusus, judul tes, atau judul sesuai aktivitas.
+const title = computed(() => {
+  if (props.title !== undefined && props.title !== null) {
+    return props.title
+  }
+
+  if (props.test) {
+    return isOrder.value ? 'Notifikasi uji' : 'Uji akun baru'
+  }
+
+  return isOrder.value ? 'Pesanan baru' : 'Akun baru'
+})
 const description = computed(() => {
   if (props.description !== undefined) return props.description
   if (!props.activity) return ''
   if (props.activity.type === 'order') return `${props.activity.username} memesan ${props.activity.quantity} tiket di ${props.activity.wahana_name}.`
   return props.test ? `Akun contoh: ${props.activity.username}` : `${props.activity.username} baru saja mendaftar.`
 })
-const icon = computed(() => props.icon ?? (isOrder.value ? 'i-lucide-receipt-text' : props.activity ? 'i-lucide-user-round-plus' : 'i-lucide-circle-check'))
-// Akun baru membuka pelanggan yang sama, bukan daftar umum tanpa konteks.
+// Pilih ikon sesuai isi kartu.
+const icon = computed(() => {
+  if (props.icon !== undefined && props.icon !== null) {
+    return props.icon
+  }
+
+  if (isOrder.value) {
+    return 'i-lucide-receipt-text'
+  }
+
+  if (props.activity) {
+    return 'i-lucide-user-round-plus'
+  }
+
+  return 'i-lucide-circle-check'
+})
+// Notifikasi akun baru membuka daftar yang sudah difilter ke pelanggan itu.
 const target = computed(() => {
   if (!props.activity) return undefined
   return isOrder.value ? `/orders?ticket=${props.activity.entity_id}` : `/customers?customer=${encodeURIComponent(props.activity.entity_id)}`
@@ -37,7 +63,7 @@ const rupiah = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'ID
 let controller: AsciiRevealController | undefined
 let disposed = false
 
-// Simpan kontrol terakhir di luar area toast, termasuk sebelum pengguna menekan F8.
+// Simpan tempat yang terakhir dipilih, termasuk sebelum tombol F8 ditekan.
 let previousFocus: HTMLElement | null = null
 function rememberFocus(target: EventTarget | null) {
   if (!(target instanceof HTMLElement) || target === document.body) return
@@ -46,7 +72,7 @@ function rememberFocus(target: EventTarget | null) {
 }
 useEventListener('focusin', event => rememberFocus(event.target))
 
-// Fokus ke kartu berikutnya atau kembali bekerja, tanpa merebut fokus yang sudah dipindahkan.
+// Setelah notifikasi ditutup, kembalikan fokus kalau pengguna belum memilih tempat lain.
 function restoreFocus(host: HTMLElement | null, hadFocus: boolean) {
   const active = document.activeElement
   const viewport = host?.parentElement
@@ -58,7 +84,7 @@ function restoreFocus(host: HTMLElement | null, hadFocus: boolean) {
   destination?.focus({ preventScroll: true })
 }
 
-// Tiga detik dihitung saat isi sudah terbaca penuh; hover dan fokus menyimpan sisa waktunya.
+// Hitung tiga detik setelah kartu terbuka; jeda hitungan saat kartu disorot atau dipilih.
 const remaining = ref(3000)
 let startedAt: number | null = null
 const { start: startLifetime, stop: stopLifetime } = useTimeoutFn(() => {
@@ -77,24 +103,24 @@ function resumeLifetime() {
 }
 watch(() => props.paused, paused => paused ? pauseLifetime() : resumeLifetime())
 
-// Sudut dan permukaan memakai surface reveal yang sama dengan kartu Pengunjung masuk.
+// Animasi kartu mengikuti cara yang sama dengan kartu Pengunjung masuk.
 const { start: startEntrance, stop: stopEntrance } = useTimeoutFn(async () => {
   if (!root.value || !surface.value || disposed || closing.value) return
   if (reducedMotion.value === 'reduce' || !asciiAnimations.value) {
-    // Preferensi bisa berubah sebelum entrance dimulai; waktu baca tetap harus berjalan.
+    // Kalau animasi dimatikan sebelum kartu muncul, timer-nya tetap berjalan.
     phase.value = 'idle'
     resumeLifetime()
     return
   }
   let effect: AsciiRevealController | undefined
   try {
-    // Buka visibility dalam microtask yang sama sebelum library mengukur teks.
+    // Tampilkan isi sebelum pustaka menghitung ukuran teks.
     phase.value = 'revealing'
     await nextTick()
     const card = surface.value
     const host = card?.closest<HTMLElement>('.dashboard-activity-toast') ?? card?.parentElement
     if (disposed || closing.value || !card || !host) return
-    // Reveal lebih pelan supaya sudut dan perubahan ASCII kebaca sebelum kartu utuh.
+    // Perlambat animasi supaya isi kartu sempat terbaca sebelum tampil penuh.
     effect = createAsciiReveal(host, {
       preset: 'decode',
       surfaces: '[data-notification-card]',
@@ -119,7 +145,7 @@ const { start: startEntrance, stop: stopEntrance } = useTimeoutFn(async () => {
   }
 }, 0, { immediate: false })
 
-// Hentikan reveal yang sedang jalan dan biarkan kartu langsung terbaca saat dimatikan.
+// Kalau animasi dimatikan, hentikan efeknya dan langsung tampilkan kartu.
 watch([asciiAnimations, reducedMotion], ([animations, motion]) => {
   if (animations && motion !== 'reduce') {
     if (phase.value === 'waiting') startEntrance()
@@ -135,10 +161,10 @@ watch([asciiAnimations, reducedMotion], ([animations, motion]) => {
   }
 })
 
-// Balikkan surface reveal: isi dan kartu menghilang dulu, lalu bingkai sudut paling akhir.
+// Saat ditutup, sembunyikan isi dan kartu dulu, lalu hilangkan bingkainya.
 async function dismiss() {
   if (closing.value || disposed) return
-  // Catat sebelum tombol dinonaktifkan dan browser melepaskan fokusnya.
+  // Simpan fokus sebelum tombol ditutup dan browser melepasnya.
   const host = surface.value?.closest<HTMLElement>('.dashboard-activity-toast') ?? null
   const hadFocus = !!host?.contains(document.activeElement)
   closing.value = true
@@ -161,20 +187,20 @@ async function dismiss() {
         lazy: false
       })
       controller = effect
-      // Habiskan glyph isi lebih dulu agar tidak tersisa setelah bingkai menghilang.
+      // Sembunyikan isi dulu supaya teks tidak tertinggal setelah bingkai hilang.
       await effect.hide({ within: content })
       if (disposed) return
       phase.value = 'unrevealing-surface'
       await nextTick()
       if (disposed) return
-      // Isi yang sudah tersembunyi dilewati; surface membalik urutan kartu lalu sudutnya.
+      // Setelah isi hilang, tutup kartu dan bingkainya.
       await effect.hide({ within: card })
     }
   } catch {
     // Kartu tetap bisa ditutup meski browser gagal menjalankan efeknya.
   } finally {
     if (!disposed) {
-      // Tahan seluruh kartu tetap tersembunyi setelah sudut selesai; reduce motion memakai fade biasa.
+      // Setelah bingkai hilang, biarkan kartu tersembunyi; opsi kurangi gerakan memakai fade.
       phase.value = reducedMotion.value === 'reduce' || !asciiAnimations.value ? 'idle' : 'hidden'
       await nextTick()
       controller?.destroy()
@@ -204,16 +230,16 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <!-- Permukaan terpisah dari host overlay agar bingkai sudut tidak ikut tersembunyi. -->
+  <!-- Pisahkan kartu dari latar notifikasi supaya bingkainya tetap bisa dianimasikan. -->
   <div ref="surface" data-notification-card class="rounded-xl border border-default bg-default px-4 py-3">
-    <!-- Isi tetap terukur untuk ASCII; jarak antar bagian tetap ringkas. -->
+    <!-- Isi tetap bisa diukur animasi tanpa menambah jarak kartu. -->
     <div
       ref="root"
       :data-activity-reveal="phase"
       :data-ascii="phase === 'unrevealing-surface' ? 'skip' : undefined"
       class="relative min-w-0 pr-7"
     >
-      <!-- Penutup sendiri menjaga toast tetap terpasang sampai unreveal selesai. -->
+      <!-- Notifikasi tetap ada sampai animasi penutup selesai. -->
       <UButton
         icon="i-lucide-x"
         color="neutral"
@@ -235,7 +261,7 @@ onBeforeUnmount(() => {
         <span v-if="activity?.type === 'order'" class="font-medium text-highlighted tabular-nums">
           {{ rupiah.format(activity.total_price) }}
         </span>
-        <!-- Area sentuh 44px memakai margin negatif agar tinggi kartu tetap ringkas. -->
+        <!-- Tombol mudah ditekan, tapi marginnya menjaga kartu tetap ringkas. -->
         <UButton
           v-if="activity && test && isOrder"
           label="Tutup uji"

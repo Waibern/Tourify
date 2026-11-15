@@ -5,7 +5,7 @@ defineProps<{
 </script>
 
 <template>
-  <!-- Logo lebih mudah dikenali saat sidebar ciut; nama tampil saat sidebar terbuka. -->
+  <!-- Saat sidebar ditutup, tampilkan logo saja; namanya muncul saat dibuka. -->
   <div class="flex h-10 items-center gap-2 px-2 text-highlighted">
     <img
       src="/logo-putih.svg"

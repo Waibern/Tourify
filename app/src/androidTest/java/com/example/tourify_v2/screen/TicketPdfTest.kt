@@ -32,7 +32,7 @@ class TicketPdfTest {
             paymentMethod = "QRIS",
             username = "Pengunjung contoh"
         )
-        // Render PDF Android sungguhan agar isi kode dan larangan masuk ikut teruji.
+        // Buat PDF sungguhan supaya isi QR dan aturan masuk ikut dicek.
         val cases = mapOf(
             "active" to active,
             "expired" to active.copy(status = "Expire"),
@@ -43,7 +43,7 @@ class TicketPdfTest {
         cases.forEach { (name, ticket) ->
             val file = File(context.getExternalFilesDir(null), "ticket-fixes-$name.pdf")
             if (name == "overwrite") {
-                // Ekspor riwayat ke lokasi bekas PDF aktif harus mengganti isi lama sepenuhnya.
+                // PDF riwayat harus mengganti seluruh isi PDF lama di lokasi yang sama.
                 writeTicketPdf(context, Uri.fromFile(file), active)
             }
             writeTicketPdf(context, Uri.fromFile(file), ticket)
@@ -70,7 +70,7 @@ class TicketPdfTest {
         }
     }
 
-    // Pembaca yang sama memeriksa QR hasil render, bukan sekadar keberadaan file PDF.
+    // Baca QR dari hasil render, bukan cuma cek file PDF-nya ada.
     private fun decodeQr(bitmap: Bitmap): String? {
         val pixels = IntArray(bitmap.width * bitmap.height)
         bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)

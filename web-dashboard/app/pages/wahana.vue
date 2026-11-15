@@ -9,7 +9,7 @@ const { notifySuccess } = useDashboardNotifications()
 const wahana = ref<TourifyWahana[]>([])
 const search = ref('')
 const sort = ref('name')
-// Daftar ringkas tampil pertama; kartu foto tetap tersedia dari pilihan tampilan.
+// Tampilkan daftar dulu; kartu foto bisa dipilih lewat menu Tampilan.
 const view = ref<'cards' | 'list'>('list')
 const loading = ref(true)
 const saving = ref(false)
@@ -17,9 +17,9 @@ const editorOpen = ref(false)
 const errorMessage = ref('')
 const editorErrorMessage = ref('')
 const selectedWahanaId = ref<number | null>(null)
-let requestId = 0
+let latestLoadId = 0
 const pagination = ref({ pageIndex: 0, pageSize: 10 })
-// Kolom lebih rapat supaya foto tidak mengambil sebagian besar layar kerja.
+// Batasi lebar kolom supaya foto tidak memenuhi layar.
 const wahanaGridStyle = {
   gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 16rem), 1fr))'
 }
@@ -68,24 +68,24 @@ function formatRupiah(amount: number): string {
   }).format(amount)
 }
 
-// Data latar tidak mengulang ASCII dan tidak menimpa daftar saat form sedang diedit.
+// Pembaruan otomatis tidak mengulang animasi atau mengganti daftar saat form dibuka.
 async function loadWahana(background = false) {
-  const request = ++requestId
+  const loadId = ++latestLoadId
   if (!background) {
     loading.value = true
     errorMessage.value = ''
   }
   try {
     const response = await api.get<DashboardApiResponse>('dashboard_wahana.php')
-    if (request !== requestId || (background && (editorOpen.value || saving.value))) return
+    if (loadId !== latestLoadId || (background && (editorOpen.value || saving.value))) return
     if (JSON.stringify(wahana.value) !== JSON.stringify(response.wahana ?? [])) {
       wahana.value = response.wahana ?? []
     }
     errorMessage.value = ''
   } catch (error) {
-    if (request === requestId) errorMessage.value = getTourifyErrorMessage(error, 'Daftar wahana gagal dimuat.')
+    if (loadId === latestLoadId) errorMessage.value = getTourifyErrorMessage(error, 'Daftar wahana gagal dimuat.')
   } finally {
-    if (request === requestId) loading.value = false
+    if (loadId === latestLoadId) loading.value = false
   }
 }
 
@@ -98,7 +98,7 @@ function openEditor(item: TourifyWahana) {
   editorOpen.value = true
 }
 
-// Hanya memperbarui wahana yang dipilih; harga lama pada tiket tidak dihitung ulang.
+// Perubahan harga wahana tidak mengubah harga tiket yang sudah dibeli.
 async function saveWahana(event: FormSubmitEvent<WahanaForm>) {
   if (selectedWahanaId.value === null) {
     return
@@ -116,8 +116,8 @@ async function saveWahana(event: FormSubmitEvent<WahanaForm>) {
       throw new Error(response.message || 'Data wahana tidak diterima dari server.')
     }
 
-    // Respons daftar yang berangkat sebelum simpan tidak boleh mengembalikan harga lama.
-    requestId++
+    // Abaikan hasil pemuatan lama supaya harga baru tidak tertimpa.
+    latestLoadId++
     loading.value = false
     wahana.value = wahana.value.map(item =>
       item.id === response.wahana?.id ? response.wahana : item
@@ -186,7 +186,7 @@ useDashboardAutoRefresh(() => loadWahana(true), () => loading.value || saving.va
             variant="ghost"
             @click="search = ''; sort = 'name'"
           />
-          <!-- Pilihan tampilan memakai tombol template dengan status aktif yang bisa dibaca. -->
+          <!-- Tombol pilihan tampilan memberi tahu pembaca layar mana yang sedang aktif. -->
           <UFieldGroup aria-label="Tampilan wahana" role="group">
             <UButton
               label="Kartu"
@@ -215,8 +215,8 @@ useDashboardAutoRefresh(() => loadWahana(true), () => loading.value || saving.va
           :actions="[{ label: 'Coba lagi', onClick: () => loadWahana() }]"
         />
 
-        <!-- Lebar kartu dibatasi biar tetap ringkas di layar yang lebar. -->
-        <!-- Daftar wahana menunggu data di ruang tetap, lalu kontennya di-reveal. -->
+        <!-- Kartu tidak melebar berlebihan di layar besar. -->
+        <!-- Sisakan ruang saat memuat supaya daftar tidak bergeser. -->
         <AsciiReveal
           :loading="loading"
           duration="fast"
@@ -246,7 +246,7 @@ useDashboardAutoRefresh(() => loadWahana(true), () => loading.value || saving.va
               />
             </div>
 
-            <!-- Kartu pakai kilau kaca yang sama dengan Ringkasan, foto Tourify, dan ASCII reveal. -->
+            <!-- Kartu memakai foto wahana dan animasi yang sama dengan Ringkasan. -->
             <div
               v-else
               class="gap-3"
@@ -282,7 +282,7 @@ useDashboardAutoRefresh(() => loadWahana(true), () => loading.value || saving.va
                     {{ item.description }}
                   </p>
                 </div>
-                <!-- Tombol kaca pakai lapisan transparan dan pantulan tipis di tepi atas. -->
+                <!-- Lapisan transparan menjaga tombol tetap terlihat di atas foto. -->
                 <UButton
                   label="Edit"
                   color="neutral"
@@ -317,7 +317,7 @@ useDashboardAutoRefresh(() => loadWahana(true), () => loading.value || saving.va
         title="Edit wahana"
         description="Perubahan harga berlaku untuk pemesanan berikutnya."
       >
-        <!-- Tutup editor mengikuti label Indonesia yang sama dengan detail pesanan. -->
+        <!-- Tombol tutup memakai label Indonesia yang sama dengan dialog lain. -->
         <template #close="{ ui }">
           <UButton
             icon="i-lucide-x"
@@ -349,7 +349,7 @@ useDashboardAutoRefresh(() => loadWahana(true), () => loading.value || saving.va
               <UTextarea v-model="editorState.description" :rows="4" class="w-full" />
             </UFormField>
             <UFormField label="Harga tiket (rupiah)" name="ticket_price">
-              <!-- Terima semua rupiah bulat mulai dari satu, termasuk harga kelipatan seribu. -->
+              <!-- Harga boleh berupa angka rupiah bulat mulai dari Rp1. -->
               <UInput
                 v-model.number="editorState.ticket_price"
                 type="number"

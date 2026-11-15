@@ -6,11 +6,11 @@ const element = ref<HTMLElement | null>(null)
 const reducedMotion = usePreferredReducedMotion()
 const { asciiAnimations } = useDashboardPreferences()
 
-// Markup hanya dari pola bawaan paket; tidak pernah memasukkan data API ke v-html.
+// Isi HTML berasal dari pola paket, bukan dari data API.
 const markup = computed(() => asciiSkeletonHTML({ variant: 'dither', rows: props.rows, css: false }))
 useHead({ style: [{ key: 'ascii-skeleton', innerHTML: SKELETON_CSS }] })
 
-// Canvas baru aktif di browser, lalu dibersihkan saat data siap atau animasi dikurangi.
+// Buat kanvas di browser, lalu bersihkan saat data siap atau animasi dimatikan.
 watch([element, markup, reducedMotion, asciiAnimations], ([root, , motion, animations], _previous, onCleanup) => {
   if (root && motion !== 'reduce' && animations) {
     onCleanup(animateSkeletons(root))
@@ -30,7 +30,7 @@ watch([element, markup, reducedMotion, asciiAnimations], ([root, , motion, anima
 </template>
 
 <style scoped>
-/* Pola dasar cukup kontras di tema terang maupun gelap saat menunggu data. */
+/* Pola tetap terlihat di tema terang dan gelap saat data dimuat. */
 :deep(.ars-dither) {
   --ars-base: 0.42;
   --ars-wave: 0.95;

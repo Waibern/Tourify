@@ -6,7 +6,7 @@ data class ApiResponse(
     @SerializedName("success") val success: Boolean = false,
     @SerializedName("message") val message: String = "",
     @SerializedName("user") val user: ApiUser? = null,
-    // Token hasil login dipakai khusus untuk endpoint foto profil.
+    // Token login dipakai saat mengakses foto profil.
     @SerializedName("access_token") val accessToken: String? = null
 )
 
@@ -22,7 +22,7 @@ data class ProfileResponse(
     @SerializedName("profile") val profile: ApiProfile? = null
 )
 
-// Path gambar yang sama dipakai oleh aplikasi dan dashboard.
+// Aplikasi dan dashboard memakai path gambar yang sama.
 data class ApiProfile(
     @SerializedName("username") val username: String,
     @SerializedName("profile_image") val profileImage: String? = null

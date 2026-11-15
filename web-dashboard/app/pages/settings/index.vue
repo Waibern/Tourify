@@ -50,7 +50,7 @@ function openFilePicker() {
   fileRef.value?.click()
 }
 
-// Foto mengikuti batas dan format unggahan yang diterima API Tourify.
+// Foto harus mengikuti batas ukuran dan format yang diterima API.
 function stageProfileImage(file: File) {
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
     toast.add({
@@ -92,7 +92,7 @@ async function saveProfile(event: FormSubmitEvent<ProfileSchema>) {
 
   isUploading.value = true
   try {
-    // Username dan foto dikirim bersama saat keduanya berubah.
+    // Kirim username dan foto bersama kalau keduanya berubah.
     const response = selectedFile.value
       ? await api.upload<DashboardApiResponse>('profile.php', selectedFile.value, { username: event.data.username })
       : await api.put<DashboardApiResponse>('profile.php', { username: event.data.username })

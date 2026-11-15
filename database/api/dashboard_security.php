@@ -57,7 +57,7 @@ try {
 
     $pdo = getDatabaseConnection();
     $pdo->beginTransaction();
-    // Kunci admin agar dua request bersamaan tidak menghapus admin terakhir.
+    // Kunci daftar admin supaya dua request tidak menghapus admin terakhir bersamaan.
     $adminIds = $pdo->query(
         "SELECT id FROM users WHERE role = 'admin' ORDER BY id FOR UPDATE"
     )->fetchAll(PDO::FETCH_COLUMN);
@@ -79,7 +79,7 @@ try {
         respond(409, ['success' => false, 'message' => 'Admin terakhir tidak bisa dihapus.']);
     }
 
-    // Akun yang pernah membuat pesanan atau melakukan check-in harus tetap tersimpan.
+    // Jangan hapus akun yang sudah punya pesanan atau check-in.
     $ticketStatement = $pdo->prepare('SELECT id FROM tickets WHERE user_id = :id LIMIT 1 FOR UPDATE');
     $ticketStatement->execute(['id' => (int) $account['id']]);
     $checkinStatement = $pdo->prepare('SELECT id FROM ticket_checkins WHERE staff_user_id = :id LIMIT 1 FOR UPDATE');
@@ -98,7 +98,7 @@ try {
         @unlink(__DIR__ . '/' . $imagePath);
     }
 
-    // Penghapusan akun juga langsung mengakhiri sesi dashboard.
+    // Hapus akun sekaligus akhiri sesi dashboard-nya.
     destroyDashboardSession();
     respond(200, ['success' => true, 'message' => 'Akun dashboard berhasil dihapus.']);
 } catch (PDOException $exception) {

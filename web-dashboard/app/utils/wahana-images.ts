@@ -1,4 +1,4 @@
-// Satu mapping foto dipakai di daftar wahana dan ringkasan check-in.
+// Daftar foto ini dipakai di halaman wahana dan ringkasan check-in.
 export const wahanaImages: Record<number, string> = {
   1: '/wahana/dunia_petualang.jpg',
   2: '/wahana/samudra_biru.jpg',

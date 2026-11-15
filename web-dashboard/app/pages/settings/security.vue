@@ -38,7 +38,7 @@ const passwordState = reactive<Partial<PasswordSchema>>({
 })
 
 async function changePassword(event: FormSubmitEvent<PasswordSchema>) {
-  // Server mengecek password saat ini sebelum menyimpan yang baru.
+  // Server meminta password lama sebelum menyimpan password baru.
   saving.value = true
   passwordError.value = ''
   try {
@@ -64,7 +64,7 @@ async function changePassword(event: FormSubmitEvent<PasswordSchema>) {
 async function deleteAccount() {
   if (!deletePassword.value || !confirmDelete.value || deleting.value) return
 
-  // Hapus akun hanya setelah password dan konfirmasi dikirim ke server.
+  // Hapus akun setelah server menerima password dan konfirmasi.
   deleting.value = true
   deleteError.value = ''
   try {

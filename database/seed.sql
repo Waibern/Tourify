@@ -1,4 +1,4 @@
--- Katalog wahana untuk database staging baru; tidak berisi akun atau tiket.
+-- Isi katalog untuk database staging baru; tidak ada akun atau tiket.
 SET NAMES utf8mb4;
 
 INSERT INTO `wahana` (`id`, `name`, `description`, `ticket_price`) VALUES

@@ -25,11 +25,11 @@ interface ApiService {
     @POST("login.php")
     suspend fun login(@Body credentials: CredentialsRequest): Response<ApiResponse>
 
-    // Catat pelanggan yang lagi aktif di aplikasi.
+    // Kirim info pelanggan yang sedang aktif.
     @POST("customer_presence.php")
     suspend fun updateCustomerPresence(@Header("Authorization") authorization: String): Response<ApiResponse>
 
-    // Foto profil dimuat dan disimpan untuk akun dari token login.
+    // Ambil dan simpan foto profil milik akun yang login.
     @GET("profile.php")
     suspend fun getProfile(@Header("Authorization") authorization: String): Response<ProfileResponse>
 
@@ -43,14 +43,14 @@ interface ApiService {
     @GET("wahana.php")
     suspend fun getWahana(): Response<WahanaResponse>
 
-    // Pesan dan konteks akun dikirim ke PHP agar OpenAI key tetap di server.
+    // Kirim chat ke PHP supaya API key OpenAI tetap di server.
     @POST("chat.php")
     suspend fun sendChatMessage(
         @Header("Authorization") authorization: String,
         @Body request: ChatRequest
     ): Response<ChatResponse>
 
-    // Tiket hanya bisa dimuat untuk akun pemilik token.
+    // Ambil tiket milik akun yang login.
     @GET("tickets.php")
     suspend fun getTickets(@Header("Authorization") authorization: String): Response<TicketsResponse>
 

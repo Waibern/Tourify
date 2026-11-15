@@ -39,13 +39,13 @@ try {
     $startDate = $start->format('Y-m-d');
     $endDate = $end->format('Y-m-d');
     $pdo = getDatabaseConnection();
-    // Semua batas tanggal mengikuti WIB, termasuk timestamp akun dan check-in.
+    // Semua tanggal dihitung pakai WIB, termasuk akun baru dan check-in.
     $pdo->exec("SET time_zone = '+07:00'");
     $days = $start->diff($end)->days + 1;
     $previousStart = $start->modify('-' . $days . ' days')->format('Y-m-d');
     $previousEnd = $start->modify('-1 day')->format('Y-m-d');
 
-    // Hitung pelanggan baru berdasarkan tanggal akun dibuat.
+    // Hitung pelanggan baru dari tanggal akun dibuat.
     $statement = $pdo->prepare(
         'SELECT COUNT(*) FROM users '
         . 'WHERE role = :role AND DATE(created_at) BETWEEN :start_date AND :end_date'
@@ -57,7 +57,7 @@ try {
     ]);
     $newCustomers = (int) $statement->fetchColumn();
 
-    // Nilai pesanan dihitung dari pemesanan, bukan dianggap sudah dibayar.
+    // Nilai ini total pesanan, bukan bukti pembayaran sudah masuk.
     $statement = $pdo->prepare(
         'SELECT COUNT(*) AS orders, COALESCE(SUM(quantity), 0) AS tickets, '
         . 'COALESCE(SUM(total_price), 0) AS booking_value '
@@ -69,10 +69,10 @@ try {
     ]);
     $orderStats = $statement->fetch();
 
-    // Jumlah wahana berasal dari katalog, bukan rentang analytics.
+    // Jumlah wahana dihitung dari seluruh katalog, tidak ikut filter tanggal.
     $wahanaCount = (int) $pdo->query('SELECT COUNT(*) FROM wahana')->fetchColumn();
 
-    // Riwayat scan dipakai agar hitungan check-in mengikuti waktu scan sebenarnya.
+    // Hitung check-in dari waktu scan yang tercatat.
     $statement = $pdo->prepare(
         'SELECT COUNT(*) FROM ticket_checkins '
         . 'WHERE DATE(scanned_at) BETWEEN :start_date AND :end_date'
@@ -115,10 +115,14 @@ try {
         }
     }
 
-    // Hari tanpa aktivitas tetap nol; grafik tidak memakai angka contoh atau interpolasi data.
+    // Hari tanpa aktivitas tetap tampil 0; grafik memakai data asli.
     foreach ([
-        'new_customers' => "SELECT DATE(created_at) AS day, COUNT(*) AS amount FROM users WHERE role = 'customer' AND DATE(created_at) BETWEEN :start AND :end GROUP BY DATE(created_at)",
-        'checkin_count' => 'SELECT DATE(scanned_at) AS day, COUNT(*) AS amount FROM ticket_checkins WHERE DATE(scanned_at) BETWEEN :start AND :end GROUP BY DATE(scanned_at)',
+        'new_customers' => 'SELECT DATE(created_at) AS day, COUNT(*) AS amount '
+            . "FROM users WHERE role = 'customer' AND DATE(created_at) BETWEEN :start AND :end "
+            . 'GROUP BY DATE(created_at)',
+        'checkin_count' => 'SELECT DATE(scanned_at) AS day, COUNT(*) AS amount '
+            . 'FROM ticket_checkins WHERE DATE(scanned_at) BETWEEN :start AND :end '
+            . 'GROUP BY DATE(scanned_at)',
     ] as $metric => $sql) {
         $statement = $pdo->prepare($sql);
         $statement->execute(['start' => $startDate, 'end' => $endDate]);
@@ -127,7 +131,7 @@ try {
         }
     }
 
-    // Pembanding adalah rentang tepat sebelum pilihan pengguna, dengan jumlah hari yang sama.
+    // Bandingkan dengan periode sebelumnya yang jumlah harinya sama.
     $previousStats = [];
     foreach ([
         'booking_value' => 'SELECT COALESCE(SUM(total_price), 0) FROM tickets WHERE DATE(booking_date) BETWEEN :start AND :end',
@@ -142,7 +146,7 @@ try {
     }
     $previousStats['wahana'] = $wahanaCount;
 
-    // Tabel ringkas mengambil pemesanan terbaru pada rentang yang dipilih.
+    // Tabel ringkas menampilkan pesanan terbaru di rentang yang dipilih.
     $statement = $pdo->prepare(
         'SELECT t.id, u.username, w.name AS wahana_name, t.booking_date, t.visit_date, '
         . 't.quantity, t.total_price FROM tickets t '
@@ -167,7 +171,7 @@ try {
         ];
     }, $statement->fetchAll());
 
-    // Tiga wahana teratas mengikuti jumlah tiket pada rentang pilihan.
+    // Tampilkan 3 wahana dengan tiket terbanyak di rentang itu.
     $statement = $pdo->prepare(
         'SELECT w.id, w.name, COUNT(*) AS order_count, '
         . 'COALESCE(SUM(t.quantity), 0) AS ticket_count, '
@@ -208,7 +212,7 @@ try {
             'series' => array_values($seriesByDate),
             'recent_orders' => $recentOrders,
             'top_wahana' => $topWahana,
-            // Daftar ini dipakai chart untuk menampilkan tiga wahana teratas.
+            // Grafik memakai daftar ini untuk menampilkan 3 wahana teratas.
             'top_wahana_distribution' => $topWahanaDistribution,
         ],
     ]);

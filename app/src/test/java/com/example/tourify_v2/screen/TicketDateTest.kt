@@ -16,7 +16,7 @@ class TicketDateTest {
     }
 
     @Test fun movesOnlyPastVisitDatesToExpiredTickets() {
-        // hari kunjungan masih aktif; hanya tanggal sebelumnya yang lewat
+        // Hari ini masih berlaku; yang lewat cuma tanggal sebelumnya.
         val today = LocalDate.of(2026, 10, 25)
         assertTrue(isTicketExpired("2026-10-24", today))
         assertFalse(isTicketExpired("2026-10-25", today))
@@ -24,7 +24,7 @@ class TicketDateTest {
         assertFalse(isTicketExpired("Belum ditentukan", today))
     }
 
-    // Status tersimpan tidak boleh menghidupkan lagi kunjungan yang sudah lewat.
+    // Status lama nggak bisa mengaktifkan lagi tiket yang tanggalnya sudah lewat.
     @Test fun expiresOldActiveTicketsButKeepsTheVisitDayValid() {
         val today = LocalDate.of(2026, 11, 1)
         assertTrue(isTicketExpired("Active", "2026-10-31", today))
@@ -33,7 +33,7 @@ class TicketDateTest {
         assertFalse(isTicketExpired("Used", "2026-10-31", today))
     }
 
-    // QR hanya tersedia selama masih ada pengunjung yang bisa masuk.
+    // QR tetap ada selama masih ada pengunjung yang bisa masuk.
     @Test fun sharesEntryRulesBetweenActiveExpiredAndUsedTickets() {
         val active = ticket("active", "2099-11-12")
         val expired = active.copy(status = "Expire")
@@ -47,7 +47,7 @@ class TicketDateTest {
         assertEquals("Terpakai", ticketStatusLabel(used))
     }
 
-    // Pesanan rombongan tetap aktif sampai kuota pengunjungnya habis.
+    // Tiket rombongan tetap aktif sampai semua pengunjung check-in.
     @Test fun keepsPartialAdmissionsAvailableAndShowsRemainingVisitors() {
         val partial = ticket("partial", "2099-11-12").copy(checkedInQuantity = 1)
         assertTrue(canShowTicketQr(partial))
@@ -55,7 +55,7 @@ class TicketDateTest {
         assertEquals("3 orang sudah masuk", ticketVisitorSummary(partial.copy(checkedInQuantity = 3)))
     }
 
-    // Urutan memakai tanggal kunjungan, bukan urutan respons atau format string tanggal.
+    // Urutkan dari tanggal kunjungan, bukan urutan respons atau teks tanggal.
     @Test fun ordersUpcomingVisitsAndPlacesUnknownDatesLast() {
         val later = ticket("later", "2099-11-12")
         val sooner = ticket("sooner", "06/11/2099")
@@ -68,7 +68,7 @@ class TicketDateTest {
         )
     }
 
-    // Riwayat terbaru tetap mudah ditemukan, termasuk tiket yang seluruh kuotanya terpakai.
+    // Tiket riwayat terbaru tetap mudah ditemukan, meski kuotanya sudah habis.
     @Test fun ordersHistoryByMostRecentVisit() {
         val older = ticket("older", "2000-01-01")
         val newer = ticket("newer", "2001-01-01")
@@ -79,7 +79,7 @@ class TicketDateTest {
         )
     }
 
-    // Pencarian mengikuti tab aktif dan bisa memakai nama destinasi maupun kode tiket.
+    // Cari di tab yang dipilih pakai nama destinasi atau kode tiket.
     @Test fun searchesByDestinationOrCodeWithinTheSelectedTab() {
         val safari = ticket("TRF-SAFARI", "2099-11-12")
         val beach = ticket("TRF-PANTAI", "2099-11-06").copy(wahanaName = "Pantai Mentari")
@@ -93,7 +93,7 @@ class TicketDateTest {
         assertEquals(listOf(beach, safari), visibleTickets(tickets, false, "   "))
     }
 
-    // Perubahan tampilan tidak mengubah isi kode yang dibaca pemindai gate.
+    // Perubahan tampilan nggak mengubah kode yang dibaca pemindai.
     @Test fun preservesTheScannerPayload() {
         val ticket = ticket("TRF-10248", "2099-11-12")
         assertEquals(
@@ -102,7 +102,7 @@ class TicketDateTest {
         )
     }
 
-    // Fixture lokal tanpa data akun atau nomor tiket sungguhan.
+    // Data tes ini tidak memakai akun atau nomor tiket asli.
     private fun ticket(id: String, visitDate: String): Ticket {
         return Ticket(
             id = id,

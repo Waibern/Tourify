@@ -43,7 +43,7 @@ const filteredMembers = computed(() => {
 })
 
 async function loadMembers() {
-  // API hanya mengembalikan akun admin dan petugas dashboard.
+  // Daftar ini hanya berisi admin dan petugas dashboard.
   loading.value = true
   loadError.value = ''
   try {
@@ -57,7 +57,7 @@ async function loadMembers() {
 }
 
 async function createMember(event: FormSubmitEvent<MemberSchema>) {
-  // Password awal dan peran ikut divalidasi kembali oleh endpoint.
+  // Server memeriksa lagi password awal dan peran akun.
   creating.value = true
   createError.value = ''
   try {
@@ -66,7 +66,9 @@ async function createMember(event: FormSubmitEvent<MemberSchema>) {
       password: event.data.password,
       role: event.data.role
     })
-    if (!response.member) throw new Error(response.message || 'Akun gagal dibuat.')
+    if (!response.member) {
+      throw new Error(response.message || 'Akun gagal dibuat.')
+    }
 
     members.value = [...members.value, response.member].sort((left, right) => {
       if (left.role !== right.role) return left.role === 'admin' ? -1 : 1
@@ -87,7 +89,7 @@ async function createMember(event: FormSubmitEvent<MemberSchema>) {
 }
 
 async function updateMemberRole(member: DashboardMember, role: DashboardRole) {
-  // Server menyimpan peran; sesi lain membaca ulang izinnya pada request berikutnya.
+  // Peran baru berlaku saat sesi lain mengecek izin lagi.
   updatingMemberId.value = member.id
   actionError.value = ''
   try {
@@ -95,8 +97,18 @@ async function updateMemberRole(member: DashboardMember, role: DashboardRole) {
       id: member.id,
       role
     })
-    if (!response.member) throw new Error(response.message || 'Peran anggota gagal diperbarui.')
-    members.value = members.value.map(item => item.id === member.id ? response.member! : item)
+    if (!response.member) {
+      throw new Error(response.message || 'Peran anggota gagal diperbarui.')
+    }
+
+    const updatedMember = response.member
+    members.value = members.value.map((currentMember) => {
+      if (currentMember.id !== member.id) {
+        return currentMember
+      }
+
+      return updatedMember
+    })
     toast.add({
       title: 'Peran diperbarui',
       description: `${member.username} sekarang ${role === 'admin' ? 'admin' : 'petugas'}.`,
@@ -111,14 +123,16 @@ async function updateMemberRole(member: DashboardMember, role: DashboardRole) {
 }
 
 function confirmMemberRemoval(member: DashboardMember) {
-  // Riwayat akun diperiksa server sebelum penghapusan dijalankan.
+  // Server memeriksa riwayat akun sebelum menghapusnya.
   pendingMember.value = member
   deleteError.value = ''
   deleteOpen.value = true
 }
 
 async function removeMember() {
-  if (!pendingMember.value || deleting.value) return
+  if (!pendingMember.value || deleting.value) {
+    return
+  }
 
   deleting.value = true
   deleteError.value = ''
