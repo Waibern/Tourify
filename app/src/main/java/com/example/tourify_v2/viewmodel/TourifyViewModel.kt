@@ -175,6 +175,63 @@ class TourifyViewModel(
         }
     }
 
+    // Hapus tiket dari daftar hanya setelah server menyimpan status riwayatnya.
+    fun hideTicketFromHistory(
+        username: String,
+        accessToken: String,
+        ticketId: String,
+        onComplete: (Boolean, String) -> Unit
+    ) {
+        if (username.isBlank() || accessToken.isBlank() || ticketId.isBlank()) {
+            onComplete(
+                false,
+                "Sesi login tidak valid. Masuk kembali lalu coba lagi."
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val response = apiService.hideTicketFromHistory(
+                    authorization = "Bearer $accessToken",
+                    ticketId = ticketId
+                )
+                val result = response.body()
+                // Hilangkan kartu lokal setelah API mengonfirmasi penghapusan riwayat.
+                if (
+                    response.isSuccessful &&
+                    result?.success == true
+                ) {
+                    if (ticketsOwner == username) {
+                        tickets = tickets.filterNot {
+                            it.id == ticketId
+                        }
+                        ticketsUpdatedAtMillis = System.currentTimeMillis()
+                    }
+                    onComplete(
+                        true,
+                        result.message.ifBlank {
+                            "Tiket berhasil dihapus dari riwayat."
+                        }
+                    )
+                } else {
+                    onComplete(
+                        false,
+                        result?.message?.takeIf { it.isNotBlank() }
+                            ?: "Riwayat tiket gagal dihapus. Coba lagi."
+                    )
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                onComplete(
+                    false,
+                    "Riwayat tiket gagal dihapus. Periksa koneksi lalu coba lagi."
+                )
+            }
+        }
+    }
+
     fun bookTicket(
         username: String,
         accessToken: String,

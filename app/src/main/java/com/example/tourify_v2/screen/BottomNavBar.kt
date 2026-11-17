@@ -95,15 +95,16 @@ fun BottomNavBar(
             .fillMaxWidth()
             .navigationBarsPadding()
             .padding(
-                horizontal = 14.dp,
+                // Lebarkan bar supaya tiap tab punya ruang lebih lega.
+                horizontal = 10.dp,
                 vertical = 8.dp
             )
     ) {
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                // Padding 5 dp menyisakan area tab 50 dp untuk disentuh.
-                .height(60.dp),
+                // Tinggi 72 dp memberi ruang ikon dan area sentuh yang lebih lega.
+                .height(72.dp),
             shape = TourifyShapes.pill,
             // Putih solid menggantikan latar kaca navbar.
             color = TourifySurface,
@@ -116,7 +117,8 @@ fun BottomNavBar(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(5.dp),
+                    // Sisakan jarak nyaman antara tab dan tepi bar.
+                    .padding(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Semua item, termasuk Asisten AI, tersusun rata di bar yang sama.
@@ -212,12 +214,12 @@ private fun RowScope.NavigationTab(
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (!isSelected || (!largeTextEnabled && !compactWidthEnabled)) {
-            // Ikon tetap terlihat di tab yang tidak aktif.
+            // Ikon sedikit lebih besar supaya mudah dibaca di HP.
             Icon(
                 imageVector = item.icon,
                 contentDescription = null,
                 tint = if (isSelected) Color.White else TourifyMuted,
-                modifier = Modifier.size(26.dp)
+                modifier = Modifier.size(28.dp)
             )
         }
         AnimatedVisibility(

@@ -28,8 +28,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowOutward
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.automirrored.filled.EventNote
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
@@ -79,8 +77,8 @@ import java.util.Locale
 import kotlinx.coroutines.launch
 
 private val Forest = TourifyForest
-// Kategori pakai hijau utama, sama seperti tombol Beranda.
-private val SelectedGreen = TourifyForest
+// Tombol cari dan kategori aktif dibuat sedikit lebih terang.
+private val SelectedGreen = TourifyForestBright
 private val Mint = TourifyMint
 private val Canvas = TourifyCanvas
 private val Ink = TourifyInk
@@ -218,17 +216,40 @@ internal fun DestinationSearchBar(
             }
         ),
         trailingIcon = {
-            if (inputQuery.isNotEmpty()) {
-                IconButton(
-                    onClick = {
-                        inputQuery = ""
-                        onSearchQueryChange("")
-                    },
-                    modifier = Modifier.size(48.dp)
+            // Tombol pencarian memakai hijau yang sedikit lebih terang.
+            Row(
+                modifier = Modifier.padding(end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (inputQuery.isNotEmpty()) {
+                    IconButton(
+                        onClick = {
+                            inputQuery = ""
+                            onSearchQueryChange("")
+                        },
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Hapus pencarian"
+                        )
+                    }
+                }
+                FilledIconButton(
+                    onClick = submitSearch,
+                    modifier = Modifier
+                        .width(64.dp)
+                        .height(48.dp),
+                    shape = CircleShape,
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = TourifyForestBright,
+                        contentColor = Color.White
+                    )
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Hapus pencarian"
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Cari destinasi",
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
@@ -433,15 +454,12 @@ fun HomeScreen(
     LaunchedEffect(Unit) {
         viewModel.loadWahana()
     }
-    // Ingat pencarian, kategori, dan favorit selama Beranda terbuka.
+    // Ingat pencarian dan kategori selama Beranda terbuka.
     var searchQuery by remember {
         mutableStateOf("")
     }
     var selectedCategory by remember {
         mutableStateOf(DestinationCategory.ALL)
-    }
-    var favoriteIds by remember {
-        mutableStateOf<Set<Int>>(emptySet())
     }
     val filteredWahana = wahanaList.filter { wahana ->
         val matchesSearch = wahana.name.contains(
@@ -501,9 +519,10 @@ fun HomeScreen(
                 ) {
                     Image(
                         // Pakai ilustrasi hijau sebagai latar header Beranda.
-                        painter = painterResource(R.drawable.home_header_background),
+                        painter = painterResource(R.drawable.home_background),
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
+                        // Fokus crop agak ke area atas latar.
                         alignment = androidx.compose.ui.BiasAlignment(0f, -0.45f),
                         modifier = Modifier.matchParentSize()
                     )
@@ -1005,7 +1024,7 @@ fun HomeScreen(
                 }
             }
         }
-        // Kartu destinasi tanpa tombol favorit.
+        // Tampilkan carousel pada halaman awal Beranda.
         if (searchQuery.isBlank() && selectedCategory == DestinationCategory.ALL) {
             item {
                 // Biarkan carousel melebar sampai tepi layar supaya kartu berikutnya terlihat utuh.
@@ -1031,7 +1050,6 @@ fun HomeScreen(
                                 .width(300.dp)
                                 // Kartu lebih pendek agar carousel terbaca sebelum navbar.
                                 .aspectRatio(destinationCardAspectRatio),
-                            isFavorite = false,
                             onClick = {
                                 onDestinationClick(wahana.id)
                             }
@@ -1059,16 +1077,8 @@ fun HomeScreen(
                         .padding(horizontal = 20.dp)
                         .fillMaxWidth()
                         .aspectRatio(1.7f),
-                    isFavorite = wahana.id in favoriteIds,
                     onClick = {
                         onDestinationClick(wahana.id)
-                    },
-                    onFavoriteClick = {
-                        favoriteIds = if (wahana.id in favoriteIds) {
-                            favoriteIds - wahana.id
-                        } else {
-                            favoriteIds + wahana.id
-                        }
                     }
                 )
             }
@@ -1360,14 +1370,12 @@ internal fun UpcomingVisitSection(
     }
 }
 
-// Kartu foto ini punya bayangan jelas, tombol favorit, dan pintasan ke detail.
+// Kartu foto punya bayangan jelas dan pintasan ke detail.
 @Composable
 internal fun DestinationCard(
     wahana: Wahana,
     modifier: Modifier,
-    isFavorite: Boolean,
-    onClick: () -> Unit,
-    onFavoriteClick: (() -> Unit)? = null
+    onClick: () -> Unit
 ) {
     Card(
         modifier = modifier,
@@ -1401,40 +1409,6 @@ internal fun DestinationCard(
                         )
                     )
             )
-            if (onFavoriteClick != null) {
-                Surface(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(12.dp)
-                        .size(48.dp),
-                    shape = CircleShape,
-                    color = TourifyGlassSurface,
-                    border = BorderStroke(
-                        1.dp,
-                        TourifyGlassHighlight
-                    )
-                ) {
-                    IconButton(
-                        onClick = onFavoriteClick,
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        Icon(
-                            imageVector = if (isFavorite) {
-                                Icons.Filled.Favorite
-                            } else {
-                                Icons.Filled.FavoriteBorder
-                            },
-                            contentDescription = if (isFavorite) {
-                                "Hapus ${wahana.name} dari favorit"
-                            } else {
-                                "Simpan ${wahana.name} ke favorit"
-                            },
-                            tint = if (isFavorite) TourifyFavorite else Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-            }
             Row(
                 modifier = Modifier
                     .align(Alignment.BottomStart)

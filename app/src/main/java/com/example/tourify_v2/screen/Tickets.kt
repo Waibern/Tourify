@@ -6,8 +6,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
@@ -42,7 +40,7 @@ import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Refresh
@@ -149,7 +147,15 @@ fun TicketsScreen(
             onTicketDetailVisibilityChanged = onTicketDetailVisibilityChanged,
             onExploreDestinations = onExploreDestinations,
             requestedTicketId = requestedTicketId,
-            onTicketRequestConsumed = onTicketRequestConsumed
+            onTicketRequestConsumed = onTicketRequestConsumed,
+            onHideHistoryTicket = { ticketId, onComplete ->
+                viewModel.hideTicketFromHistory(
+                    username = currentUser,
+                    accessToken = accessToken,
+                    ticketId = ticketId,
+                    onComplete = onComplete
+                )
+            }
         )
     }
 }
@@ -168,7 +174,14 @@ internal fun TicketsContent(
     onExploreDestinations: () -> Unit = {},
     // ID dari Beranda dikonsumsi sekali supaya tombol kembali tetap membuka daftar.
     requestedTicketId: String? = null,
-    onTicketRequestConsumed: () -> Unit = {}
+    onTicketRequestConsumed: () -> Unit = {},
+    // Aksi hapus hanya tersedia untuk tiket milik akun yang sedang login.
+    onHideHistoryTicket: (String, (Boolean, String) -> Unit) -> Unit = { _, onComplete ->
+        onComplete(
+            false,
+            "Riwayat tiket gagal dihapus. Coba lagi."
+        )
+    }
 ) {
     // Simpan ID tiket supaya perubahan ukuran teks nggak menutup tiket yang dibuka.
     var showHistory by rememberSaveable {
@@ -252,7 +265,8 @@ internal fun TicketsContent(
                 isRefreshing = isRefreshing,
                 refreshError = refreshError,
                 updatedAtMillis = updatedAtMillis,
-                onRefresh = onRefresh
+                onRefresh = onRefresh,
+                onHideHistoryTicket = onHideHistoryTicket
             )
         } else {
             Column(
@@ -556,7 +570,8 @@ private fun TicketTopBar(
     title: String,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
-    onDownload: (() -> Unit)? = null,
+    onDeleteHistory: (() -> Unit)? = null,
+    canDeleteHistory: Boolean = true,
     onBack: (() -> Unit)? = null,
     backDescription: String = "Kembali ke daftar tiket"
 ) {
@@ -584,10 +599,9 @@ private fun TicketTopBar(
                         tint = TourifyForest
                     )
                 }
-            } else {
-                Spacer(Modifier.size(48.dp))
             }
-            // TalkBack mengenali judul ini sebagai heading.
+            // Judul daftar tiket rata kiri; detail tiket tetap rata tengah.
+            // TalkBack tetap mengenali judul ini sebagai heading.
             Text(
                 text = title,
                 modifier = Modifier
@@ -598,17 +612,18 @@ private fun TicketTopBar(
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = TourifyInk,
-                textAlign = TextAlign.Center
+                textAlign = if (onBack == null) TextAlign.Start else TextAlign.Center
             )
-            // Di detail tiket, pakai slot kanan atas untuk mengunduh PDF.
-            if (onDownload != null) {
+            // Hapus riwayat lewat kanan atas; tiket aktif belum bisa dihapus.
+            if (onDeleteHistory != null) {
                 IconButton(
-                    onClick = onDownload
+                    onClick = onDeleteHistory,
+                    enabled = canDeleteHistory
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Download,
-                        contentDescription = "Unduh tiket PDF",
-                        tint = TourifyForest
+                        imageVector = Icons.Default.DeleteOutline,
+                        contentDescription = "Hapus riwayat tiket",
+                        tint = if (canDeleteHistory) TourifyError else TourifyMuted
                     )
                 }
             } else {
@@ -1206,7 +1221,14 @@ internal fun TicketDetailScreen(
     isRefreshing: Boolean = false,
     refreshError: String = "",
     updatedAtMillis: Long? = null,
-    onRefresh: () -> Unit = {}
+    onRefresh: () -> Unit = {},
+    // Gunakan API agar riwayat yang dihapus tetap hilang setelah aplikasi dibuka ulang.
+    onHideHistoryTicket: (String, (Boolean, String) -> Unit) -> Unit = { _, onComplete ->
+        onComplete(
+            false,
+            "Riwayat tiket gagal dihapus. Coba lagi."
+        )
+    }
 ) {
     // Nyalakan layar QR hanya saat tiket masih bisa dipakai.
     val canShowQrCode = canShowTicketQr(ticket)
@@ -1219,6 +1241,16 @@ internal fun TicketDetailScreen(
     var showLargeQr by rememberSaveable(ticket.id) {
         mutableStateOf(false)
     }
+    // Simpan dialog hapus dan status permintaan selama detail tiket terbuka.
+    var showDeleteHistoryConfirmation by rememberSaveable(ticket.id) {
+        mutableStateOf(false)
+    }
+    var isDeletingHistory by remember(ticket.id) {
+        mutableStateOf(false)
+    }
+    var deleteHistoryError by rememberSaveable(ticket.id) {
+        mutableStateOf("")
+    }
     val context = LocalContext.current
     val view = LocalView.current
     // Biarkan layar menyala saat tiket aktif ditunjukkan ke petugas.
@@ -1230,25 +1262,6 @@ internal fun TicketDetailScreen(
         view.keepScreenOn = canShowQrCode
         onDispose {
             view.keepScreenOn = previous
-        }
-    }
-    // Simpan salinan PDF lewat pemilih file Android tanpa izin tambahan.
-    val pdfLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/pdf")
-    ) { uri ->
-        if (uri != null) {
-            val result = runCatching {
-                writeTicketPdf(
-                    context,
-                    uri,
-                    ticket
-                )
-            }
-            Toast.makeText(
-                context,
-                if (result.isSuccess) "PDF tiket berhasil disimpan" else "PDF tiket gagal disimpan. Coba lagi.",
-                Toast.LENGTH_SHORT
-            ).show()
         }
     }
 
@@ -1264,13 +1277,12 @@ internal fun TicketDetailScreen(
             title = "Tiket Saya",
             isRefreshing = isRefreshing,
             onRefresh = onRefresh,
-            onDownload = {
-                val ticketFileId = ticket.id.replace(
-                    Regex("[^A-Za-z0-9_-]"),
-                    "_"
-                )
-                pdfLauncher.launch("Tourify-Tiket-$ticketFileId.pdf")
+            // Buka konfirmasi sebelum menghapus riwayat tiket yang selesai.
+            onDeleteHistory = {
+                deleteHistoryError = ""
+                showDeleteHistoryConfirmation = true
             },
+            canDeleteHistory = isFinished && !isDeletingHistory,
             onBack = onDismiss
         )
 
@@ -1484,6 +1496,77 @@ internal fun TicketDetailScreen(
                 )
             }
         }
+    }
+    // Minta konfirmasi sebelum menyembunyikan riwayat tiket dari akun.
+    if (showDeleteHistoryConfirmation) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!isDeletingHistory) {
+                    showDeleteHistoryConfirmation = false
+                }
+            },
+            title = {
+                Text("Hapus riwayat tiket?")
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        "Tiket ${ticket.wahanaName} akan dihapus dari riwayat akun."
+                    )
+                    Text(
+                        "Catatan booking tetap tersimpan."
+                    )
+                    if (deleteHistoryError.isNotBlank()) {
+                        Text(
+                            text = deleteHistoryError,
+                            color = TourifyError,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        isDeletingHistory = true
+                        deleteHistoryError = ""
+                        onHideHistoryTicket(
+                            ticket.id
+                        ) { success, message ->
+                            isDeletingHistory = false
+                            if (success) {
+                                showDeleteHistoryConfirmation = false
+                                Toast.makeText(
+                                    context,
+                                    message,
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                onDismiss()
+                            } else {
+                                deleteHistoryError = message
+                            }
+                        }
+                    },
+                    enabled = !isDeletingHistory
+                ) {
+                    Text(
+                        if (isDeletingHistory) "Menghapus..." else "Hapus"
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteHistoryConfirmation = false
+                    },
+                    enabled = !isDeletingHistory
+                ) {
+                    Text("Batal")
+                }
+            }
+        )
     }
     if (showLargeQr && (canShowQrCode || used)) {
         LargeTicketQr(

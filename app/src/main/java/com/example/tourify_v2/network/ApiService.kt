@@ -11,6 +11,7 @@ import com.example.tourify_v2.model.WahanaResponse
 import okhttp3.MultipartBody
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.Multipart
@@ -53,6 +54,13 @@ interface ApiService {
     // Ambil tiket milik akun yang login.
     @GET("tickets.php")
     suspend fun getTickets(@Header("Authorization") authorization: String): Response<TicketsResponse>
+
+    // Sembunyikan tiket selesai dari riwayat akun yang sedang login.
+    @DELETE("tickets.php")
+    suspend fun hideTicketFromHistory(
+        @Header("Authorization") authorization: String,
+        @Query("id") ticketId: String
+    ): Response<ApiResponse>
 
     @POST("tickets.php")
     suspend fun bookTicket(

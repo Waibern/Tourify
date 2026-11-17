@@ -265,7 +265,8 @@ fun AccountScreen(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(96.dp)
+                            // Foto profil dibuat lebih besar supaya lebih menonjol.
+                            .size(128.dp)
                             .clip(CircleShape)
                             .background(TourifySurface)
                             .border(

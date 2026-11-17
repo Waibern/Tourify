@@ -35,6 +35,8 @@ CREATE TABLE `tickets` (
   `unit_price` int unsigned NOT NULL,
   `total_price` int unsigned NOT NULL,
   `payment_method` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  -- Tandai waktu tiket disembunyikan dari riwayat akun tanpa menghapus catatan booking.
+  `history_hidden_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `fk_tickets_user` (`user_id`),
   KEY `fk_tickets_wahana` (`wahana_id`),

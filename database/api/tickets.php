@@ -18,13 +18,36 @@ try {
     }
 
     $method = $_SERVER['REQUEST_METHOD'] ?? '';
-    if (!in_array($method, ['GET', 'POST'], true)) {
-        header('Allow: GET, POST');
-        respond(405, ['success' => false, 'message' => 'Gunakan metode GET atau POST.']);
+    if (!in_array($method, ['GET', 'POST', 'DELETE'], true)) {
+        header('Allow: GET, POST, DELETE');
+        respond(405, ['success' => false, 'message' => 'Gunakan metode GET, POST, atau DELETE.']);
     }
     $input = $method === 'POST' ? readJsonInput() : [];
     // Tentukan tanggal tiket berdasarkan waktu Jakarta.
     $today = (new DateTimeImmutable('now', new DateTimeZone('Asia/Jakarta')))->format('Y-m-d');
+
+    if ($method === 'DELETE') {
+        $ticketId = filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT);
+        if ($ticketId === false || $ticketId === null || $ticketId < 1) {
+            respond(400, ['success' => false, 'message' => 'ID tiket tidak valid.']);
+        }
+
+        // Batasi hapus riwayat ke tiket selesai milik akun dari token.
+        $statement = $pdo->prepare(
+            "UPDATE tickets SET history_hidden_at = UTC_TIMESTAMP() "
+            . "WHERE id = :ticket_id AND user_id = :user_id "
+            . "AND status IN ('Expire', 'Used') AND history_hidden_at IS NULL"
+        );
+        $statement->execute([
+            'ticket_id' => $ticketId,
+            'user_id' => $user['id'],
+        ]);
+        if ($statement->rowCount() !== 1) {
+            respond(404, ['success' => false, 'message' => 'Riwayat tiket tidak ditemukan atau belum selesai.']);
+        }
+
+        respond(200, ['success' => true, 'message' => 'Tiket berhasil dihapus dari riwayat.']);
+    }
 
     if ($method === 'GET') {
         // Jangan ubah status Terpakai; perbarui status tiket lain pakai tanggal Jakarta.
@@ -40,7 +63,8 @@ try {
             'SELECT t.id, u.username, w.name AS wahana_name, t.booking_date, t.visit_date, t.quantity, '
             . 't.checked_in_quantity, t.unit_price, t.total_price, t.payment_method, t.status '
             . 'FROM tickets t INNER JOIN users u ON u.id = t.user_id INNER JOIN wahana w ON w.id = t.wahana_id '
-            . 'WHERE t.user_id = :user_id ORDER BY t.booking_date DESC, t.id DESC'
+            . 'WHERE t.user_id = :user_id AND t.history_hidden_at IS NULL '
+            . 'ORDER BY t.booking_date DESC, t.id DESC'
         );
         $statement->execute(['user_id' => $user['id']]);
         $tickets = array_map(static function (array $row): array {

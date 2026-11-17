@@ -202,7 +202,6 @@ fun DestinationsScreen(
                         )
                         .fillMaxWidth()
                         .aspectRatio(1.65f),
-                    isFavorite = false,
                     onClick = {
                         onDestinationClick(destination.id)
                     }

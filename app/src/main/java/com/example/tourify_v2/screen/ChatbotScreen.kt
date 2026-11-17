@@ -45,6 +45,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -75,7 +76,6 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -1781,21 +1781,17 @@ private fun ChatHeaderButton(
     }
 }
 
-// Monogram putih ini jadi tanda asisten Tourify yang lebih mudah dikenali.
+// Ikon bintang ini menyamakan tanda asisten dengan ikon di navbar.
 @Composable
 private fun ChatBrandMark(
     modifier: Modifier = Modifier,
     color: Color = Color.White
 ) {
-    Text(
-        text = "T",
-        color = color,
-        fontSize = 18.sp,
-        lineHeight = 20.sp,
-        fontWeight = FontWeight.ExtraBold,
-        fontFamily = FontFamily.SansSerif,
-        textAlign = TextAlign.Center,
-        modifier = modifier.clearAndSetSemantics { }
+    Icon(
+        imageVector = Icons.Default.AutoAwesome,
+        contentDescription = null,
+        tint = color,
+        modifier = modifier
     )
 }
 

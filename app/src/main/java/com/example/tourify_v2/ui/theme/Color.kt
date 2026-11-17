@@ -31,7 +31,6 @@ val TourifyInfo = Color(0xFF2E6278)
 val TourifyInfoContainer = Color(0xFFE7F1F4)
 val TourifyScrim = Color(0x99121614)
 
-val TourifyFavorite = Color(0xFFB8514A)
 val TourifyForestDeep = Color(0xFF313131)
 val TourifyGlassSurface = Color(0xD9212925)
 val TourifyGlassHighlight = Color.White.copy(alpha = 0.32f)
