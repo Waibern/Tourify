@@ -39,6 +39,150 @@ Tourify adalah platform pemesanan tiket wahana dengan aplikasi Android untuk pen
 | Database | MySQL |
 | Hosting | Nginx dan PHP-FPM; panduan ada di [`deploy/README.md`](deploy/README.md) |
 
+## Tangkapan layar
+
+### Aplikasi Android
+
+<p align="center">
+  <img src="docs/screenshots/android-home.png" alt="Beranda aplikasi Tourify di Android" width="320">
+</p>
+
+### Dashboard web
+
+<img src="web-dashboard/public/tourify-dashboard-overview.png" alt="Screenshot penuh halaman Overview dashboard Tourify" width="100%">
+
+## Class diagram Android
+
+Diagram berikut menunjukkan alur layar Compose, ViewModel, Retrofit API, dan model data utama.
+
+```mermaid
+classDiagram
+    direction LR
+
+    class MainActivity {
+        +onCreate()
+    }
+    class TourifyApp {
+        <<Composable>>
+    }
+    class TourifyMainContent {
+        <<Composable>>
+    }
+    class AuthScreen {
+        <<Composable>>
+    }
+    class HomeScreen {
+        <<Composable>>
+    }
+    class DestinationsScreen {
+        <<Composable>>
+    }
+    class DestinationScreen {
+        <<Composable>>
+    }
+    class TicketsScreen {
+        <<Composable>>
+    }
+    class AccountScreen {
+        <<Composable>>
+    }
+    class ChatbotAssistantScreen {
+        <<Composable>>
+    }
+
+    class AuthViewModel {
+        +register(username, password)
+        +login(username, password)
+        +updateCustomerPresence()
+        +loadProfileImage()
+        +uploadProfileImage(bytes, mimeType)
+        +logout()
+    }
+    class TourifyViewModel {
+        +loadWahana()
+        +loadTickets(username, accessToken)
+        +bookTicket(accessToken, request)
+        +sendChatMessage(accessToken, message, history)
+        +submitTicketRating(accessToken, request)
+        +hideTicketFromHistory(accessToken, ticketId)
+    }
+    class ApiClient {
+        <<object>>
+        +service ApiService
+        +profileImageUrl(path)
+    }
+    class ApiService {
+        <<interface>>
+        +register(credentials)
+        +login(credentials)
+        +updateCustomerPresence(accessToken)
+        +getProfile(accessToken)
+        +uploadProfileImage(accessToken, image)
+        +getWahana()
+        +getTickets(accessToken)
+        +bookTicket(accessToken, request)
+        +sendChatMessage(accessToken, request)
+        +submitTicketRating(accessToken, request)
+        +hideTicketFromHistory(accessToken, ticketId)
+    }
+
+    class CredentialsRequest
+    class ApiResponse
+    class ApiUser
+    class ProfileResponse
+    class ApiProfile
+    class Wahana
+    class WahanaResponse
+    class Ticket
+    class TicketsResponse
+    class TicketBookingRequest
+    class TicketRatingRequest
+    class TicketResultResponse
+    class ChatRequest
+    class ChatHistoryItem
+    class ChatResponse
+    class ChatBookingProposal
+
+    MainActivity --> TourifyApp : starts
+    TourifyApp --> TourifyMainContent : opens app flow
+    TourifyMainContent --> AuthViewModel : creates
+    TourifyMainContent --> TourifyViewModel : creates
+    TourifyMainContent --> ChatbotAssistantScreen : presents chat
+
+    AuthScreen --> AuthViewModel : sign in / sign up
+    HomeScreen --> TourifyViewModel : browse / chat
+    DestinationsScreen --> TourifyViewModel : browse
+    DestinationScreen --> TourifyViewModel : details / booking
+    TicketsScreen --> TourifyViewModel : tickets / rating
+    AccountScreen --> AuthViewModel : profile / session
+    AccountScreen --> TourifyViewModel : ticket summary
+    TourifyMainContent ..> TourifyViewModel : dispatches chat / booking
+
+    AuthViewModel --> ApiClient : calls service
+    TourifyViewModel --> ApiClient : default service
+    TourifyViewModel --> ApiService : calls endpoints
+    ApiClient --> ApiService : builds Retrofit service
+
+    ApiService ..> CredentialsRequest : register / login
+    ApiService ..> ApiResponse : auth / presence / rating
+    ApiService ..> ProfileResponse : profile
+    ApiService ..> WahanaResponse : catalog
+    ApiService ..> TicketsResponse : ticket list
+    ApiService ..> TicketBookingRequest : booking
+    ApiService ..> TicketRatingRequest : rating
+    ApiService ..> TicketResultResponse : booking result
+    ApiService ..> ChatRequest : chat input
+    ApiService ..> ChatResponse : chat output
+
+    ApiResponse o-- ApiUser : user
+    ProfileResponse o-- ApiProfile : profile
+    WahanaResponse o-- Wahana : wahana list
+    TicketsResponse o-- Ticket : ticket list
+    TicketResultResponse o-- Ticket : created ticket
+    ChatRequest o-- ChatHistoryItem : conversation history
+    ChatResponse o-- ChatBookingProposal : optional booking proposal
+```
+
 ## Struktur proyek
 
 ```text
