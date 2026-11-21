@@ -1,4 +1,8 @@
-# Tourify
+<p align="center">
+  <img src="web-dashboard/public/tourify-overview.png" alt="Dashboard web dan beranda aplikasi Android Tourify" width="100%">
+</p>
+
+<h1 align="center">Tourify</h1>
 
 Tourify adalah platform pemesanan tiket wahana dengan aplikasi Android untuk pengunjung dan dashboard web untuk admin serta petugas. Proyek ini berisi aplikasi Android, dashboard Nuxt, API PHP, skema MySQL, dan berkas deploy.
 
@@ -31,6 +35,18 @@ Tourify adalah platform pemesanan tiket wahana dengan aplikasi Android untuk pen
 
 ## Teknologi
 
+<p align="center">
+  <img src="https://img.shields.io/badge/Kotlin-7F52FF?logo=kotlin&amp;logoColor=white" alt="Kotlin">
+  <img src="https://img.shields.io/badge/Jetpack%20Compose-4285F4?logo=jetpackcompose&amp;logoColor=white" alt="Jetpack Compose">
+  <img src="https://img.shields.io/badge/Retrofit-3DDC84?logo=android&amp;logoColor=white" alt="Retrofit">
+  <img src="https://img.shields.io/badge/Nuxt-00DC82?logo=nuxt&amp;logoColor=white" alt="Nuxt">
+  <img src="https://img.shields.io/badge/Vue-4FC08D?logo=vuedotjs&amp;logoColor=white" alt="Vue">
+  <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&amp;logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/badge/PHP-777BB4?logo=php&amp;logoColor=white" alt="PHP">
+  <img src="https://img.shields.io/badge/MySQL-4479A1?logo=mysql&amp;logoColor=white" alt="MySQL">
+  <img src="https://img.shields.io/badge/Nginx-009639?logo=nginx&amp;logoColor=white" alt="Nginx">
+</p>
+
 | Bagian | Teknologi |
 | --- | --- |
 | Android | Kotlin, Jetpack Compose, Navigation Compose, Retrofit |
@@ -38,18 +54,6 @@ Tourify adalah platform pemesanan tiket wahana dengan aplikasi Android untuk pen
 | API | PHP 8.3, PDO MySQL |
 | Database | MySQL |
 | Hosting | Nginx dan PHP-FPM; panduan ada di [`deploy/README.md`](deploy/README.md) |
-
-## Tangkapan layar
-
-### Aplikasi Android
-
-<p align="center">
-  <img src="docs/screenshots/android-home.png" alt="Beranda aplikasi Tourify di Android" width="320">
-</p>
-
-### Dashboard web
-
-<img src="web-dashboard/public/tourify-dashboard-overview.png" alt="Screenshot penuh halaman Overview dashboard Tourify" width="100%">
 
 ## Class diagram Android
 

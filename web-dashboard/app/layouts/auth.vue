@@ -9,10 +9,10 @@
     </section>
 
     <!-- Screenshot utuh memakai rasio asli supaya seluruh dashboard terlihat. -->
-    <aside class="order-first mx-3 mt-3 flex aspect-[2992/1722] max-h-[42svh] items-center justify-center overflow-hidden rounded-[1.5rem] bg-[#151515] p-2 lg:order-last lg:mx-0 lg:my-0 lg:h-dvh lg:max-h-none lg:rounded-none lg:p-8">
+    <aside class="order-first mx-3 mt-3 flex aspect-[2766/1310] max-h-[42svh] items-center justify-center overflow-hidden rounded-[1.5rem] bg-[#151515] p-2 lg:order-last lg:mx-0 lg:my-0 lg:h-dvh lg:max-h-none lg:rounded-none lg:p-8">
       <img
-        src="/tourify-dashboard-overview.png"
-        alt="Screenshot penuh halaman Overview dashboard Tourify"
+        src="/tourify-overview.png"
+        alt="Screenshot gabungan dashboard web dan beranda Android Tourify"
         class="block max-h-full max-w-full rounded-xl object-contain"
       >
     </aside>
