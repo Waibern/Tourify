@@ -1,20 +1,21 @@
 package com.example.tourify_v2.screen
 
-import android.content.ClipData
-import android.content.ClipboardManager
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.graphics.Bitmap
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -33,19 +34,25 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.QrCode
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -53,21 +60,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -93,11 +103,16 @@ import com.example.tourify_v2.ui.theme.*
 import com.example.tourify_v2.viewmodel.TourifyViewModel
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 // Pakai token akun aktif saat memuat tiket.
 @Composable
@@ -148,6 +163,15 @@ fun TicketsScreen(
             onExploreDestinations = onExploreDestinations,
             requestedTicketId = requestedTicketId,
             onTicketRequestConsumed = onTicketRequestConsumed,
+            onSubmitTicketRating = { ticketId, rating, onComplete ->
+                viewModel.submitTicketRating(
+                    username = currentUser,
+                    accessToken = accessToken,
+                    ticketId = ticketId,
+                    rating = rating,
+                    onComplete = onComplete
+                )
+            },
             onHideHistoryTicket = { ticketId, onComplete ->
                 viewModel.hideTicketFromHistory(
                     username = currentUser,
@@ -175,6 +199,13 @@ internal fun TicketsContent(
     // ID dari Beranda dikonsumsi sekali supaya tombol kembali tetap membuka daftar.
     requestedTicketId: String? = null,
     onTicketRequestConsumed: () -> Unit = {},
+    // Simpan rating ke booking yang sudah punya check-in.
+    onSubmitTicketRating: (String, Int, (Boolean, String) -> Unit) -> Unit = { _, _, onComplete ->
+        onComplete(
+            false,
+            "Rating wahana gagal disimpan. Coba lagi."
+        )
+    },
     // Aksi hapus hanya tersedia untuk tiket milik akun yang sedang login.
     onHideHistoryTicket: (String, (Boolean, String) -> Unit) -> Unit = { _, onComplete ->
         onComplete(
@@ -184,7 +215,15 @@ internal fun TicketsContent(
     }
 ) {
     // Simpan ID tiket supaya perubahan ukuran teks nggak menutup tiket yang dibuka.
-    var showHistory by rememberSaveable {
+    var selectedFilter by rememberSaveable {
+        mutableStateOf(TicketFilter.ACTIVE)
+    }
+    // Simpan tanggal sebagai teks ISO supaya bisa dipulihkan saat layar dibuka lagi.
+    var selectedVisitDateValue by rememberSaveable {
+        mutableStateOf<String?>(null)
+    }
+    // Bedakan pintasan rating dari tombol buka QR biasa.
+    var openAtRating by rememberSaveable {
         mutableStateOf(false)
     }
     var selectedTicketId by rememberSaveable {
@@ -194,6 +233,7 @@ internal fun TicketsContent(
     var searchQuery by rememberSaveable {
         mutableStateOf("")
     }
+    val selectedVisitDate = selectedVisitDateValue?.let(::parseTicketDate)
     val focusManager = LocalFocusManager.current
     val ticketListState = rememberLazyListState()
     // Tunggu tiket tersedia sebelum membuka detail yang diminta Beranda.
@@ -208,8 +248,9 @@ internal fun TicketsContent(
     }
     val visibleTickets = visibleTickets(
         tickets,
-        showHistory,
-        searchQuery
+        selectedFilter,
+        searchQuery,
+        visitDate = selectedVisitDate
     )
     // Tandai tiket yang sudah muncul supaya animasinya nggak berulang saat digulir.
     val appearedTicketIds = remember {
@@ -217,7 +258,8 @@ internal fun TicketsContent(
     }
     LaunchedEffect(
         searchQuery,
-        showHistory
+        selectedFilter,
+        selectedVisitDate
     ) {
         ticketListState.scrollToItem(0)
     }
@@ -233,23 +275,18 @@ internal fun TicketsContent(
         selectedTicketId = null
     }
 
-    // Perubahan check-in nggak mengulang animasi pindah halaman.
+    // Daftar tetap diam di bawah detail. Perubahan check-in nggak mengulang animasi.
     AnimatedContent(
         targetState = selectedTicket?.id,
         modifier = Modifier.fillMaxSize(),
         transitionSpec = {
-            val direction = if (targetState != null) 1 else -1
-            slideInHorizontally(
-                initialOffsetX = {
-                    it * direction
-                },
-                animationSpec = tween(260)
-            ) togetherWith slideOutHorizontally(
-                targetOffsetX = {
-                    -it * direction
-                },
-                animationSpec = tween(260)
-            )
+            if (targetState != null) {
+                detailEnterTransition() togetherWith ExitTransition.KeepUntilTransitionsFinished
+            } else {
+                (EnterTransition.None togetherWith detailExitTransition()).apply {
+                    targetContentZIndex = -1f
+                }
+            }
         },
         label = "ticketScreenSlide"
     ) { ticketId ->
@@ -259,6 +296,7 @@ internal fun TicketsContent(
         if (ticket != null) {
             TicketDetailScreen(
                 ticket = ticket,
+                openAtRating = openAtRating,
                 onDismiss = {
                     selectedTicketId = null
                 },
@@ -266,6 +304,7 @@ internal fun TicketsContent(
                 refreshError = refreshError,
                 updatedAtMillis = updatedAtMillis,
                 onRefresh = onRefresh,
+                onSubmitRating = onSubmitTicketRating,
                 onHideHistoryTicket = onHideHistoryTicket
             )
         } else {
@@ -276,19 +315,23 @@ internal fun TicketsContent(
                     .blur(if (showBookingSuccess) 6.dp else 0.dp)
             ) {
                 TicketTopBar(
-                    title = "Tiket Saya",
+                    title = "Tiket",
                     isRefreshing = isRefreshing,
                     onRefresh = onRefresh
                 )
-                // Satukan pencarian dan pilihan status tiket.
+                // Satukan pencarian, tanggal, dan pilihan status tiket.
                 TicketSearchBar(
                     searchQuery = searchQuery,
                     onSearchQueryChange = {
                         searchQuery = it
                     },
-                    showHistory = showHistory,
-                    onSelectHistory = {
-                        showHistory = it
+                    selectedFilter = selectedFilter,
+                    onSelectFilter = {
+                        selectedFilter = it
+                    },
+                    selectedVisitDate = selectedVisitDate,
+                    onSelectVisitDate = { date ->
+                        selectedVisitDateValue = date?.toString()
                     },
                     modifier = Modifier.padding(
                         horizontal = 20.dp,
@@ -296,7 +339,31 @@ internal fun TicketsContent(
                     )
                 )
                 LazyColumn(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        // Samarkan tepi kartu yang lewat di bawah filter saat daftar digulir.
+                        .drawWithCache {
+                            val fadeHeight = 20.dp.toPx().coerceAtMost(size.height)
+                            val edgeFade = Brush.verticalGradient(
+                                colors = listOf(
+                                    TourifyCanvas,
+                                    TourifyCanvas.copy(alpha = 0f)
+                                ),
+                                endY = fadeHeight
+                            )
+                            onDrawWithContent {
+                                drawContent()
+                                if (ticketListState.canScrollBackward) {
+                                    drawRect(
+                                        brush = edgeFade,
+                                        size = Size(
+                                            width = size.width,
+                                            height = fadeHeight
+                                        )
+                                    )
+                                }
+                            }
+                        },
                     state = ticketListState,
                     // Beri ruang bawah supaya tiket terakhir bisa digulir melewati navbar.
                     contentPadding = PaddingValues(
@@ -344,20 +411,23 @@ internal fun TicketsContent(
                         item(key = "empty") {
                             TicketMessage(
                                 title = when {
-                                    searchQuery.isNotBlank() -> "Tiket tidak ditemukan"
-                                    showHistory -> "Belum ada riwayat tiket"
+                                    searchQuery.isNotBlank() ||
+                                        selectedVisitDate != null -> "Tiket tidak ditemukan"
+                                    selectedFilter != TicketFilter.ACTIVE -> "Belum ada tiket ${selectedFilter.label.lowercase()}"
                                     else -> "Belum ada tiket aktif"
                                 },
                                 detail = when {
                                     searchQuery.isNotBlank() -> "Coba nama destinasi atau kode tiket lain."
-                                    showHistory -> "Tiket yang sudah terpakai atau kedaluwarsa tampil di sini."
+                                    selectedVisitDate != null -> "Tidak ada tiket pada tanggal ${formatTicketDate(selectedVisitDate.toString())}."
+                                    selectedFilter != TicketFilter.ACTIVE -> "Tiket yang sesuai filter akan tampil di sini."
                                     tickets.isNotEmpty() -> "Tiket yang sudah selesai ada di Riwayat."
                                     else -> "Pesan tiket dari halaman Beranda."
                                 },
                                 onExplore = if (
                                     tickets.isEmpty() &&
                                     searchQuery.isBlank() &&
-                                    !showHistory
+                                    selectedVisitDate == null &&
+                                    selectedFilter == TicketFilter.ACTIVE
                                 ) {
                                     onExploreDestinations
                                 } else {
@@ -408,6 +478,12 @@ internal fun TicketsContent(
                                 onShowTicket = {
                                     // Tutup keyboard supaya QR punya ruang penuh.
                                     focusManager.clearFocus()
+                                    openAtRating = false
+                                    selectedTicketId = item.id
+                                },
+                                onShowRating = {
+                                    focusManager.clearFocus()
+                                    openAtRating = true
                                     selectedTicketId = item.id
                                 }
                             )
@@ -424,140 +500,280 @@ internal fun TicketsContent(
     }
 }
 
-// Satukan pencarian dan filter status dalam satu kapsul tanpa garis tepi.
+// Filter status mengikuti booking dan rating yang sudah tersimpan.
+internal enum class TicketFilter(val label: String) {
+    ACTIVE("Aktif"),
+    EXPIRED("Kedaluwarsa"),
+    RATED("Rated"),
+    UNRATED("Unrated")
+}
+
+// Pencarian dan tanggal ada di baris atas; status tetap di baris bawah.
 @Composable
 private fun TicketSearchBar(
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
-    showHistory: Boolean,
-    onSelectHistory: (Boolean) -> Unit,
+    selectedFilter: TicketFilter,
+    onSelectFilter: (TicketFilter) -> Unit,
+    selectedVisitDate: LocalDate?,
+    onSelectVisitDate: (LocalDate?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val focusManager = LocalFocusManager.current
-    var statusMenuExpanded by remember {
+    var showDatePicker by remember {
         mutableStateOf(false)
     }
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = 60.dp)
-            .shadow(
-                3.dp,
-                TourifyShapes.pill
-            )
-            .clip(TourifyShapes.pill)
-            .background(TourifySurface),
-        verticalAlignment = Alignment.CenterVertically
+    // Kontrol berdiri sendiri tanpa kartu pembungkus.
+    Column(
+        modifier = modifier.fillMaxWidth()
     ) {
-        // Ikon dan input pencarian tetap berada di sisi kiri.
-        Icon(
-            imageVector = Icons.Default.Search,
-            contentDescription = null,
-            tint = TourifyForest,
-            modifier = Modifier.padding(horizontal = 10.dp)
-        )
-        BasicTextField(
-            value = searchQuery,
-            onValueChange = onSearchQueryChange,
-            singleLine = true,
-            textStyle = MaterialTheme.typography.bodyLarge.copy(
-                color = TourifyInk
-            ),
-            cursorBrush = SolidColor(TourifyForest),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(
-                onSearch = {
-                    focusManager.clearFocus()
-                }
-            ),
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 4.dp),
-            decorationBox = { innerTextField ->
-                Box {
-                    if (searchQuery.isEmpty()) {
-                        Text(
-                            text = "Cari tiket",
-                            color = TourifyMuted,
-                            style = MaterialTheme.typography.bodyLarge
+        Column(
+            modifier = Modifier.padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .shadow(
+                            elevation = 2.dp,
+                            shape = RoundedCornerShape(16.dp)
                         )
-                    }
-                    innerTextField()
-                }
-            }
-        )
-        if (searchQuery.isNotEmpty()) {
-            IconButton(
-                onClick = {
-                    onSearchQueryChange("")
-                }
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Hapus pencarian"
-                )
-            }
-        }
-        Box(
-            modifier = Modifier
-                .width(1.dp)
-                .height(28.dp)
-                .background(TourifyOutline.copy(alpha = 0.35f))
-        )
-        // Pilihan Aktif atau Riwayat ada di ujung kanan kolom cari.
-        Box {
-            TextButton(
-                onClick = {
-                    statusMenuExpanded = true
-                },
-                modifier = Modifier.heightIn(min = 52.dp),
-                contentPadding = PaddingValues(
-                    start = 8.dp,
-                    end = 12.dp
-                )
-            ) {
-                Text(
-                    text = if (showHistory) "Riwayat" else "Aktif",
-                    color = TourifyForest,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Icon(
-                    imageVector = Icons.Default.ExpandMore,
-                    contentDescription = "Pilih status tiket",
-                    tint = TourifyForest
-                )
-            }
-            DropdownMenu(
-                expanded = statusMenuExpanded,
-                onDismissRequest = {
-                    statusMenuExpanded = false
-                }
-            ) {
-                listOf(
-                    false to "Aktif",
-                    true to "Riwayat"
-                ).forEach { (history, label) ->
-                    DropdownMenuItem(
-                        text = {
-                            Text(label)
-                        },
-                        onClick = {
-                            focusManager.clearFocus()
-                            onSelectHistory(history)
-                            statusMenuExpanded = false
-                        },
-                        trailingIcon = if (showHistory == history) {
-                            {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = TourifyForest
-                                )
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(TourifySurface)
+                        .padding(start = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = null,
+                        tint = TourifyForest,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    BasicTextField(
+                        value = searchQuery,
+                        onValueChange = onSearchQueryChange,
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = TourifyInk),
+                        cursorBrush = SolidColor(TourifyForest),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(
+                            onSearch = {
+                                focusManager.clearFocus()
                             }
-                        } else {
-                            null
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(8.dp),
+                        decorationBox = { innerTextField ->
+                            Box {
+                                if (searchQuery.isEmpty()) {
+                                    Text(
+                                        text = "Cari tiket",
+                                        color = TourifyMuted,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                                innerTextField()
+                            }
                         }
                     )
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(
+                            onClick = {
+                                onSearchQueryChange("")
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Hapus pencarian",
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+                // Kalender membuka pemilih tanggal tiket.
+                Box {
+                    Surface(
+                        onClick = {
+                            showDatePicker = true
+                        },
+                        modifier = Modifier
+                            .widthIn(min = 48.dp)
+                            .heightIn(min = 48.dp)
+                            .semantics(mergeDescendants = true) {
+                                contentDescription = selectedVisitDate?.let {
+                                    "Ubah tanggal kunjungan, dipilih ${formatTicketDate(it.toString())}"
+                                } ?: "Pilih tanggal kunjungan"
+                            },
+                        shape = RoundedCornerShape(16.dp),
+                        color = TourifySurface,
+                        shadowElevation = 2.dp
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CalendarMonth,
+                                contentDescription = null,
+                                tint = if (selectedVisitDate != null) {
+                                    TourifyForest
+                                } else {
+                                    TourifyMuted
+                                },
+                                modifier = Modifier.size(18.dp)
+                            )
+                            selectedVisitDate?.let { date ->
+                                Text(
+                                    text = date.format(
+                                        DateTimeFormatter.ofPattern(
+                                            "d MMM",
+                                            Locale.forLanguageTag("id-ID")
+                                        )
+                                    ),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = TourifyInk,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            // Pemilih kalender menyaring tiket pada satu tanggal kunjungan.
+            if (showDatePicker) {
+                val datePickerState = rememberDatePickerState(
+                    initialSelectedDateMillis = selectedVisitDate
+                        ?.atStartOfDay(ZoneOffset.UTC)
+                        ?.toInstant()
+                        ?.toEpochMilli()
+                )
+                DatePickerDialog(
+                    onDismissRequest = {
+                        showDatePicker = false
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                datePickerState.selectedDateMillis?.let { dateMillis ->
+                                    onSelectVisitDate(
+                                        Instant.ofEpochMilli(dateMillis)
+                                            .atZone(ZoneOffset.UTC)
+                                            .toLocalDate()
+                                    )
+                                }
+                                showDatePicker = false
+                                focusManager.clearFocus()
+                            }
+                        ) {
+                            Text("Pilih")
+                        }
+                    },
+                    dismissButton = {
+                        Row {
+                            if (selectedVisitDate != null) {
+                                TextButton(
+                                    onClick = {
+                                        onSelectVisitDate(null)
+                                        showDatePicker = false
+                                    }
+                                ) {
+                                    Text("Hapus")
+                                }
+                            }
+                            TextButton(
+                                onClick = {
+                                    showDatePicker = false
+                                }
+                            ) {
+                                Text("Batal")
+                            }
+                        }
+                    }
+                ) {
+                    DatePicker(
+                        state = datePickerState
+                    )
+                }
+            }
+            // Hitung pill dan empat tab dari track yang sama supaya tepinya sejajar.
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .shadow(
+                        elevation = 2.dp,
+                        shape = TourifyShapes.pill
+                    )
+                    .clip(TourifyShapes.pill)
+                    .background(TourifySurface)
+            ) {
+                val segmentWidth = maxWidth / TicketFilter.entries.size
+                val indicatorInset = 2.dp
+                val indicatorHeight = 40.dp
+                val indicatorOffset by animateDpAsState(
+                    targetValue = segmentWidth * selectedFilter.ordinal + indicatorInset,
+                    animationSpec = tween(220),
+                    label = "ticketFilterOffset"
+                )
+                val indicatorWidth by animateDpAsState(
+                    targetValue = segmentWidth - indicatorInset * 2,
+                    animationSpec = tween(220),
+                    label = "ticketFilterWidth"
+                )
+                val indicatorVerticalInset = (48.dp - indicatorHeight) / 2
+                Box(
+                    modifier = Modifier
+                        .offset(
+                            x = indicatorOffset,
+                            y = indicatorVerticalInset
+                        )
+                        .width(indicatorWidth.coerceAtLeast(0.dp))
+                        .height(indicatorHeight)
+                        .background(
+                            TourifyForest,
+                            TourifyShapes.pill
+                        )
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .selectableGroup()
+                ) {
+                    TicketFilter.entries.forEach { filter ->
+                        val selected = selectedFilter == filter
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(TourifyShapes.pill)
+                                .selectable(
+                                    selected = selected,
+                                    role = Role.Tab,
+                                    onClick = {
+                                        onSelectFilter(filter)
+                                        focusManager.clearFocus()
+                                    }
+                                )
+                                .fillMaxHeight(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = filter.label,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontSize = 12.sp,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (selected) Color.White else TourifyMuted,
+                                maxLines = 1
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -570,22 +786,27 @@ private fun TicketTopBar(
     title: String,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
+    onDownloadPdf: (() -> Unit)? = null,
+    isSavingPdf: Boolean = false,
     onDeleteHistory: (() -> Unit)? = null,
     canDeleteHistory: Boolean = true,
     onBack: (() -> Unit)? = null,
     backDescription: String = "Kembali ke daftar tiket"
 ) {
-    // Latar menyambung sampai status bar; judul tetap di bawah ikon.
+    // Jarak judul dan tombol tiket mengikuti tinggi header halaman lain.
     Column(
-        modifier = Modifier.statusBarsPadding()
+        modifier = Modifier
+            .statusBarsPadding()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(
+                    top = TourifySpacing.screenHeaderTop - 8.dp
+                )
                 .heightIn(min = 56.dp)
                 .padding(
-                    horizontal = 12.dp,
-                    vertical = 4.dp
+                    horizontal = TourifySpacing.screen
                 ),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -614,6 +835,19 @@ private fun TicketTopBar(
                 color = TourifyInk,
                 textAlign = if (onBack == null) TextAlign.Start else TextAlign.Center
             )
+            // Unduh PDF langsung dari detail, termasuk saat kartu tiket digulir.
+            if (onDownloadPdf != null) {
+                IconButton(
+                    onClick = onDownloadPdf,
+                    enabled = !isSavingPdf
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Download,
+                        contentDescription = "Unduh tiket PDF",
+                        tint = if (isSavingPdf) TourifyMuted else TourifyForest
+                    )
+                }
+            }
             // Hapus riwayat lewat kanan atas; tiket aktif belum bisa dihapus.
             if (onDeleteHistory != null) {
                 IconButton(
@@ -676,13 +910,6 @@ private fun TicketSyncNotice(
                 text = "Tiket yang sudah dimuat tetap bisa dibuka. Periksa koneksi lalu coba lagi.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TourifyMuted
-            )
-        }
-        if (isRefreshing) {
-            Text(
-                text = "Memperbarui status tiket…",
-                style = MaterialTheme.typography.bodyMedium,
-                color = TourifyInfo
             )
         }
         if (refreshError.isNotBlank()) {
@@ -817,19 +1044,24 @@ private val ticketDetailShape = GenericShape { size, _ ->
     close()
 }
 
-// Kartu tiket menampilkan foto wahana, info kunjungan, dan kode booking.
+// Kartu tiket merangkum kunjungan, harga, dan akses ke detail.
 @Composable
 internal fun TicketCard(
     ticket: Ticket,
-    onShowTicket: () -> Unit = {}
+    onShowTicket: () -> Unit = {},
+    onShowRating: () -> Unit = onShowTicket
 ) {
-    // Bedakan tiket yang masih berlaku dengan tiket riwayat.
-    val canShowQrCode = canShowTicketQr(ticket)
     val isExpired = isTicketExpired(
         ticket.status,
         ticket.visitDate
     )
     val total = ticketPrice(ticket.totalPrice)
+    // Isi kuota tiket lama yang berstatus Terpakai meski jumlah check-in belum tercatat.
+    val checkedIn = when {
+        ticket.checkedInQuantity > 0 -> ticket.checkedInQuantity.coerceAtMost(ticket.quantity)
+        isTicketUsed(ticket) -> ticket.quantity
+        else -> 0
+    }
     // Foto hitam-putih hanya untuk tiket kedaluwarsa.
     val photoColorFilter = remember(isExpired) {
         if (isExpired) {
@@ -842,11 +1074,6 @@ internal fun TicketCard(
             null
         }
     }
-    val context = LocalContext.current
-    val clipboardManager = remember(context) {
-        context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    }
-
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = TourifyShapes.card,
@@ -857,11 +1084,11 @@ internal fun TicketCard(
         Column(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Foto memenuhi bagian atas kartu dan mengikuti sudut kartunya.
+            // Foto dibuat sedikit lebih tinggi dan tetap mengikuti sudut kartu.
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(128.dp)
+                    .height(144.dp)
                     .clip(
                         RoundedCornerShape(
                             topStart = 20.dp,
@@ -871,31 +1098,104 @@ internal fun TicketCard(
                         )
                     )
             ) {
-                Image(
-                    painter = painterResource(ticketWahanaImage(ticket.wahanaName)),
+                TicketWahanaPhoto(
+                    ticket = ticket,
                     contentDescription = "Foto wahana ${ticket.wahanaName}",
-                    modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
                     colorFilter = photoColorFilter
                 )
-                // Nama wahana tetap besar, putih, dan terbaca di atas foto.
-                Text(
-                    text = ticket.wahanaName,
+                // Fade hitam dari bawah ke atas sama seperti foto di layar QR.
+                Box(
                     modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(16.dp),
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        shadow = Shadow(
-                            color = Color.Black.copy(alpha = 0.8f),
-                            offset = Offset(0f, 3f),
-                            blurRadius = 10f
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colorStops = arrayOf(
+                                    0f to Color.Transparent,
+                                    0.42f to Color.Transparent,
+                                    1f to Color.Black.copy(alpha = 0.72f)
+                                )
+                            )
                         )
-                    ),
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
                 )
+                // Nama dan jumlah tiket di kiri, tanggal berikon di kanan seperti foto QR.
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = ticket.wahanaName,
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                shadow = Shadow(
+                                    color = Color.Black.copy(alpha = 0.8f),
+                                    offset = Offset(0f, 3f),
+                                    blurRadius = 10f
+                                )
+                            ),
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "${ticket.quantity} tiket",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                shadow = Shadow(
+                                    color = Color.Black.copy(alpha = 0.8f),
+                                    offset = Offset(0f, 2f),
+                                    blurRadius = 6f
+                                )
+                            ),
+                            color = Color.White
+                        )
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CalendarMonth,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = formatTicketDate(ticket.visitDate),
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                shadow = Shadow(
+                                    color = Color.Black.copy(alpha = 0.8f),
+                                    offset = Offset(0f, 2f),
+                                    blurRadius = 6f
+                                )
+                            ),
+                            color = Color.White,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+                // Badge status menunjukkan sisa tiket yang belum dipakai.
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TicketStatusBadge(
+                        ticket = ticket,
+                        checkedIn = checkedIn
+                    )
+                }
             }
 
             // Info tiket tetap berjarak dari tepi kartu.
@@ -906,149 +1206,98 @@ internal fun TicketCard(
                     .padding(bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Tampilkan tanggal kunjungan, jumlah tiket, dan status.
-                Row(
+                // Tanggal pemesanan dan metode bayar tetap terlihat di bawah foto.
+                Text(
+                    text = "${formatTicketDate(ticket.bookingDate)} · ${ticket.paymentMethod}",
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = formatTicketDate(ticket.visitDate),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = TourifyForest
-                        )
-                        Text(
-                            text = "•",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TourifyMuted
-                        )
-                        Text(
-                            text = "${ticket.quantity} tiket",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TourifyInk
-                        )
-                    }
-                    // Tampilkan status sebagai chip yang konsisten dan mudah dibaca.
-                    TicketStatusBadge(ticket)
-                }
-
-                // Ringkas tanggal pemesanan dan metode, lalu taruh harga di kanan.
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "${formatTicketDate(ticket.bookingDate)} · ${ticket.paymentMethod}",
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TourifyMuted,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = total,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = TourifyForest
-                    )
-                }
-                if (ticket.checkedInQuantity > 0) {
-                    Text(
-                        text = ticketVisitorSummary(ticket),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TourifyMuted
-                    )
-                }
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TourifyMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
 
                 TicketDashedDivider()
 
-                // Salin kode booking, atau ketuk teksnya untuk membuka tiket lengkap.
-                Row(
+                // Ukur harga dan aksi dengan ruang penuh supaya nominal tetap utuh.
+                Layout(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Text(
-                            text = "Kode booking",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TourifyMuted
-                        )
-                        Text(
-                            text = ticket.id,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = TourifyInk,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            clipboardManager.setPrimaryClip(
-                                ClipData.newPlainText(
-                                    "Kode booking",
-                                    ticket.id
+                    content = {
+                        Column(
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = "Harga total",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TourifyMuted
+                            )
+                            Text(
+                                text = total,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = TourifyForest,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                        // Aksi detail memakai teks dan panah hijau tanpa latar tombol.
+                        Row(
+                            modifier = Modifier
+                                .heightIn(min = 48.dp)
+                                .clip(TourifyShapes.pill)
+                                .clickable(
+                                    role = Role.Button,
+                                    onClickLabel = "Lihat detail",
+                                    onClick = onShowTicket
                                 )
+                                .padding(horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Lihat detail",
+                                color = TourifyForest,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                softWrap = false
                             )
-                            Toast.makeText(
-                                context,
-                                "Kode booking disalin",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        },
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ContentCopy,
-                            contentDescription = "Salin kode booking ${ticket.id}",
-                            tint = TourifyMuted
-                        )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                tint = TourifyForest,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
-                    Row(
-                        modifier = Modifier
-                            .heightIn(min = 48.dp)
-                            .clip(TourifyShapes.pill)
-                            .background(TourifyForestBright)
-                            .clickable(
-                                role = Role.Button,
-                                onClickLabel = if (canShowQrCode) {
-                                    "Lihat QR"
-                                } else {
-                                    "Lihat tiket"
-                                },
-                                onClick = onShowTicket
-                            )
-                            .padding(horizontal = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = if (canShowQrCode) {
-                                Icons.Default.QrCode
-                            } else {
-                                Icons.AutoMirrored.Filled.ReceiptLong
-                            },
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
+                ) { measurables, constraints ->
+                    val childConstraints = constraints.copy(
+                        minWidth = 0,
+                        minHeight = 0
+                    )
+                    val price = measurables[0].measure(childConstraints)
+                    val detail = measurables[1].measure(childConstraints)
+                    val width = constraints.maxWidth
+                    // Turunkan tombol ke kanan bawah kalau keduanya nggak muat sejajar.
+                    val fitsSideBySide = price.width + 8.dp.roundToPx() + detail.width <= width
+                    val height = if (fitsSideBySide) {
+                        maxOf(
+                            price.height,
+                            detail.height
                         )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = if (canShowQrCode) "Lihat QR" else "Lihat tiket",
-                            color = Color.White,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            softWrap = false
+                    } else {
+                        price.height + detail.height
+                    }
+                    layout(
+                        width,
+                        height
+                    ) {
+                        price.placeRelative(
+                            x = 0,
+                            y = if (fitsSideBySide) (height - price.height) / 2 else 0
+                        )
+                        detail.placeRelative(
+                            x = width - detail.width,
+                            y = if (fitsSideBySide) (height - detail.height) / 2 else price.height
                         )
                     }
                 }
@@ -1157,71 +1406,69 @@ private fun TicketVisitDate(
     )
 }
 
-// Samakan nama dan warna status di semua layar tiket.
+// Pakai status yang sama dengan QR, termasuk untuk tiket dengan kuota tersisa.
 @Composable
-private fun TicketStatusBadge(ticket: Ticket) {
-    // Warna dan ikon badge mengikuti status QR tiket.
-    val canShowQrCode = canShowTicketQr(ticket)
-    val isExpired = isTicketExpired(
+private fun TicketStatusBadge(
+    ticket: Ticket,
+    checkedIn: Int
+) {
+    val isUsed = isTicketUsed(ticket)
+    val isExpired = !isUsed && isTicketExpired(
         ticket.status,
         ticket.visitDate
     )
-    val statusContainerColor = if (isExpired) {
-        TourifyWarningContainer
+    // Badge aktif menyebut jumlah tiket yang belum check-in.
+    val statusLabel = ticketStatusLabel(ticket)
+    val badgeLabel = if (statusLabel.isEmpty()) {
+        val remaining = (ticket.quantity - checkedIn).coerceAtLeast(0)
+        "Aktif · Sisa $remaining"
     } else {
-        TourifySoftSurface
+        statusLabel
     }
-    val statusContentColor = if (isExpired) {
-        TourifyWarning
-    } else {
-        TourifyMuted
-    }
-    if (canShowQrCode) {
-        // Tiket aktif ditandai lingkaran hijau dengan centang putih kecil.
-        Surface(
-            modifier = Modifier.size(24.dp),
-            shape = CircleShape,
-            color = TourifyForest
-        ) {
-            Box(
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = "Aktif",
-                    modifier = Modifier.size(12.dp),
-                    tint = Color.White
-                )
-            }
-        }
-    } else {
-        Surface(
-            shape = TourifyShapes.pill,
-            color = statusContainerColor
-        ) {
-            Text(
-                text = ticketStatusLabel(ticket),
-                modifier = Modifier.padding(
-                    horizontal = 10.dp,
-                    vertical = 6.dp
-                ),
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = statusContentColor,
-                maxLines = 1
-            )
-        }
+    // Garis putih tipis membantu badge terlihat di atas foto wahana.
+    Surface(
+        shape = TourifyShapes.pill,
+        color = when {
+            // Latar abu-abu menandai tiket yang sudah dipakai.
+            isUsed -> TourifyMuted
+            isExpired -> TourifyWarningContainer
+            else -> TourifyForest
+        },
+        border = BorderStroke(
+            width = 1.dp,
+            color = Color.White
+        )
+    ) {
+        Text(
+            text = badgeLabel,
+            modifier = Modifier.padding(
+                horizontal = 10.dp,
+                vertical = 6.dp
+            ),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = if (isExpired) TourifyWarning else Color.White,
+            maxLines = 1
+        )
     }
 }
 
 @Composable
 internal fun TicketDetailScreen(
     ticket: Ticket,
+    openAtRating: Boolean = false,
     onDismiss: () -> Unit,
     isRefreshing: Boolean = false,
     refreshError: String = "",
     updatedAtMillis: Long? = null,
     onRefresh: () -> Unit = {},
+    // Rating hanya dikirim untuk tiket yang sudah check-in.
+    onSubmitRating: (String, Int, (Boolean, String) -> Unit) -> Unit = { _, _, onComplete ->
+        onComplete(
+            false,
+            "Rating wahana gagal disimpan. Coba lagi."
+        )
+    },
     // Gunakan API agar riwayat yang dihapus tetap hilang setelah aplikasi dibuka ulang.
     onHideHistoryTicket: (String, (Boolean, String) -> Unit) -> Unit = { _, onComplete ->
         onComplete(
@@ -1230,6 +1477,16 @@ internal fun TicketDetailScreen(
         )
     }
 ) {
+    // Tunggu transisi detail selesai sebelum mengarahkan layar ke bagian rating.
+    val ratingRequester = remember {
+        BringIntoViewRequester()
+    }
+    LaunchedEffect(ticket.id, openAtRating) {
+        if (openAtRating) {
+            delay(350)
+            ratingRequester.bringIntoView()
+        }
+    }
     // Nyalakan layar QR hanya saat tiket masih bisa dipakai.
     val canShowQrCode = canShowTicketQr(ticket)
     val used = isTicketUsed(ticket)
@@ -1253,6 +1510,38 @@ internal fun TicketDetailScreen(
     }
     val context = LocalContext.current
     val view = LocalView.current
+    // Pakai pemilih file Android, lalu tulis PDF di luar thread UI.
+    val scope = rememberCoroutineScope()
+    var isSavingPdf by remember(ticket.id) {
+        mutableStateOf(false)
+    }
+    val pdfLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        if (uri != null) {
+            isSavingPdf = true
+            scope.launch {
+                try {
+                    val saved = withContext(Dispatchers.IO) {
+                        runCatching {
+                            writeTicketPdf(
+                                context,
+                                uri,
+                                ticket
+                            )
+                        }.isSuccess
+                    }
+                    Toast.makeText(
+                        context,
+                        if (saved) "PDF tiket berhasil disimpan." else "PDF tiket gagal disimpan. Coba lagi.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                } finally {
+                    isSavingPdf = false
+                }
+            }
+        }
+    }
     // Biarkan layar menyala saat tiket aktif ditunjukkan ke petugas.
     DisposableEffect(
         view,
@@ -1277,6 +1566,23 @@ internal fun TicketDetailScreen(
             title = "Tiket Saya",
             isRefreshing = isRefreshing,
             onRefresh = onRefresh,
+            // Pakai kode tiket sebagai nama awal file tanpa karakter pemisah folder.
+            onDownloadPdf = {
+                val fileId = ticket.id.replace(
+                    Regex("[^A-Za-z0-9_-]"),
+                    "_"
+                )
+                try {
+                    pdfLauncher.launch("Tourify-Tiket-$fileId.pdf")
+                } catch (_: ActivityNotFoundException) {
+                    Toast.makeText(
+                        context,
+                        "Pemilih lokasi penyimpanan tidak tersedia.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            },
+            isSavingPdf = isSavingPdf,
             // Buka konfirmasi sebelum menghapus riwayat tiket yang selesai.
             onDeleteHistory = {
                 deleteHistoryError = ""
@@ -1317,32 +1623,70 @@ internal fun TicketDetailScreen(
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 18.dp),
                     verticalArrangement = Arrangement.spacedBy(13.dp)
                 ) {
-                    // Foto dibuat lebih tinggi supaya pas dengan lebar kartu.
-                    Image(
-                        painter = painterResource(ticketWahanaImage(ticket.wahanaName)),
-                        contentDescription = "Foto ${ticket.wahanaName}",
+                    // Gabungkan foto, nama wahana, dan tanggal seperti kartu referensi.
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(180.dp)
-                            .clip(RoundedCornerShape(14.dp)),
-                        contentScale = ContentScale.Crop
-                    )
-
-                    // Tampilkan nama wahana dan tanggal kunjungan di isi tiket.
-                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Text(
-                            text = ticket.wahanaName,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = TourifyInk,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
+                            .clip(RoundedCornerShape(14.dp))
+                    ) {
+                        TicketWahanaPhoto(
+                            ticket = ticket,
+                            contentDescription = "Foto ${ticket.wahanaName}",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
                         )
-                        Text(
-                            text = formatTicketDate(ticket.visitDate),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = TourifyMuted
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        colorStops = arrayOf(
+                                            0f to Color.Transparent,
+                                            0.42f to Color.Transparent,
+                                            1f to Color.Black.copy(alpha = 0.72f)
+                                        )
+                                    )
+                                )
                         )
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = ticket.wahanaName,
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    shadow = Shadow(
+                                        color = Color.Black.copy(alpha = 0.65f),
+                                        offset = Offset(0f, 2f),
+                                        blurRadius = 8f
+                                    )
+                                ),
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CalendarMonth,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = formatTicketDate(ticket.visitDate),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.White.copy(alpha = 0.96f)
+                                )
+                            }
+                        }
                     }
 
                     // Tampilkan nama dan jumlah pengunjung sebelum detail pembayaran.
@@ -1495,6 +1839,27 @@ internal fun TicketDetailScreen(
                     onRefresh = onRefresh
                 )
             }
+            // Pintasan tetap menjelaskan syarat check-in untuk tiket yang belum dipakai.
+            if (ticket.checkedInQuantity > 0 || openAtRating) {
+                Spacer(Modifier.height(16.dp))
+                Column(
+                    modifier = Modifier.bringIntoViewRequester(ratingRequester)
+                ) {
+                    if (ticket.checkedInQuantity > 0) {
+                        TicketRatingSection(
+                            ticket = ticket,
+                            onSubmitRating = onSubmitRating
+                        )
+                    } else {
+                        Text(
+                            text = "Rating tersedia setelah check-in pertama.",
+                            modifier = Modifier.padding(16.dp),
+                            color = TourifyMuted,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            }
         }
     }
     // Minta konfirmasi sebelum menyembunyikan riwayat tiket dari akun.
@@ -1580,6 +1945,137 @@ internal fun TicketDetailScreen(
             updatedAtMillis = updatedAtMillis,
             onRefresh = onRefresh
         )
+    }
+}
+
+// Tampilkan bintang yang sudah tersimpan dan izinkan pelanggan memperbaruinya.
+@Composable
+private fun TicketRatingSection(
+    ticket: Ticket,
+    onSubmitRating: (String, Int, (Boolean, String) -> Unit) -> Unit
+) {
+    var selectedRating by rememberSaveable(ticket.id) {
+        mutableStateOf(ticket.rating ?: 0)
+    }
+    var isSubmitting by remember(ticket.id) {
+        mutableStateOf(false)
+    }
+    var ratingMessage by rememberSaveable(ticket.id) {
+        mutableStateOf("")
+    }
+    var ratingSubmissionSucceeded by remember(ticket.id) {
+        mutableStateOf(false)
+    }
+
+    LaunchedEffect(ticket.id, ticket.rating) {
+        if (ticket.rating != null) {
+            selectedRating = ticket.rating
+        }
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("ticketRatingSection"),
+        shape = TourifyShapes.card,
+        color = TourifySurface,
+        border = BorderStroke(1.dp, TourifyBorder),
+        shadowElevation = TourifyElevation.floating
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "Beri rating wahana",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = TourifyInk
+            )
+            Text(
+                text = if (ticket.rating != null) {
+                    "Rating tersimpan: ${ticket.rating} dari 5 bintang. Kamu bisa mengubahnya."
+                } else {
+                    "Bagaimana pengalamanmu? Pilih 1 sampai 5 bintang."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = TourifyMuted
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                (1..5).forEach { star ->
+                    IconButton(
+                        modifier = Modifier
+                            .semantics {
+                                contentDescription = if (star == selectedRating) {
+                                    "$star bintang dipilih"
+                                } else {
+                                    "Beri $star bintang"
+                                }
+                            }
+                            .testTag("ticketRatingStar-$star"),
+                        onClick = {
+                            selectedRating = star
+                            ratingMessage = ""
+                        }
+                    ) {
+                        Icon(
+                            imageVector = if (star <= selectedRating) {
+                                Icons.Filled.Star
+                            } else {
+                                Icons.Outlined.Star
+                            },
+                            contentDescription = null,
+                            tint = if (star <= selectedRating) {
+                                Color(0xFFFFC857)
+                            } else {
+                                TourifyMuted
+                            },
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                }
+            }
+            Button(
+                modifier = Modifier.fillMaxWidth(),
+                enabled = selectedRating in 1..5 &&
+                    selectedRating != ticket.rating &&
+                    !isSubmitting,
+                onClick = {
+                    isSubmitting = true
+                    ratingMessage = ""
+                    onSubmitRating(
+                        ticket.id,
+                        selectedRating
+                    ) { success, message ->
+                        isSubmitting = false
+                        ratingSubmissionSucceeded = success
+                        ratingMessage = message
+                    }
+                }
+            ) {
+                Text(
+                    when {
+                        isSubmitting -> "Menyimpan..."
+                        ticket.rating == null -> "Kirim rating"
+                        else -> "Perbarui rating"
+                    }
+                )
+            }
+            if (ratingMessage.isNotBlank()) {
+                Text(
+                    text = ratingMessage,
+                    modifier = Modifier.semantics {
+                        liveRegion = LiveRegionMode.Polite
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (ratingSubmissionSucceeded) TourifyForest else TourifyError
+                )
+            }
+        }
     }
 }
 
@@ -1790,6 +2286,47 @@ internal fun visibleTickets(
     }
 }
 
+// Gabungkan pencarian, tanggal kunjungan, dan status tiket.
+internal fun visibleTickets(
+    tickets: List<Ticket>,
+    filter: TicketFilter,
+    searchQuery: String = "",
+    visitDate: LocalDate? = null
+): List<Ticket> {
+    val query = searchQuery.trim()
+    val filtered = tickets.filter { ticket ->
+        val matchesStatus = when (filter) {
+            TicketFilter.ACTIVE -> canShowTicketQr(ticket)
+            TicketFilter.EXPIRED -> isTicketExpired(
+                ticket.status,
+                ticket.visitDate
+            )
+            TicketFilter.RATED -> ticket.rating != null
+            TicketFilter.UNRATED -> ticket.checkedInQuantity > 0 && ticket.rating == null
+        }
+        val matchesVisitDate =
+            visitDate == null || parseTicketDate(ticket.visitDate) == visitDate
+        matchesStatus &&
+            matchesVisitDate &&
+            (ticket.wahanaName.contains(
+                query,
+                ignoreCase = true
+            ) || ticket.id.contains(
+                query,
+                ignoreCase = true
+            ))
+    }
+    return if (filter == TicketFilter.ACTIVE) {
+        filtered.sortedBy {
+            parseTicketDate(it.visitDate) ?: LocalDate.MAX
+        }
+    } else {
+        filtered.sortedByDescending {
+            parseTicketDate(it.visitDate) ?: LocalDate.MIN
+        }
+    }
+}
+
 // Tanggal lewat tetap kedaluwarsa walau server belum memperbarui status.
 internal fun isTicketExpired(
     status: String,
@@ -1924,6 +2461,26 @@ internal fun ticketWahanaImage(wahanaName: String): Int {
     }
 }
 
+// Foto tiket mengikuti gambar unggahan dan memakai gambar katalog saat path kosong.
+@Composable
+internal fun TicketWahanaPhoto(
+    ticket: Ticket,
+    contentDescription: String?,
+    contentScale: ContentScale,
+    modifier: Modifier = Modifier,
+    colorFilter: ColorFilter? = null
+) {
+    // Foto tiket yang muncul di Beranda juga dimuat di luar thread UI.
+    AsyncWahanaImage(
+        imagePath = ticket.imagePath,
+        drawable = ticketWahanaImage(ticket.wahanaName),
+        contentDescription = contentDescription,
+        contentScale = contentScale,
+        colorFilter = colorFilter,
+        modifier = modifier
+    )
+}
+
 @Composable
 private fun TicketQrCode(
     ticket: Ticket,
@@ -1987,20 +2544,20 @@ private fun BookingSuccessDialog(onDismiss: () -> Unit) {
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Box(
-                        modifier = Modifier.size(82.dp),
+                        modifier = Modifier
+                            .size(72.dp)
+                            .background(
+                                TourifyForest,
+                                CircleShape
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.Verified,
-                            contentDescription = null,
-                            tint = TourifyAccent,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        // Tampilkan centang sederhana di atas lingkaran hijau.
                         Icon(
                             imageVector = Icons.Default.Check,
                             contentDescription = null,
-                            tint = TourifyForest,
-                            modifier = Modifier.size(40.dp)
+                            tint = Color.White,
+                            modifier = Modifier.size(36.dp)
                         )
                     }
                     Spacer(modifier = Modifier.height(20.dp))

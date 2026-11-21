@@ -2,6 +2,7 @@ package com.example.tourify_v2
 
 import android.Manifest
 import android.animation.ValueAnimator
+import android.app.Activity
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -12,14 +13,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -45,6 +45,7 @@ import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,6 +65,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
 import com.example.tourify_v2.model.ChatBookingProposal
 import com.example.tourify_v2.model.TicketBookingRequest
 import androidx.core.content.ContextCompat
@@ -76,24 +78,27 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.tourify_v2.screen.AccountScreen
+import com.example.tourify_v2.screen.AuthScreen
 import com.example.tourify_v2.screen.BottomNavBar
 import com.example.tourify_v2.screen.ChatbotAssistantScreen
+import com.example.tourify_v2.screen.ChatbotConversationState
 import com.example.tourify_v2.screen.chatbotCircleReveal
 import com.example.tourify_v2.screen.DestinationScreen
 import com.example.tourify_v2.screen.DestinationsScreen
 import com.example.tourify_v2.screen.HomeScreen
-import com.example.tourify_v2.screen.LoginScreen
-import com.example.tourify_v2.screen.RegisterScreen
 import com.example.tourify_v2.screen.TicketsScreen
 import com.example.tourify_v2.ui.theme.Tourify_v2Theme
+import com.example.tourify_v2.ui.theme.TourifyMotion
+import com.example.tourify_v2.ui.theme.detailEnterTransition
+import com.example.tourify_v2.ui.theme.detailExitTransition
 import com.example.tourify_v2.viewmodel.AuthViewModel
 import com.example.tourify_v2.viewmodel.TourifyViewModel
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-// Kurva ease-out membuat layar baru cepat terlihat lalu mereda dengan halus.
-private val navigationFadeEasing = CubicBezierEasing(0.23f, 1f, 0.32f, 1f)
+private const val destinationDetailRoute = "destination/{destinationId}"
+private val bottomNavRoutes = setOf("home", "destinations", "ticket", "account")
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -212,6 +217,7 @@ private fun TourifyMainContent() {
     val authViewModel: AuthViewModel = viewModel()
     val tourifyViewModel: TourifyViewModel = viewModel()
     val lifecycleOwner = LocalLifecycleOwner.current
+    val context = LocalContext.current
     val currentUser = authViewModel.currentUsername
     // Kirim token login supaya tiket dan chat memakai akun yang sama.
     val currentAccessToken = authViewModel.currentAccessToken
@@ -226,11 +232,31 @@ private fun TourifyMainContent() {
         mutableStateOf<String?>(null)
     }
     // Simpan percakapan chat saat panel dibuka atau ditutup.
+    val chatbotConversation = remember(currentUser) {
+        ChatbotConversationState()
+    }
     var isChatbotVisible by remember { mutableStateOf(false) }
     var isChatbotOpen by remember { mutableStateOf(false) }
     // Simpan titik tengah item Asisten untuk animasi buka chat.
     var chatbotNavItemCenter by remember { mutableStateOf(Offset.Zero) }
     val chatbotReveal = remember { Animatable(0f) }
+
+    // Ikon status bar mengikuti warna latar halaman.
+    DisposableEffect(currentRoute, isChatbotVisible) {
+        val window = (context as? Activity)?.window
+        val insetsController = window?.let {
+            WindowCompat.getInsetsController(
+                it,
+                it.decorView
+            )
+        }
+        val destinationOwnsStatusBar =
+            currentRoute == destinationDetailRoute && !isChatbotVisible
+        if (!destinationOwnsStatusBar) {
+            insetsController?.isAppearanceLightStatusBars = true
+        }
+        onDispose {}
+    }
 
     // Kirim info ke server kalau pelanggan sedang aktif di aplikasi.
     LaunchedEffect(lifecycleOwner, authViewModel.currentAccessToken) {
@@ -271,16 +297,26 @@ private fun TourifyMainContent() {
             isChatbotVisible = false
         }
     }
-    // Pakai fade dan scale tipis untuk perpindahan halaman.
+    // Pakai fade singkat agar perpindahan halaman terasa ringan.
     val systemAnimationsDisabled =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
         !ValueAnimator.areAnimatorsEnabled()
-    val pageFadeDurationMillis = if (systemAnimationsDisabled) 120 else 200
-    val pageScaleAmount = if (systemAnimationsDisabled) 1f else 0.97f
+    val fadeDurationMillis = if (systemAnimationsDisabled) 0 else 180
     val pageFadeSpec = tween<Float>(
-        durationMillis = pageFadeDurationMillis,
-        easing = navigationFadeEasing
+        durationMillis = fadeDurationMillis,
+        easing = TourifyMotion.navigationEasing
     )
+    // Layar tab baru naik sedikit sambil muncul. Ikuti pengaturan animasi Android.
+    val tabOffsetPx = with(LocalDensity.current) { 12.dp.roundToPx() }
+    val tabEnterTransition = if (systemAnimationsDisabled) {
+        EnterTransition.None
+    } else {
+        fadeIn(animationSpec = tween(fadeDurationMillis, easing = FastOutSlowInEasing)) +
+            slideInVertically(
+                animationSpec = tween(fadeDurationMillis, easing = FastOutSlowInEasing),
+                initialOffsetY = { tabOffsetPx }
+            )
+    }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -299,7 +335,7 @@ private fun TourifyMainContent() {
                 MaterialTheme.colorScheme.background
             },
             // Tiap layar mengatur jarak isinya dari status bar.
-            contentWindowInsets = if (currentRoute == "destination/{destinationId}") {
+            contentWindowInsets = if (currentRoute == destinationDetailRoute) {
                 ScaffoldDefaults.contentWindowInsets
                     .exclude(WindowInsets.statusBars)
                     .exclude(WindowInsets.navigationBars)
@@ -308,15 +344,18 @@ private fun TourifyMainContent() {
             },
             bottomBar = {
                 if (
-                    currentRoute in listOf("home", "destinations", "ticket", "account") &&
+                    currentRoute in bottomNavRoutes &&
                     !(currentRoute == "ticket" && isTicketDetailVisible)
                 ) {
                     BottomNavBar(
                         currentRoute = currentRoute,
                         onNavigate = { route ->
-                            navController.navigate(route) {
-                                popUpTo("home")
-                                launchSingleTop = true
+                            // Ketuk tab aktif tidak perlu membuat transisi baru.
+                            if (route != navController.currentDestination?.route) {
+                                navController.navigate(route) {
+                                    popUpTo("home")
+                                    launchSingleTop = true
+                                }
                             }
                         },
                         // Item Asisten di navbar membuka layar chat.
@@ -331,11 +370,11 @@ private fun TourifyMainContent() {
         ) { paddingValues ->
             Box(modifier = Modifier.fillMaxSize()) {
                 val layoutDirection = LocalLayoutDirection.current
-                val showFloatingNav = currentRoute in listOf("home", "destinations", "ticket", "account") &&
+                val showFloatingNav = currentRoute in bottomNavRoutes &&
                     !(currentRoute == "ticket" && isTicketDetailVisible)
                 // Detail destinasi dan tiket mengisi area sampai ke belakang navbar.
                 val drawsBehindNavigationBar =
-                    currentRoute == "destination/{destinationId}" ||
+                    currentRoute == destinationDetailRoute ||
                         (currentRoute == "ticket" && isTicketDetailVisible)
                 val screenPadding = PaddingValues(
                     start = paddingValues.calculateStartPadding(layoutDirection),
@@ -347,53 +386,51 @@ private fun TourifyMainContent() {
                         paddingValues.calculateBottomPadding()
                     }
                 )
-                // Rute layar memakai cross-fade saat berpindah halaman.
+                // Saat pindah tab, hanya layar yang masuk yang naik dan memudar masuk.
                 NavHost(
                     navController = navController,
                     startDestination = "login",
                     modifier = Modifier.padding(screenPadding),
                     enterTransition = {
-                        fadeIn(animationSpec = pageFadeSpec) +
-                            scaleIn(
-                                initialScale = pageScaleAmount,
-                                animationSpec = pageFadeSpec
-                            )
+                        if (initialState.destination.route in bottomNavRoutes &&
+                            targetState.destination.route in bottomNavRoutes
+                        ) {
+                            tabEnterTransition
+                        } else {
+                            fadeIn(animationSpec = pageFadeSpec)
+                        }
                     },
                     exitTransition = {
-                        fadeOut(animationSpec = pageFadeSpec) +
-                            scaleOut(
-                                targetScale = pageScaleAmount,
-                                animationSpec = pageFadeSpec
-                            )
+                        if (targetState.destination.route == destinationDetailRoute ||
+                            (initialState.destination.route in bottomNavRoutes &&
+                                targetState.destination.route in bottomNavRoutes)
+                        ) {
+                            ExitTransition.KeepUntilTransitionsFinished
+                        } else {
+                            ExitTransition.None
+                        }
                     },
                     popEnterTransition = {
-                        fadeIn(animationSpec = pageFadeSpec) +
-                            scaleIn(
-                                initialScale = pageScaleAmount,
-                                animationSpec = pageFadeSpec
-                            )
+                        when {
+                            initialState.destination.route == destinationDetailRoute ->
+                                EnterTransition.None
+                            initialState.destination.route in bottomNavRoutes &&
+                                targetState.destination.route in bottomNavRoutes -> tabEnterTransition
+                            else -> fadeIn(animationSpec = pageFadeSpec)
+                        }
                     },
                     popExitTransition = {
-                        fadeOut(animationSpec = pageFadeSpec) +
-                            scaleOut(
-                                targetScale = pageScaleAmount,
-                                animationSpec = pageFadeSpec
-                            )
+                        ExitTransition.None
                     }
                 ) {
                     composable("login") {
-                        LoginScreen(
+                        // Form masuk dan daftar berganti di dalam layar akun yang sama.
+                        AuthScreen(
                             authViewModel = authViewModel,
                             onLoginSuccess = { showLoginHomeWipe = true },
-                            onNavigateToRegister = { navController.navigate("register") },
-                            isActive = currentRoute == "login"
-                        )
-                    }
-                    composable("register") {
-                        RegisterScreen(
-                            authViewModel = authViewModel,
-                            onRegisterSuccess = { navController.popBackStack() },
-                            onBackToLogin = { navController.popBackStack() }
+                            isActive = currentRoute == "login",
+                            playIntro = !systemAnimationsDisabled,
+                            formFadeSpec = pageFadeSpec
                         )
                     }
                     // Rute Beranda dan detail destinasi.
@@ -441,7 +478,11 @@ private fun TourifyMainContent() {
                             onDestinationClick = { id -> navController.navigate("destination/$id") }
                         )
                     }
-                    composable("destination/{destinationId}") { entry ->
+                    composable(
+                        route = destinationDetailRoute,
+                        enterTransition = { detailEnterTransition() },
+                        popExitTransition = { detailExitTransition() }
+                    ) { entry ->
                         DestinationScreen(
                             destinationId = entry.arguments?.getString("destinationId")?.toIntOrNull() ?: -1,
                             viewModel = tourifyViewModel,
@@ -531,6 +572,7 @@ private fun TourifyMainContent() {
         if (isChatbotVisible) {
             ChatbotAssistantScreen(
                 currentUser = currentUser,
+                conversationState = chatbotConversation,
                 isSending = tourifyViewModel.isSendingChat,
                 isBooking = tourifyViewModel.isBooking,
                 // Kirim katalog supaya chat bisa mengenali nama wahana.
@@ -565,6 +607,14 @@ private fun TourifyMainContent() {
                     }
                 },
                 onClose = { isChatbotOpen = false },
+                // Tautan dari ringkasan pesanan membuka tab Tiket.
+                onOpenTickets = {
+                    isChatbotOpen = false
+                    navController.navigate("ticket") {
+                        popUpTo("home")
+                        launchSingleTop = true
+                    }
+                },
                 modifier = Modifier
                     .fillMaxSize()
                     .chatbotCircleReveal(

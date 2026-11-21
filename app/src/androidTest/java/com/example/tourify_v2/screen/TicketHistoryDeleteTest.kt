@@ -3,7 +3,6 @@ package com.example.tourify_v2.screen
 import android.graphics.Bitmap
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -68,8 +67,8 @@ class TicketHistoryDeleteTest {
                 it
             )
         }
-        // Tombol unduh diganti; batal tidak mengirim permintaan hapus.
-        compose.onNodeWithContentDescription("Unduh tiket PDF").assertDoesNotExist()
+        // Riwayat bisa diunduh, dan batal menghapus tidak mengirim permintaan.
+        compose.onNodeWithContentDescription("Unduh tiket PDF").assertIsDisplayed()
         compose.onNodeWithContentDescription("Hapus riwayat tiket").performClick()
         compose.onNodeWithText("Hapus riwayat tiket?").assertIsDisplayed()
         compose.onNodeWithText("Batal").performClick()

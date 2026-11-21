@@ -2,7 +2,6 @@ package com.example.tourify_v2.screen
 
 import com.example.tourify_v2.ui.theme.*
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -27,12 +26,14 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowOutward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.automirrored.filled.EventNote
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -53,8 +54,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextMotion
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -216,7 +218,7 @@ internal fun DestinationSearchBar(
             }
         ),
         trailingIcon = {
-            // Tombol pencarian memakai hijau yang sedikit lebih terang.
+            // Tombol pencarian memakai panah ke atas dengan warna hijau terang.
             Row(
                 modifier = Modifier.padding(end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -247,7 +249,7 @@ internal fun DestinationSearchBar(
                     )
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Search,
+                        imageVector = Icons.Default.ArrowUpward,
                         contentDescription = "Cari destinasi",
                         modifier = Modifier.size(24.dp)
                     )
@@ -264,13 +266,13 @@ internal fun DestinationSearchBar(
             focusedBorderColor = Color.Transparent,
             cursorColor = TourifyForest
         ),
-        // Sediakan tinggi minimum supaya teks dan ikon tidak terpotong.
+        // Sediakan tinggi dan bayangan tipis supaya search bar terangkat dari latar.
         // Modifier dari layar menempatkan kolom di pertemuan foto dan panel.
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
             .shadow(
-                2.dp,
+                3.dp,
                 CircleShape
             )
     )
@@ -319,9 +321,10 @@ internal fun DestinationCategoryFilters(
                 label = "categoryChipText"
             )
 
+            // Ringkaskan tinggi pill dan foto tanpa mengubah ukuran label kategori.
             Surface(
                 modifier = Modifier
-                    .height(48.dp)
+                    .height(44.dp)
                     .clip(chipShape)
                     .selectable(
                         selected = isSelected,
@@ -342,12 +345,13 @@ internal fun DestinationCategoryFilters(
                     modifier = Modifier.padding(start = 4.dp, end = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Image(
-                        painter = painterResource(category.imageRes),
+                    // Baca foto kategori sesuai ukuran ikon 36 dp.
+                    AsyncImage(
+                        model = category.imageRes,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(36.dp)
                             .clip(CircleShape)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
@@ -430,10 +434,11 @@ fun HomeScreen(
         }
     }
 
-    // Segarkan kunjungan saat Beranda aktif, termasuk setelah kembali dari aplikasi lain.
+    // Segarkan tiket dan pilihan unggulan admin saat kembali ke Beranda.
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(currentUser, accessToken, lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            viewModel.loadWahana()
             viewModel.loadTickets(
                 username = currentUser,
                 accessToken = accessToken
@@ -451,9 +456,6 @@ fun HomeScreen(
         null
     }
     val wahanaList = viewModel.wahana
-    LaunchedEffect(Unit) {
-        viewModel.loadWahana()
-    }
     // Ingat pencarian dan kategori selama Beranda terbuka.
     var searchQuery by remember {
         mutableStateOf("")
@@ -484,11 +486,9 @@ fun HomeScreen(
 
         matchesSearch && matchesCategory
     }
+    // Tampilkan pilihan admin; katalog lama tetap bisa menampilkan wahana pertama.
     val featured = wahanaList.firstOrNull {
-        it.name.trim().equals(
-            "Pantai Mentari",
-            ignoreCase = true
-        )
+        it.isFeatured
     } ?: wahanaList.firstOrNull()
     // Jarak ini menyisakan 60 dp bar dan 8 dp di atas/bawah, lalu inset gesture sistem.
     val bottomNavClearance = 76.dp +
@@ -506,7 +506,7 @@ fun HomeScreen(
         // Rapatkan jarak antarbagian utama Beranda.
         verticalArrangement = Arrangement.spacedBy(TourifySpacing.control)
     ) {
-        // Foto tanpa fade bertemu panel putih membulat di bawahnya.
+        // Foto memudar ke panel putih membulat di bawahnya.
         item {
             Column(
                 modifier = Modifier.fillMaxWidth()
@@ -517,15 +517,37 @@ fun HomeScreen(
                         // Sisakan ruang gambar agar lengkung panel terlihat jelas.
                         .heightIn(min = 232.dp)
                 ) {
-                    Image(
-                        // Pakai ilustrasi hijau sebagai latar header Beranda.
-                        painter = painterResource(R.drawable.home_background),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        // Fokus crop agak ke area atas latar.
-                        alignment = androidx.compose.ui.BiasAlignment(0f, -0.45f),
-                        modifier = Modifier.matchParentSize()
-                    )
+                    // Fade transparansi membuat foto larut ke UI putih tanpa memudarkan teks.
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .graphicsLayer {
+                                compositingStrategy = CompositingStrategy.Offscreen
+                            }
+                            .drawWithContent {
+                                drawContent()
+                                drawRect(
+                                    brush = Brush.verticalGradient(
+                                        colorStops = arrayOf(
+                                            0f to Color.Black,
+                                            0.68f to Color.Black,
+                                            1f to Color.Transparent
+                                        )
+                                    ),
+                                    blendMode = BlendMode.DstIn
+                                )
+                            }
+                    ) {
+                        // Baca ilustrasi sesuai ukuran header tanpa menahan frame pertama.
+                        AsyncImage(
+                            model = R.drawable.home_background,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            // Fokus crop agak ke area atas latar.
+                            alignment = androidx.compose.ui.BiasAlignment(0f, -0.45f),
+                            modifier = Modifier.matchParentSize()
+                        )
+                    }
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -556,10 +578,10 @@ fun HomeScreen(
                                             it.toString()
                                         }
                                     }
-                                // Judul tetap menonjol, tapi tidak mendorong konten terlalu jauh.
+                                // Besarkan sedikit judul tanpa mendorong konten terlalu jauh.
                                 val photoHeadingStyle = MaterialTheme.typography.headlineLarge.copy(
-                                    fontSize = 32.sp,
-                                    lineHeight = 38.sp,
+                                    fontSize = 34   .sp,
+                                    lineHeight = 40.sp,
                                     fontWeight = FontWeight.Bold,
                                     shadow = Shadow(
                                         color = Color.Black.copy(alpha = 0.32f),
@@ -567,10 +589,13 @@ fun HomeScreen(
                                         blurRadius = 4f
                                     )
                                 )
+                                // Sapaan sedikit lebih kecil agar judul utama tetap dominan.
                                 Text(
                                     text = "Halo, $displayName",
                                     color = Color.White,
                                     style = MaterialTheme.typography.titleLarge.copy(
+                                        fontSize = 20.sp,
+                                        lineHeight = 24.sp,
                                         shadow = photoHeadingStyle.shadow
                                     )
                                 )
@@ -661,7 +686,18 @@ fun HomeScreen(
                                     topEnd = 40.dp
                                 )
                             )
-                            .background(TourifySurface)
+                            // Teruskan fade foto di dalam panel sampai putih penuh.
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color.Transparent,
+                                        TourifySurface
+                                    ),
+                                    endY = with(LocalDensity.current) {
+                                        24.dp.toPx()
+                                    }
+                                )
+                            )
                             // Sisakan jarak tipis sebelum judul fitur.
                             .padding(bottom = 8.dp)
                     ) {
@@ -699,8 +735,8 @@ fun HomeScreen(
 
         }
 
-        // Judul dan kartu unggulan jadi satu bagian di daftar.
-        item {
+        // Sembunyikan rekomendasi unggulan selama pencarian destinasi aktif.
+        if (searchQuery.isBlank()) item {
             Column(
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -740,9 +776,9 @@ fun HomeScreen(
                         Box(
                             Modifier.fillMaxSize()
                         ) {
-                            val featuredPhoto = painterResource(destinationImage(featured.id))
-                            Image(
-                                painter = featuredPhoto,
+                            // Foto unggulan mengikuti katalog yang baru dimuat.
+                            WahanaPhoto(
+                                wahana = featured,
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize()
@@ -769,8 +805,8 @@ fun HomeScreen(
                                     }
                             ) {
 
-                                Image(
-                                    painter = featuredPhoto,
+                                WahanaPhoto(
+                                    wahana = featured,
                                     contentDescription = null,
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier
@@ -1317,8 +1353,8 @@ internal fun UpcomingVisitSection(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Image(
-                            painter = painterResource(ticketWahanaImage(ticket.wahanaName)),
+                        TicketWahanaPhoto(
+                            ticket = ticket,
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
@@ -1389,8 +1425,9 @@ internal fun DestinationCard(
         Box(
             Modifier.fillMaxSize()
         ) {
-            Image(
-                painter = painterResource(destinationImage(wahana.id)),
+            // Kartu di Beranda dan daftar destinasi memakai foto yang sama.
+            WahanaPhoto(
+                wahana = wahana,
                 contentDescription = "Foto ${wahana.name}",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
@@ -1409,6 +1446,45 @@ internal fun DestinationCard(
                         )
                     )
             )
+            // Tampilkan rata-rata hanya setelah wahana punya rating.
+            wahana.averageRating?.let { averageRating ->
+                val formattedRating = String.format(
+                    Locale.US,
+                    "%.1f",
+                    averageRating
+                )
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(14.dp),
+                    shape = RoundedCornerShape(50),
+                    color = Color.White.copy(alpha = 0.96f),
+                    shadowElevation = 5.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .semantics(mergeDescendants = true) {
+                                contentDescription = "Rating wahana $formattedRating dari 5"
+                            }
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = formattedRating,
+                            color = TourifyInk,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                        Icon(
+                            imageVector = Icons.Filled.Star,
+                            contentDescription = null,
+                            tint = Color(0xFFFFC857),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
             Row(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
@@ -1463,16 +1539,6 @@ internal fun DestinationCard(
             }
         }
     }
-}
-
-// Gambar lokal dipilih mengikuti ID destinasi.
-internal fun destinationImage(id: Int): Int = when (id) {
-    1 -> R.drawable.dunia_petualang
-    2 -> R.drawable.samudra_biru
-    3 -> R.drawable.pulau_air
-    4 -> R.drawable.pantai_mentari
-    5 -> R.drawable.taman_satwa_pesisir
-    else -> R.drawable.dunia_petualang
 }
 
 @Composable

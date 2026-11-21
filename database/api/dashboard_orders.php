@@ -2,11 +2,73 @@
 require_once __DIR__ . '/common.php';
 configureDashboardCors();
 header('Content-Type: application/json; charset=utf-8');
-requireMethod('GET');
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+if (!in_array($method, ['GET', 'DELETE'], true)) {
+    header('Allow: GET, DELETE');
+    respond(405, ['success' => false, 'message' => 'Metode request tidak diizinkan.']);
+}
 requireDashboardRole(['admin']);
 
 try {
     $pdo = getDatabaseConnection();
+    // Hapus hanya tiket yang belum pernah dipakai agar riwayat check-in tetap utuh.
+    if ($method === 'DELETE') {
+        $input = readJsonInput();
+        $ids = $input['ids'] ?? null;
+        if (!is_array($ids) || count($ids) < 1 || count($ids) > 100) {
+            respond(400, ['success' => false, 'message' => 'Pilih 1 sampai 100 tiket.']);
+        }
+
+        $ticketIds = [];
+        foreach ($ids as $id) {
+            if ((!is_int($id) && !is_string($id)) || !preg_match('/^[1-9][0-9]{0,19}$/D', (string) $id)) {
+                respond(400, ['success' => false, 'message' => 'Daftar ID tiket tidak valid.']);
+            }
+            $ticketIds[] = (string) $id;
+        }
+        $ticketIds = array_values(array_unique($ticketIds, SORT_STRING));
+        $placeholders = implode(', ', array_fill(0, count($ticketIds), '?'));
+
+        $pdo->beginTransaction();
+        $ticketStatement = $pdo->prepare(
+            "SELECT id, status, checked_in_quantity FROM tickets WHERE id IN ($placeholders) FOR UPDATE"
+        );
+        $ticketStatement->execute($ticketIds);
+        $tickets = $ticketStatement->fetchAll();
+        $foundIds = array_map(static fn (array $ticket): string => (string) $ticket['id'], $tickets);
+        sort($foundIds, SORT_STRING);
+        $expectedIds = $ticketIds;
+        sort($expectedIds, SORT_STRING);
+        if ($foundIds !== $expectedIds) {
+            $pdo->rollBack();
+            respond(404, ['success' => false, 'message' => 'Sebagian tiket tidak ditemukan. Muat ulang daftar.']);
+        }
+
+        foreach ($tickets as $ticket) {
+            if ($ticket['status'] === 'Used' || (int) $ticket['checked_in_quantity'] > 0) {
+                $pdo->rollBack();
+                respond(409, ['success' => false, 'message' => 'Tiket terpakai atau sudah check-in tidak bisa dihapus.']);
+            }
+        }
+
+        // Cek tabel riwayat juga karena catatan check-in tidak memakai foreign key cascade.
+        $checkinStatement = $pdo->prepare(
+            "SELECT ticket_id FROM ticket_checkins WHERE ticket_id IN ($placeholders) LIMIT 1"
+        );
+        $checkinStatement->execute($ticketIds);
+        if ($checkinStatement->fetchColumn() !== false) {
+            $pdo->rollBack();
+            respond(409, ['success' => false, 'message' => 'Tiket yang memiliki riwayat check-in tidak bisa dihapus.']);
+        }
+
+        $deleteStatement = $pdo->prepare("DELETE FROM tickets WHERE id IN ($placeholders)");
+        $deleteStatement->execute($ticketIds);
+        $deletedCount = $deleteStatement->rowCount();
+        $pdo->commit();
+
+        respond(200, ['success' => true, 'deleted_count' => $deletedCount]);
+    }
+
     // Tanggal pesanan ditampilkan dan difilter pakai waktu Jakarta.
     $pdo->exec("SET time_zone = '+07:00'");
     $today = (new DateTimeImmutable('now', new DateTimeZone('Asia/Jakarta')))->format('Y-m-d');
@@ -58,7 +120,7 @@ try {
         respond(400, ['success' => false, 'message' => 'Filter status tidak valid.']);
     }
     if ($status !== '') {
-        $where[] = "(CASE WHEN t.checked_in_quantity >= t.quantity THEN 'Used' "
+        $where[] = "(CASE WHEN t.status = 'Used' OR t.checked_in_quantity >= t.quantity THEN 'Used' "
             . "WHEN t.visit_date < :filter_today THEN 'Expire' ELSE 'Active' END) = :status";
         $params['filter_today'] = $today;
         $params['status'] = $status;
@@ -111,7 +173,8 @@ try {
         'SELECT CAST(t.id AS CHAR) AS id, u.username, w.id AS wahana_id, '
         . 'w.name AS wahana_name, t.booking_date, t.visit_date, t.quantity, '
         . 't.checked_in_quantity, t.unit_price, t.total_price, t.payment_method, '
-        . "CASE WHEN t.checked_in_quantity >= t.quantity THEN 'Used' "
+        . 'EXISTS (SELECT 1 FROM ticket_checkins c WHERE c.ticket_id = t.id) AS has_checkins, '
+        . "CASE WHEN t.status = 'Used' OR t.checked_in_quantity >= t.quantity THEN 'Used' "
         . "WHEN t.visit_date < :today THEN 'Expire' ELSE 'Active' END AS status "
         . $from
         . $filter
@@ -125,6 +188,10 @@ try {
         foreach (['wahana_id', 'quantity', 'checked_in_quantity', 'unit_price', 'total_price'] as $field) {
             $row[$field] = (int) $row[$field];
         }
+        $row['can_delete'] = $row['status'] !== 'Used'
+            && $row['checked_in_quantity'] === 0
+            && !(bool) $row['has_checkins'];
+        unset($row['has_checkins']);
     }
     unset($row);
     respond(200, [
@@ -141,5 +208,8 @@ try {
         'order_trend' => array_values($orderTrend),
     ]);
 } catch (Throwable $exception) {
+    if (isset($pdo) && $pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
     handleApiError('dashboard orders', $exception);
 }

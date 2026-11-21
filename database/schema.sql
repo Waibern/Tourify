@@ -20,6 +20,12 @@ CREATE TABLE `wahana` (
   `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
   `description` text COLLATE utf8mb4_unicode_ci NOT NULL,
   `ticket_price` int unsigned NOT NULL,
+  -- Foto lama tetap memakai gambar bawaan kalau path kosong.
+  `image_path` varchar(255) DEFAULT NULL,
+  -- Pilihan wahana unggulan untuk Beranda aplikasi.
+  `is_featured` tinyint(1) NOT NULL DEFAULT 0,
+  -- Arsipkan wahana tanpa menghapus tiket dan riwayat pemiliknya.
+  `is_deleted` tinyint(1) NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -42,6 +48,17 @@ CREATE TABLE `tickets` (
   KEY `fk_tickets_wahana` (`wahana_id`),
   CONSTRAINT `fk_tickets_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_tickets_wahana` FOREIGN KEY (`wahana_id`) REFERENCES `wahana` (`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `ratings` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `ticket_id` bigint unsigned NOT NULL,
+  `rating` tinyint unsigned NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_ratings_ticket_id` (`ticket_id`),
+  CONSTRAINT `fk_ratings_ticket` FOREIGN KEY (`ticket_id`) REFERENCES `tickets` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `ticket_checkins` (

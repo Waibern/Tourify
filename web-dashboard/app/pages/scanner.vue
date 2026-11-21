@@ -7,6 +7,21 @@ const resultPanel = ref<HTMLElement | null>(null)
 const api = useTourifyApi()
 const { user } = useDashboardAuth()
 const phase = ref<'preparing' | 'idle' | 'starting' | 'scanning' | 'checking' | 'result' | 'camera-error'>('preparing')
+const checkinTimeFormatter = new Intl.DateTimeFormat('id-ID', {
+  timeZone: 'Asia/Jakarta',
+  hour: '2-digit',
+  minute: '2-digit'
+})
+// Riwayat ini menyimpan lima check-in sukses pada sesi pemindai yang sedang berjalan.
+const recentCheckins = ref<Array<{
+  key: string
+  ticketId: string
+  username: string
+  wahanaName: string
+  time: string
+}>>([])
+// Simpan kondisi stream supaya hasil scan tidak otomatis mematikan kamera.
+const cameraActive = ref(false)
 const resultKind = ref<'success' | 'error'>('success')
 const resultMessage = ref('')
 const cameraMessage = ref('')
@@ -20,6 +35,11 @@ let scanner: QrScanner | null = null
 let listCameraDevices: (() => Promise<QrScanner.Camera[]>) | null = null
 let disposed = false
 let cameraStartRequest = 0
+let successAudioContext: AudioContext | null = null
+
+// QR yang masih terlihat hanya boleh mencatat satu pengunjung.
+let heldQr: string | null = null
+let blankFrameSince: number | null = null
 
 const cameraOptions = computed(() => cameraDevices.value.map(camera => ({
   label: camera.label,
@@ -29,7 +49,7 @@ const cameraOptions = computed(() => cameraDevices.value.map(camera => ({
 const cameraStatusLabel = computed(() => {
   if (phase.value === 'preparing') return 'Menyiapkan pemindai'
   if (phase.value === 'starting') return 'Membuka kamera'
-  if (phase.value === 'scanning') return 'Kamera aktif'
+  if (phase.value === 'scanning' || (phase.value === 'result' && cameraActive.value)) return 'Kamera aktif'
   if (phase.value === 'checking') return 'Memeriksa tiket'
   if (phase.value === 'camera-error') return 'Kamera bermasalah'
   if (phase.value === 'result') return 'Pemindaian dijeda'
@@ -37,7 +57,7 @@ const cameraStatusLabel = computed(() => {
 })
 
 const cameraStatusColor = computed(() => {
-  if (phase.value === 'scanning') return 'success'
+  if (phase.value === 'scanning' || (phase.value === 'result' && cameraActive.value)) return 'success'
   if (phase.value === 'checking') return 'warning'
   if (phase.value === 'camera-error') return 'error'
   return 'neutral'
@@ -47,7 +67,7 @@ const cameraOverlayTitle = computed(() => {
   if (phase.value === 'preparing') return 'Menyiapkan pemindai'
   if (phase.value === 'starting') return 'Membuka kamera…'
   if (phase.value === 'checking') return 'Memeriksa tiket…'
-  if (phase.value === 'result') return 'Pemindaian dijeda'
+  if (phase.value === 'result') return 'Kamera dijeda'
   if (phase.value === 'camera-error') return 'Kamera belum bisa dibuka'
   return 'Siap menerima pengunjung?'
 })
@@ -56,15 +76,27 @@ const cameraOverlayDescription = computed(() => {
   if (phase.value === 'preparing') return 'Pemindai sedang dimuat. Tombol kamera akan tersedia sebentar lagi.'
   if (phase.value === 'starting') return 'Izinkan akses kamera jika browser memintanya.'
   if (phase.value === 'checking') return 'Tunggu hasil server sebelum memindai tiket berikutnya.'
-  if (phase.value === 'result') return 'Periksa hasil check-in sebelum lanjut ke pengunjung berikutnya.'
+  if (phase.value === 'result') return uncertainResult.value
+    ? 'Konfirmasi status tiket sebelum melanjutkan.'
+    : 'Aktifkan kamera untuk melanjutkan.'
   if (phase.value === 'camera-error') return cameraMessage.value
   if (cameraMessage.value) return cameraMessage.value
   return 'Aktifkan kamera, lalu pilih kamera yang sesuai jika tersedia.'
 })
 
-// Setelah hasil scan muncul, tombol lanjut bisa langsung dipakai dengan keyboard.
+// Buka pemindaian lagi setelah satu detik tanpa mengganti stream kamera.
+watch([phase, cameraActive, uncertainResult], ([currentPhase, active, uncertain], _, onCleanup) => {
+  if (currentPhase !== 'result' || !active || uncertain) return
+
+  const timer = window.setTimeout(() => {
+    phase.value = 'scanning'
+  }, 1000)
+  onCleanup(() => window.clearTimeout(timer))
+})
+
+// Pindahkan fokus hanya saat status check-in perlu dikonfirmasi petugas.
 watch(phase, async (value) => {
-  if (value === 'result') {
+  if (value === 'result' && uncertainResult.value) {
     await nextTick()
     const action = resultPanel.value?.querySelector('button')
     if (action) action.focus({ preventScroll: true })
@@ -94,6 +126,19 @@ async function initializeScanner() {
         preferredCamera: selectedCameraId.value || 'environment',
         highlightScanRegion: false,
         highlightCodeOutline: false,
+        // Abaikan QR yang sama sampai kamera melihat bingkai kosong selama setengah detik.
+        onDecodeError(error) {
+          if (!cameraActive.value || !heldQr || error !== QrScannerBrowser.NO_QR_CODE_FOUND) {
+            blankFrameSince = null
+            return
+          }
+
+          blankFrameSince ??= performance.now()
+          if (performance.now() - blankFrameSince >= 500) {
+            heldQr = null
+            blankFrameSince = null
+          }
+        },
         returnDetailedScanResult: true
       }
     )
@@ -130,6 +175,8 @@ async function refreshCameraDevices(request: number) {
 async function selectCamera(cameraId: string) {
   if (!scanner || !cameraId || cameraId === selectedCameraId.value) return
 
+  // QR harus hilang dari kamera yang sama sebelum boleh dipindai ulang.
+  blankFrameSince = null
   const previousCameraId = selectedCameraId.value
   const resumeScanning = phase.value === 'scanning'
   const request = ++cameraStartRequest
@@ -166,16 +213,22 @@ onMounted(() => {
   void initializeScanner()
 })
 
-// Hentikan kamera saat tab disembunyikan atau halaman ditinggalkan.
+// Hentikan kamera saat tab disembunyikan, tapi pertahankan hasil scan terakhir.
 function handlePageVisibility() {
-  if (document.visibilityState !== 'hidden' || !['starting', 'scanning'].includes(phase.value)) {
+  const shouldStopCamera = document.visibilityState === 'hidden'
+    && (cameraActive.value || ['starting', 'scanning'].includes(phase.value))
+  if (!shouldStopCamera) {
     return
   }
 
+  const shouldResetPhase = ['starting', 'scanning'].includes(phase.value)
   cameraStartRequest++
   scanner?.stop()
-  phase.value = 'idle'
-  cameraMessage.value = 'Pemindaian dijeda karena tab tidak aktif. Aktifkan kamera lagi sebelum memindai.'
+  cameraActive.value = false
+  if (shouldResetPhase) {
+    phase.value = 'idle'
+    cameraMessage.value = 'Pemindaian dijeda karena tab tidak aktif. Aktifkan kamera lagi sebelum memindai.'
+  }
 }
 
 onBeforeUnmount(() => {
@@ -183,6 +236,10 @@ onBeforeUnmount(() => {
   cameraStartRequest++
   document.removeEventListener('visibilitychange', handlePageVisibility)
   scanner?.destroy()
+  // Tutup audio pemindai saat halaman ditinggalkan.
+  if (successAudioContext && successAudioContext.state !== 'closed') {
+    void successAudioContext.close().catch(() => undefined)
+  }
 })
 
 function ticketIdFromQr(value: string): string | null {
@@ -201,13 +258,63 @@ function responseStatusCode(error: unknown): number | null {
   return null
 }
 
+// Siapkan audio saat petugas menekan tombol supaya browser mengizinkan bunyi scan.
+function prepareSuccessSound() {
+  if (typeof window === 'undefined' || !window.AudioContext) return
+
+  try {
+    successAudioContext ??= new window.AudioContext()
+    if (successAudioContext.state === 'suspended') {
+      void successAudioContext.resume().catch(() => undefined)
+    }
+  } catch {
+    successAudioContext = null
+  }
+}
+
+// Putar bunyi pendek hanya setelah server mengonfirmasi check-in.
+function playSuccessSound() {
+  const context = successAudioContext
+  if (!context || context.state !== 'running') return
+
+  try {
+    const oscillator = context.createOscillator()
+    const volume = context.createGain()
+    const startAt = context.currentTime
+    const endAt = startAt + 0.18
+
+    oscillator.type = 'sine'
+    oscillator.frequency.setValueAtTime(1047, startAt)
+    volume.gain.setValueAtTime(0.0001, startAt)
+    volume.gain.exponentialRampToValueAtTime(0.035, startAt + 0.012)
+    volume.gain.exponentialRampToValueAtTime(0.0001, endAt)
+    oscillator.connect(volume)
+    volume.connect(context.destination)
+    oscillator.addEventListener('ended', () => {
+      oscillator.disconnect()
+      volume.disconnect()
+    }, { once: true })
+    oscillator.start(startAt)
+    oscillator.stop(endAt)
+  } catch {
+    // Bunyi tidak boleh mengubah hasil check-in yang sudah dicatat server.
+  }
+}
+
 // Satu scan mencatat satu orang; server mengecek tiket dan sisa jumlahnya.
 async function handleQr(value: string) {
+  blankFrameSince = null
   if (phase.value !== 'scanning') {
     return
   }
 
-  scanner?.stop()
+  // Tiket lain boleh langsung diproses setelah jeda, walau QR sebelumnya belum dijauhkan.
+  const ticketId = ticketIdFromQr(value)
+  const qrKey = ticketId ? `ticket:${ticketId}` : `invalid:${value.trim()}`
+  if (qrKey === heldQr) return
+  heldQr = qrKey
+
+  // Tahan scan lain selama server mencatat pengunjung.
   phase.value = 'checking'
   resultMessage.value = ''
   scannedTicket.value = null
@@ -215,7 +322,6 @@ async function handleQr(value: string) {
   uncertainResult.value = false
   statusChecked.value = false
 
-  const ticketId = ticketIdFromQr(value)
   if (!ticketId) {
     resultKind.value = 'error'
     resultMessage.value = 'QR ini bukan tiket Tourify yang valid.'
@@ -235,6 +341,19 @@ async function handleQr(value: string) {
     }
 
     scannedTicket.value = response.ticket
+    // Catat hasil sukses terbaru sebelum menyiapkan scan berikutnya.
+    const scannedAt = new Date()
+    recentCheckins.value = [
+      {
+        key: `${response.ticket.id}-${response.ticket.checked_in_quantity}`,
+        ticketId: response.ticket.id,
+        username: response.ticket.username,
+        wahanaName: response.ticket.wahana_name,
+        time: checkinTimeFormatter.format(scannedAt)
+      },
+      ...recentCheckins.value
+    ].slice(0, 5)
+    playSuccessSound()
     resultKind.value = 'success'
     resultMessage.value = response.message || 'Check-in berhasil.'
   } catch (error) {
@@ -249,13 +368,16 @@ async function handleQr(value: string) {
   phase.value = 'result'
 }
 
-// Kamera mulai setelah petugas menekan tombol dan memberi izin.
+// Siapkan audio dan kamera setelah petugas menekan tombol.
 async function startScanner() {
+  prepareSuccessSound()
   if (!scanner) {
     await initializeScanner()
     if (!scanner || disposed) return
   }
 
+  // Hitung jeda QR kosong dari stream yang baru dibuka.
+  blankFrameSince = null
   cameraMessage.value = ''
   phase.value = 'starting'
   const request = ++cameraStartRequest
@@ -263,13 +385,16 @@ async function startScanner() {
     await scanner.start()
     if (disposed || document.visibilityState === 'hidden' || request !== cameraStartRequest) {
       scanner.stop()
+      cameraActive.value = false
       if (!disposed && phase.value === 'starting') phase.value = 'idle'
       return
     }
+    cameraActive.value = true
     phase.value = 'scanning'
     void refreshCameraDevices(request)
   } catch (error) {
     if (disposed || request !== cameraStartRequest) return
+    cameraActive.value = false
     phase.value = 'camera-error'
     const name = typeof error === 'object' && error !== null && 'name' in error
       ? String(error.name)
@@ -288,19 +413,32 @@ async function startScanner() {
   }
 }
 
+// Tombol manual bisa mematikan kamera sambil mempertahankan hasil check-in.
 function stopScanner() {
+  const preserveResult = phase.value === 'checking' || phase.value === 'result'
   cameraStartRequest++
   scanner?.stop()
-  phase.value = 'idle'
+  cameraActive.value = false
+  if (!preserveResult) {
+    phase.value = 'idle'
+  }
 }
 
-async function scanNext() {
-  if (uncertainResult.value && !statusChecked.value) return
+// Respons server yang belum pasti tetap perlu dikonfirmasi sebelum scan dilanjutkan.
+async function resumeAfterConfirmation() {
+  if (phase.value !== 'result' || !uncertainResult.value || !statusChecked.value) return
   scannedTicket.value = null
   scannedTicketId.value = null
   resultMessage.value = ''
   uncertainResult.value = false
   statusChecked.value = false
+
+  // Kalau kamera masih menyala, langsung siapkan scan berikutnya dengan stream yang sama.
+  if (cameraActive.value) {
+    phase.value = 'scanning'
+    return
+  }
+
   await startScanner()
 }
 </script>
@@ -316,8 +454,8 @@ async function scanNext() {
     </template>
 
     <template #body>
-      <!-- Kamera dan hasil tampil berdampingan supaya petugas bisa mengecek tiket. -->
-      <div class="mx-auto w-full max-w-6xl space-y-6">
+      <!-- Sesuaikan posisi panel dengan lebar ruang setelah sidebar dashboard. -->
+      <div class="@container mx-auto w-full max-w-6xl space-y-6">
         <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 class="text-2xl font-semibold tracking-tight text-highlighted">
@@ -338,7 +476,7 @@ async function scanNext() {
                 :items="cameraOptions"
                 placeholder="Pilih kamera"
                 aria-label="Pilih kamera pemindai QR"
-                :disabled="['preparing', 'starting', 'checking'].includes(phase)"
+                :disabled="['preparing', 'starting', 'checking'].includes(phase) || (phase === 'result' && cameraActive)"
                 class="w-full"
                 @update:model-value="selectCamera"
               />
@@ -356,20 +494,18 @@ async function scanNext() {
           </div>
         </div>
 
-        <div class="grid items-stretch gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(18rem,0.9fr)]">
-          <!-- Di HP, tampilkan hasil scan saja supaya detail check-in lebih mudah dibaca. -->
+        <div class="grid items-start gap-5 @min-[44rem]:grid-cols-[minmax(0,1.5fr)_minmax(18rem,0.9fr)]">
           <UCard
-            class="h-full overflow-hidden"
+            class="overflow-hidden"
             :ui="{ body: 'p-0 sm:p-0' }"
-            :class="{ 'hidden lg:block': phase === 'result' }"
           >
+            <!-- Ukuran preview tetap sama saat QR diperiksa dan hasilnya tampil. -->
             <div class="relative aspect-[4/3] overflow-hidden bg-zinc-950">
               <video
                 ref="video"
                 muted
                 playsinline
                 class="absolute inset-0 h-full w-full object-cover"
-                :class="{ 'opacity-30': phase !== 'scanning' }"
                 aria-label="Tampilan kamera untuk scan QR tiket"
               />
 
@@ -394,8 +530,9 @@ async function scanNext() {
                 </span>
               </div>
 
+              <!-- Saat kamera aktif, status pemeriksaan tampil di panel tiket supaya preview tetap jelas. -->
               <div
-                v-else
+                v-else-if="!cameraActive"
                 class="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950/60 p-6 text-center text-white"
               >
                 <UIcon
@@ -411,7 +548,7 @@ async function scanNext() {
                   {{ cameraOverlayDescription }}
                 </p>
                 <UButton
-                  v-if="phase === 'idle' || phase === 'camera-error'"
+                  v-if="phase === 'idle' || phase === 'camera-error' || (phase === 'result' && !uncertainResult)"
                   class="mt-5 min-h-11"
                   size="lg"
                   :label="phase === 'camera-error' ? 'Coba buka kamera' : 'Aktifkan kamera'"
@@ -422,7 +559,7 @@ async function scanNext() {
 
               <div class="absolute inset-x-0 top-0 flex items-start justify-end p-3 sm:p-4">
                 <UButton
-                  v-if="phase === 'scanning'"
+                  v-if="cameraActive"
                   label="Hentikan kamera"
                   icon="i-lucide-camera-off"
                   color="neutral"
@@ -435,11 +572,11 @@ async function scanNext() {
             </div>
             <div class="flex items-start gap-3 border-t border-default bg-elevated/20 p-4 text-sm leading-6 text-muted sm:px-5">
               <UIcon name="i-lucide-info" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              <p>Satu QR bisa mewakili beberapa orang. Pindai ulang untuk tiap orang dan tunggu hasil sebelum melanjutkan.</p>
+              <p>Untuk tiket rombongan, jauhkan QR sebentar dari kamera lalu pindai lagi untuk orang berikutnya.</p>
             </div>
           </UCard>
 
-          <UCard class="h-full">
+          <UCard>
             <div
               ref="resultPanel"
               role="status"
@@ -449,10 +586,11 @@ async function scanNext() {
               class="flex h-full min-h-[24rem] flex-col gap-5 focus-visible:outline-2 focus-visible:outline-primary"
             >
               <h2 class="text-sm font-semibold text-highlighted">
-                Hasil pemeriksaan
+                Detail tiket
               </h2>
 
-              <template v-if="phase === 'result'">
+              <!-- Detail terakhir tetap terlihat saat pemindai sudah siap lagi. -->
+              <template v-if="resultMessage">
                 <div class="flex items-start gap-3">
                   <div
                     class="flex size-12 shrink-0 items-center justify-center rounded-full"
@@ -482,6 +620,15 @@ async function scanNext() {
                       </dt>
                       <dd class="mt-1 font-medium text-highlighted">
                         {{ scannedTicket.wahana_name }}
+                      </dd>
+                    </div>
+                    <!-- Tampilkan nama akun pengunjung pada hasil scan. -->
+                    <div>
+                      <dt class="text-muted">
+                        Nama pengunjung
+                      </dt>
+                      <dd class="mt-1 break-all font-medium text-highlighted">
+                        {{ scannedTicket.username }}
                       </dd>
                     </div>
                     <div class="flex justify-between gap-3">
@@ -552,17 +699,14 @@ async function scanNext() {
                 </div>
 
                 <UButton
-                  v-if="!uncertainResult || statusChecked"
-                  label="Scan berikutnya"
+                  v-if="uncertainResult && statusChecked"
+                  label="Lanjutkan pemindaian"
                   icon="i-lucide-scan-line"
                   size="lg"
                   block
                   class="min-h-11"
-                  @click="scanNext"
+                  @click="resumeAfterConfirmation"
                 />
-                <p v-if="!uncertainResult" class="text-sm text-muted">
-                  Lanjutkan setelah pengunjung melewati gate agar tidak terhitung dua kali.
-                </p>
               </template>
 
               <div v-else class="flex flex-1 flex-col items-center justify-center py-6 text-center">
@@ -582,6 +726,41 @@ async function scanNext() {
             </div>
           </UCard>
         </div>
+
+        <!-- Riwayat ringkas menampilkan lima scan sukses pada sesi ini. -->
+        <UCard>
+          <div class="flex items-center justify-between gap-3">
+            <h2 class="text-sm font-semibold text-highlighted">
+              Riwayat check-in
+            </h2>
+            <UBadge color="neutral" variant="subtle">
+              {{ recentCheckins.length }} scan
+            </UBadge>
+          </div>
+
+          <ul v-if="recentCheckins.length" class="mt-3 divide-y divide-default">
+            <li
+              v-for="checkin in recentCheckins"
+              :key="checkin.key"
+              class="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0"
+            >
+              <div class="min-w-0">
+                <p class="truncate text-sm font-medium text-highlighted">
+                  {{ checkin.username }}
+                </p>
+                <p class="truncate text-sm text-muted">
+                  Tiket #{{ checkin.ticketId }} · {{ checkin.wahanaName }}
+                </p>
+              </div>
+              <time class="shrink-0 text-sm tabular-nums text-muted">
+                {{ checkin.time }} WIB
+              </time>
+            </li>
+          </ul>
+          <p v-else class="mt-3 text-sm text-muted">
+            Belum ada check-in di sesi ini.
+          </p>
+        </UCard>
       </div>
     </template>
   </UDashboardPanel>

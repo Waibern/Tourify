@@ -13,7 +13,11 @@ if (localPropertiesFile.isFile) {
     }
 }
 
-val tourifyApiBaseUrl = localProperties.getProperty("tourifyApiBaseUrl")
+// Override ini menjaga alamat server lokal tetap di proses build.
+val tourifyApiBaseUrl = System.getenv("TOURIFY_API_BASE_URL")
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: localProperties.getProperty("tourifyApiBaseUrl")
     ?.trim()
     ?.takeIf { it.isNotEmpty() }
     ?: "http://10.0.2.2:8888/tourify-api/"

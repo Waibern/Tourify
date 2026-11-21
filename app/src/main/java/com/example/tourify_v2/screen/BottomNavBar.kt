@@ -2,9 +2,7 @@ package com.example.tourify_v2.screen
 
 import com.example.tourify_v2.ui.theme.*
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -89,6 +87,9 @@ fun BottomNavBar(
     val largeTextEnabled = LocalDensity.current.fontScale >= 1.3f
     val compactWidthEnabled = LocalConfiguration.current.screenWidthDp <= 360
     val selectedTabWeight = if (largeTextEnabled || compactWidthEnabled) 1f else 1.9f
+    val activeIndex = navItems.indexOfFirst {
+        it.route == currentRoute
+    }
 
     Box(
         modifier = modifier
@@ -114,25 +115,120 @@ fun BottomNavBar(
             ),
             shadowElevation = TourifyElevation.floating
         ) {
-            Row(
+            // Pill bergerak sendiri, sementara slot navigasi tetap ringan.
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
-                    // Sisakan jarak nyaman antara tab dan tepi bar.
-                    .padding(6.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(6.dp)
             ) {
-                // Semua item, termasuk Asisten AI, tersusun rata di bar yang sama.
-                navItems.forEach { item ->
-                    NavigationTab(
-                        item = item,
-                        currentRoute = currentRoute,
-                        selectedTabWeight = selectedTabWeight,
-                        largeTextEnabled = largeTextEnabled,
-                        compactWidthEnabled = compactWidthEnabled,
-                        onNavigate = onNavigate,
-                        onAssistantClick = onAssistantClick,
-                        onAssistantCenterChanged = onAssistantCenterChanged
+                val totalWeight = if (activeIndex >= 0) {
+                    navItems.size - 1 + selectedTabWeight
+                } else {
+                    navItems.size.toFloat()
+                }
+                val slotWidth = maxWidth / totalWeight
+                val activeItem = navItems.getOrNull(activeIndex)
+                val targetPillOffset = if (activeIndex >= 0) {
+                    slotWidth * activeIndex + 2.dp
+                } else {
+                    0.dp
+                }
+                val targetPillWidth = if (activeIndex >= 0) {
+                    slotWidth * selectedTabWeight - 4.dp
+                } else {
+                    0.dp
+                }
+                val pillOffset by animateDpAsState(
+                    targetValue = targetPillOffset,
+                    animationSpec = tween(
+                        durationMillis = TourifyMotion.standardMillis,
+                        easing = TourifyMotion.navigationEasing
+                    ),
+                    label = "navPillOffset"
+                )
+                val pillWidth by animateDpAsState(
+                    targetValue = targetPillWidth,
+                    animationSpec = tween(
+                        durationMillis = TourifyMotion.standardMillis,
+                        easing = TourifyMotion.navigationEasing
+                    ),
+                    label = "navPillWidth"
+                )
+
+                if (activeItem != null) {
+                    // Latar pill meluncur ke tab yang dipilih.
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .offset(x = pillOffset)
+                            .width(pillWidth.coerceAtLeast(0.dp))
+                            .fillMaxHeight()
+                            .padding(vertical = 2.dp)
+                            .clip(TourifyShapes.pill)
+                            .background(TourifyForestBright)
                     )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Semua item memakai slot yang sama seperti susunan awal.
+                    navItems.forEach { item ->
+                        NavigationTab(
+                            item = item,
+                            currentRoute = currentRoute,
+                            selectedTabWeight = selectedTabWeight,
+                            onNavigate = onNavigate,
+                            onAssistantClick = onAssistantClick,
+                            onAssistantCenterChanged = onAssistantCenterChanged
+                        )
+                    }
+                }
+
+                if (activeItem != null) {
+                    // Ikon dan teks ikut bergerak bersama pill.
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .offset(x = pillOffset)
+                            .width(pillWidth.coerceAtLeast(0.dp))
+                            .fillMaxHeight()
+                            .padding(vertical = 2.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxSize(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (!largeTextEnabled && !compactWidthEnabled) {
+                                Icon(
+                                    imageVector = activeItem.icon,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                            Text(
+                                text = activeItem.label,
+                                modifier = Modifier.padding(
+                                    start = if (largeTextEnabled || compactWidthEnabled) {
+                                        0.dp
+                                    } else {
+                                        6.dp
+                                    }
+                                ),
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -145,27 +241,12 @@ private fun RowScope.NavigationTab(
     item: NavItem,
     currentRoute: String,
     selectedTabWeight: Float,
-    largeTextEnabled: Boolean,
-    compactWidthEnabled: Boolean,
     onNavigate: (String) -> Unit,
     onAssistantClick: () -> Unit,
     onAssistantCenterChanged: (Offset) -> Unit
 ) {
     val isSelected = item.route != null && item.route == currentRoute
-    val itemWeight by animateFloatAsState(
-        targetValue = if (isSelected) {
-            selectedTabWeight
-        } else {
-            1f
-        },
-        animationSpec = tween(TourifyMotion.standardMillis),
-        label = "navItemWidth"
-    )
-    val background by animateColorAsState(
-        targetValue = if (isSelected) TourifyForestBright else Color.Transparent,
-        animationSpec = tween(TourifyMotion.standardMillis),
-        label = "navItemColor"
-    )
+    val itemWeight = if (isSelected) selectedTabWeight else 1f
     // Simpan titik tengah item asisten untuk animasi membuka chat.
     val positionModifier = if (item.route == null) {
         Modifier.onGloballyPositioned { coordinates ->
@@ -202,43 +283,21 @@ private fun RowScope.NavigationTab(
                     }
                 }
             )
-            // Inset mengecilkan pill aktif tanpa mengurangi area klik.
+            // Pertahankan area klik yang sama untuk semua tab.
             .padding(
-                vertical = if (isSelected) 2.dp else 0.dp
-            )
-            .background(
-                color = background,
-                shape = TourifyShapes.pill
+                horizontal = 2.dp,
+                vertical = 2.dp
             ),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (!isSelected || (!largeTextEnabled && !compactWidthEnabled)) {
-            // Ikon sedikit lebih besar supaya mudah dibaca di HP.
+        if (!isSelected) {
+            // Ikon aktif ditampilkan di pill yang bergerak.
             Icon(
                 imageVector = item.icon,
                 contentDescription = null,
-                tint = if (isSelected) Color.White else TourifyMuted,
+                tint = TourifyMuted,
                 modifier = Modifier.size(28.dp)
-            )
-        }
-        AnimatedVisibility(
-            visible = isSelected
-        ) {
-            Text(
-                text = item.label,
-                modifier = Modifier.padding(
-                    start = if (largeTextEnabled || compactWidthEnabled) {
-                        0.dp
-                    } else {
-                        6.dp
-                    }
-                ),
-                color = Color.White,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
             )
         }
     }

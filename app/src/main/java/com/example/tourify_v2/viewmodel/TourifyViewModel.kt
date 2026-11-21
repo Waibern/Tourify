@@ -5,14 +5,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.tourify_v2.model.ApiResponse
 import com.example.tourify_v2.model.ChatHistoryItem
 import com.example.tourify_v2.model.ChatRequest
 import com.example.tourify_v2.model.ChatResponse
 import com.example.tourify_v2.model.Ticket
 import com.example.tourify_v2.model.TicketBookingRequest
+import com.example.tourify_v2.model.TicketRatingRequest
 import com.example.tourify_v2.model.Wahana
 import com.example.tourify_v2.network.ApiClient
 import com.example.tourify_v2.network.ApiService
+import com.google.gson.Gson
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
@@ -86,16 +89,20 @@ class TourifyViewModel(
                         serverChatResponse
                     }
                 } else {
+                    // Jelaskan cara pulih tanpa meneruskan pesan konfigurasi dari server.
                     ChatResponse(
-                        message = serverChatResponse?.message
-                            ?: "Asisten gagal menjawab. Coba lagi nanti."
+                        message = when (response.code()) {
+                            401 -> "Sesi masuk berakhir. Masuk kembali ke Tourify untuk melanjutkan."
+                            429 -> "Asisten sedang sibuk. Tunggu sebentar, lalu coba lagi."
+                            else -> "Asisten belum bisa menjawab. Coba lagi sebentar lagi."
+                        }
                     )
                 }
                 onComplete(displayChatResponse)
             } catch (_: Exception) {
                 onComplete(
                     ChatResponse(
-                        message = "Tidak bisa menghubungi asisten. Pastikan server Tourify aktif lalu coba lagi."
+                        message = "Koneksi ke asisten terputus. Periksa internet, lalu coba lagi."
                     )
                 )
             } finally {
@@ -227,6 +234,87 @@ class TourifyViewModel(
                 onComplete(
                     false,
                     "Riwayat tiket gagal dihapus. Periksa koneksi lalu coba lagi."
+                )
+            }
+        }
+    }
+
+    // Simpan rating booking yang sudah punya check-in pertama.
+    fun submitTicketRating(
+        username: String,
+        accessToken: String,
+        ticketId: String,
+        rating: Int,
+        onComplete: (Boolean, String) -> Unit
+    ) {
+        if (
+            username.isBlank() ||
+            accessToken.isBlank() ||
+            ticketId.isBlank() ||
+            rating !in 1..5
+        ) {
+            onComplete(
+                false,
+                "Sesi atau rating tidak valid. Coba lagi."
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val response = apiService.submitTicketRating(
+                    authorization = "Bearer $accessToken",
+                    request = TicketRatingRequest(
+                        ticketId = ticketId,
+                        rating = rating
+                    )
+                )
+                val result = response.body() ?: response.errorBody()?.string()?.let { errorBody ->
+                    runCatching {
+                        Gson().fromJson(
+                            errorBody,
+                            ApiResponse::class.java
+                        )
+                    }.getOrNull()
+                }
+                if (
+                    response.isSuccessful &&
+                    result?.success == true
+                ) {
+                    if (ticketsOwner == username) {
+                        tickets = tickets.map { ticket ->
+                            if (ticket.id == ticketId) {
+                                ticket.copy(rating = rating)
+                            } else {
+                                ticket
+                            }
+                        }
+                    }
+                    loadTickets(
+                        username = username,
+                        accessToken = accessToken,
+                        forceRefresh = true
+                    )
+                    loadWahana()
+                    onComplete(
+                        true,
+                        result.message.ifBlank {
+                            "Rating wahana berhasil disimpan."
+                        }
+                    )
+                } else {
+                    onComplete(
+                        false,
+                        result?.message?.takeIf { it.isNotBlank() }
+                            ?: "Rating wahana gagal disimpan. Coba lagi."
+                    )
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                onComplete(
+                    false,
+                    "Rating wahana gagal disimpan. Periksa koneksi lalu coba lagi."
                 )
             }
         }

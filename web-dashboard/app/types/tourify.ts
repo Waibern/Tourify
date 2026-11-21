@@ -42,15 +42,26 @@ export interface DashboardProfile {
 }
 
 export interface TourifyWahana {
+  // Path foto relatif terhadap alamat API.
+  image_path?: string | null
   id: number
   name: string
   description: string
   ticket_price: number
+  average_rating: number | null
+  rating_count: number
+  // Ringkasan tiket terkait untuk peringatan saat wahana diarsipkan.
+  ticket_count?: number
+  ticket_owner_count?: number
+  // Pilihan tunggal untuk banner unggulan di aplikasi.
+  is_featured: boolean
 }
 
 export interface CheckinTicket {
   id: string
   wahana_name: string
+  // Nama akun pemesan ditampilkan sebagai identitas pengunjung.
+  username: string
   visit_date: string
   quantity: number
   checked_in_quantity: number
@@ -116,6 +127,8 @@ export interface DashboardTopWahana {
   order_count: number
   ticket_count: number
   booking_value: number
+  average_rating: number | null
+  rating_count: number
 }
 
 export interface DashboardAnalytics {
@@ -160,6 +173,7 @@ export interface DashboardOrder extends DashboardRecentOrder {
   unit_price: number
   payment_method: string
   status: 'Active' | 'Expire' | 'Used'
+  can_delete: boolean
 }
 
 // Grafik menampilkan jumlah pesanan harian selama 14 hari terakhir.

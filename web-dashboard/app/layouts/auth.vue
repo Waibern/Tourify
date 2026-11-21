@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import BlurText from '~/components/ui/blur-text.vue'
 
 // Foto wahana untuk panel login.
 const heroPhotos = [
@@ -67,9 +68,9 @@ onUnmounted(() => {
         </div>
 
         <div class="mt-[4vh] max-w-xl max-[380px]:mt-[3vh] lg:mt-[10vh] lg:flex lg:flex-1 lg:flex-col">
-          <!-- Bayangan lembut menjaga judul tetap terbaca di atas foto. -->
-          <h2 data-login-copy="title" class="login-title-shadow max-w-[16ch] text-4xl font-semibold leading-[1.06] tracking-[-0.03em] text-white max-[380px]:text-3xl sm:text-5xl xl:text-6xl">
-            Kelola tiket dan kunjungan dalam satu tempat.
+          <!-- Tagline muncul bertahap dengan efek blur. -->
+          <h2 class="login-title-shadow max-w-[16ch] text-4xl font-semibold leading-[1.06] tracking-[-0.03em] text-white max-[380px]:text-3xl sm:text-5xl xl:text-6xl">
+            <BlurText text="Kelola tiket dan kunjungan dalam satu tempat." />
           </h2>
           <div class="mt-5 lg:mt-auto">
             <!-- Pilih titik untuk langsung menampilkan foto yang diinginkan. -->
@@ -141,10 +142,6 @@ onUnmounted(() => {
 
   [data-login-copy='brand'] {
     animation-delay: 80ms;
-  }
-
-  [data-login-copy='title'] {
-    animation-delay: 220ms;
   }
 
   [data-login-copy='description'] {

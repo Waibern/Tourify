@@ -107,14 +107,8 @@ const links = computed<NavigationMenuItem[]>(() => {
     })
   }
 
-  primary.push({
-    label: 'Pemindai QR',
-    icon: 'i-lucide-qr-code',
-    to: '/scanner',
-    onSelect: closeSidebar
-  })
-
   if (isAdmin) {
+    // Wahana tampil sebelum pemindai QR di menu admin.
     primary.push({
       label: 'Wahana',
       icon: 'i-lucide-ticket',
@@ -122,6 +116,13 @@ const links = computed<NavigationMenuItem[]>(() => {
       onSelect: closeSidebar
     })
   }
+
+  primary.push({
+    label: 'Pemindai QR',
+    icon: 'i-lucide-qr-code',
+    to: '/scanner',
+    onSelect: closeSidebar
+  })
 
   // Ikon roda gigi membuka daftar halaman pengaturan.
   primary.push({

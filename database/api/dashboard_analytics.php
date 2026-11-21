@@ -69,8 +69,8 @@ try {
     ]);
     $orderStats = $statement->fetch();
 
-    // Jumlah wahana dihitung dari seluruh katalog, tidak ikut filter tanggal.
-    $wahanaCount = (int) $pdo->query('SELECT COUNT(*) FROM wahana')->fetchColumn();
+    // Jumlah wahana aktif tidak ikut filter tanggal laporan.
+    $wahanaCount = (int) $pdo->query('SELECT COUNT(*) FROM wahana WHERE is_deleted = 0')->fetchColumn();
 
     // Hitung check-in dari waktu scan yang tercatat.
     $statement = $pdo->prepare(
@@ -175,8 +175,14 @@ try {
     $statement = $pdo->prepare(
         'SELECT w.id, w.name, COUNT(*) AS order_count, '
         . 'COALESCE(SUM(t.quantity), 0) AS ticket_count, '
-        . 'COALESCE(SUM(t.total_price), 0) AS booking_value '
+        . 'COALESCE(SUM(t.total_price), 0) AS booking_value, '
+        . 'MAX(rating_summary.average_rating) AS average_rating, '
+        . 'COALESCE(MAX(rating_summary.rating_count), 0) AS rating_count '
         . 'FROM tickets t INNER JOIN wahana w ON w.id = t.wahana_id '
+        . 'LEFT JOIN (SELECT rated_ticket.wahana_id, AVG(r.rating) AS average_rating, '
+        . 'COUNT(*) AS rating_count FROM ratings r '
+        . 'INNER JOIN tickets rated_ticket ON rated_ticket.id = r.ticket_id '
+        . 'GROUP BY rated_ticket.wahana_id) AS rating_summary ON rating_summary.wahana_id = w.id '
         . 'WHERE DATE(t.booking_date) BETWEEN :start_date AND :end_date '
         . 'GROUP BY w.id, w.name '
         . 'ORDER BY ticket_count DESC, order_count DESC, w.id ASC LIMIT 3'
@@ -192,6 +198,8 @@ try {
             'order_count' => (int) $row['order_count'],
             'ticket_count' => (int) $row['ticket_count'],
             'booking_value' => (int) $row['booking_value'],
+            'average_rating' => $row['average_rating'] === null ? null : round((float) $row['average_rating'], 1),
+            'rating_count' => (int) $row['rating_count'],
         ];
     }, $statement->fetchAll());
     $topWahana = $topWahanaDistribution[0] ?? null;

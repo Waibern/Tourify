@@ -39,6 +39,12 @@ server {
         autoindex off;
     }
 
+    # Layani foto wahana sebagai file statis dari penyimpanan persisten.
+    location ^~ /tourify-api/uploads/wahana/ {
+        alias /var/lib/tourify/uploads/wahana/;
+        autoindex off;
+    }
+
     # PHP-FPM hanya menangani endpoint API.
     location ~ ^/tourify-api/(register|login|logout|wahana|tickets|chat|profile|dashboard_auth|dashboard_analytics|dashboard_activity|dashboard_activity_feed|dashboard_checkin|dashboard_checkins|dashboard_customers|dashboard_members|dashboard_orders|dashboard_security|dashboard_wahana|customer_presence)\.php$ {
         fastcgi_param SCRIPT_FILENAME /var/www/tourify/database/api/$1.php;

@@ -1,8 +1,10 @@
 package com.example.tourify_v2.screen
 
 import com.example.tourify_v2.ui.theme.*
+import com.example.tourify_v2.R
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -10,6 +12,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,63 +30,86 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.AddComment
+import androidx.compose.material.icons.outlined.ConfirmationNumber
+import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.Sell
+import androidx.compose.material.icons.outlined.HelpOutline
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -100,13 +126,14 @@ import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 import java.text.NumberFormat
 import kotlin.math.hypot
+import kotlinx.coroutines.launch
 
 private val ChatCanvas = TourifyCanvas
 private val ChatInk = TourifyInk
 private val ChatMuted = TourifyMuted
-private val ChatBubble = TourifySoftSurface
 // Tombol Asisten pakai hijau utama supaya warnanya konsisten.
 private val ChatGreen = TourifyForest
+private const val ChatMessageLimit = 1000
 
 // Tombol ini membuka chat dari halaman utama.
 @Composable
@@ -249,6 +276,23 @@ internal fun ChatbotAssistantScreen(
     val messages = activeConversationState.messages
     var draft by activeConversationState.draft
     val messageListState = rememberLazyListState()
+    val composerFocus = remember {
+        FocusRequester()
+    }
+    val scrollScope = rememberCoroutineScope()
+    var showHelp by rememberSaveable {
+        mutableStateOf(false)
+    }
+    var confirmNewChat by rememberSaveable {
+        mutableStateOf(false)
+    }
+    // Tampilkan pintasan saat pengguna menggulir menjauh dari pesan terbaru.
+    val showLatestShortcut by remember(messageListState, messages) {
+        derivedStateOf {
+            val lastVisible = messageListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
+            lastVisible != null && lastVisible < messages.lastIndex
+        }
+    }
 
     // Tombol konfirmasi mengirim draf pesanan ke server.
     fun confirmBooking(
@@ -263,14 +307,14 @@ internal fun ChatbotAssistantScreen(
         ) return
 
         messages[index] = message.copy(proposalStatus = BookingProposalStatus.PROCESSING)
-        onConfirmBooking(proposal) { success, detail ->
+        onConfirmBooking(proposal) { success, _ ->
             if (index in messages.indices) {
                 val latestMessage = messages[index]
                 messages[index] = latestMessage.copy(
                     text = if (success) {
-                        "Pesanan berhasil dibuat. Buka menu Tiket untuk melihat tiket dan QR-nya."
+                        "Pesanan berhasil dibuat. Kamu bisa melihat tiket dan kode QR di tab Tiket."
                     } else {
-                        "Hasil pemesanan belum bisa dipastikan: $detail. Cek menu Tiket sebelum mencoba lagi agar tidak membuat pesanan ganda."
+                        "Status pesanan belum bisa dipastikan. Cek tab Tiket sebelum memesan lagi agar tidak membuat pesanan ganda."
                     },
                     proposalStatus = if (success) {
                         BookingProposalStatus.CONFIRMED
@@ -288,15 +332,102 @@ internal fun ChatbotAssistantScreen(
         if (message.proposalStatus != BookingProposalStatus.PENDING) return
 
         messages[index] = message.copy(
-            text = "Oke, belum ada tiket yang dibuat. Kirim detail yang ingin diubah, misalnya wahana, tanggal, jumlah, atau metode pembayaran.",
+            text = "Tulis bagian yang ingin kamu ubah, misalnya tanggal, jumlah tiket, atau metode bayar.",
             proposalStatus = BookingProposalStatus.CANCELLED
+        )
+        // Langsung arahkan pengguna ke kolom untuk menulis perubahan.
+        composerFocus.requestFocus()
+    }
+
+    // Tahan kirim ganda meski tombol diketuk sebelum status server sempat tampil.
+    fun isChatBusy(): Boolean = isSending || isBooking || messages.any { it.isLoading }
+
+    fun recentHistory(before: Int = messages.size): List<ChatHistoryItem> = messages
+        .take(before)
+        .filterNot { message ->
+            message.isLoading || message.isFailed
+        }
+        .takeLast(10)
+        .map { message ->
+            ChatHistoryItem(
+                role = if (message.fromUser) "user" else "assistant",
+                text = message.asHistoryText()
+            )
+        }
+
+    // Pakai alur yang sama untuk kirim baru dan coba lagi.
+    fun requestAnswer(
+        question: String,
+        history: List<ChatHistoryItem>,
+        answerIndex: Int
+    ) {
+        onSendMessage(
+            question,
+            history
+        ) { response ->
+            if (answerIndex in messages.indices && messages[answerIndex].isLoading) {
+                val serverAnswer = response.answer?.takeIf(String::isNotBlank)
+                    ?: response.message
+                    ?: "Asisten gagal menjawab. Coba lagi nanti."
+                // Kalau server belum menyiapkan draf, minta detail yang masih kurang.
+                val localBookingReply = if (response.bookingProposal == null) {
+                    buildBookingReply(
+                        question = question,
+                        history = history,
+                        answer = serverAnswer,
+                        availableWahana = availableWahana
+                    )
+                } else {
+                    null
+                }
+                val answer = localBookingReply?.text ?: serverAnswer
+                val proposal = response.bookingProposal ?: localBookingReply?.proposal
+                if (proposal != null) {
+                    messages.indices.forEach { index ->
+                        val oldMessage = messages[index]
+                        if (oldMessage.proposalStatus == BookingProposalStatus.PENDING) {
+                            messages[index] = oldMessage.copy(
+                                text = "Draf ini diganti dengan ringkasan pesanan terbaru.",
+                                proposalStatus = BookingProposalStatus.CANCELLED
+                            )
+                        }
+                    }
+                }
+                // Balasan gagal diberi aksi ulang di pesan yang sama.
+                messages[answerIndex] = messages[answerIndex].copy(
+                    text = answer,
+                    isFailed = !response.success && localBookingReply == null,
+                    isLoading = false,
+                    bookingProposal = proposal,
+                    proposalStatus = if (proposal == null) null else BookingProposalStatus.PENDING
+                )
+            }
+        }
+    }
+
+    // Pertahankan pertanyaan dan draf yang sedang diketik saat mencoba ulang.
+    fun retryAnswer(index: Int) {
+        if (isChatBusy() || index != messages.lastIndex) return
+        val failed = messages.getOrNull(index) ?: return
+        val question = messages.getOrNull(index - 1)?.takeIf { it.fromUser } ?: return
+        if (!failed.isFailed) return
+
+        messages[index] = failed.copy(
+            text = "",
+            isLoading = true,
+            isFailed = false
+        )
+        requestAnswer(
+            question = question.text,
+            history = recentHistory(before = index - 1),
+            answerIndex = index
         )
     }
 
     // Saran dan pertanyaan yang diketik memakai alur yang sama.
     fun sendQuestion(rawQuestion: String) {
         val question = rawQuestion.trim()
-        if (question.isEmpty() || isSending || isBooking) return
+        if (question.isEmpty() || isChatBusy()) return
 
         // Pertanyaan baru membatalkan draf yang masih menunggu konfirmasi.
         messages.indices.forEach { index ->
@@ -309,17 +440,7 @@ internal fun ChatbotAssistantScreen(
             }
         }
 
-        val history = messages
-            .filterNot {
-                it.isLoading
-            }
-            .map { message ->
-                ChatHistoryItem(
-                    role = if (message.fromUser) "user" else "assistant",
-                    text = message.asHistoryText()
-                )
-            }
-            .takeLast(10)
+        val history = recentHistory()
 
         // Jawab jadwal terdekat dari tiket akun yang sama supaya tanggalnya akurat.
         val nearestTicketReply = buildNearestTicketReply(
@@ -395,77 +516,88 @@ internal fun ChatbotAssistantScreen(
             )
         )
         val answerIndex = messages.lastIndex
-        onSendMessage(
-            question,
-            history
-        ) { response ->
-            if (answerIndex in messages.indices && messages[answerIndex].isLoading) {
-                val serverAnswer = response.answer?.takeIf(String::isNotBlank)
-                    ?: response.message
-                    ?: "Asisten gagal menjawab. Coba lagi nanti."
-                // Kalau server belum menyiapkan draf, minta detail yang masih kurang.
-                val localBookingReply = if (response.bookingProposal == null) {
-                    buildBookingReply(
-                        question = question,
-                        history = history,
-                        answer = serverAnswer,
-                        availableWahana = availableWahana
-                    )
-                } else {
-                    null
-                }
-                val answer = localBookingReply?.text ?: serverAnswer
-                val proposal = response.bookingProposal ?: localBookingReply?.proposal
-                if (proposal != null) {
-                    messages.indices.forEach { index ->
-                        val oldMessage = messages[index]
-                        if (oldMessage.proposalStatus == BookingProposalStatus.PENDING) {
-                            messages[index] = oldMessage.copy(
-                                text = "Draf ini diganti dengan ringkasan pesanan terbaru.",
-                                proposalStatus = BookingProposalStatus.CANCELLED
-                            )
-                        }
-                    }
-                }
-                messages[answerIndex] = messages[answerIndex].copy(
-                    text = answer,
-                    isLoading = false,
-                    bookingProposal = proposal,
-                    proposalStatus = if (proposal == null) null else BookingProposalStatus.PENDING
-                )
-            }
-        }
+        requestAnswer(
+            question = question,
+            history = history,
+            answerIndex = answerIndex
+        )
     }
 
-    // Gulir ke jawaban baru setelah indikator memuat selesai.
-    LaunchedEffect(
-        messages.size,
-        messages.lastOrNull()?.isLoading
-    ) {
+    // Gulir saat pesan ditambahkan. Balasan yang selesai tidak menarik pembaca dari riwayat.
+    LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
             messageListState.animateScrollToItem(messages.lastIndex)
         }
+    }
+    val chatBusy = isChatBusy()
+
+    // Pisahkan membuka bantuan atau chat baru dari aksi yang benar-benar menghapus isi.
+    if (showHelp) {
+        ChatHelpDialog(
+            onDismiss = {
+                showHelp = false
+            }
+        )
+    }
+    if (confirmNewChat) {
+        AlertDialog(
+            onDismissRequest = {
+                confirmNewChat = false
+            },
+            // Dialog memakai permukaan putih yang sama dengan panel asisten.
+            containerColor = TourifySurface,
+            titleContentColor = ChatInk,
+            textContentColor = ChatMuted,
+            title = {
+                Text(text = "Mulai chat baru?")
+            },
+            text = {
+                Text(text = "Percakapan ini dan pesan yang belum dikirim akan dihapus.")
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        confirmNewChat = false
+                    }
+                ) {
+                    Text(text = "Tetap di chat")
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmNewChat = false
+                        if (!isChatBusy()) {
+                            messages.clear()
+                            draft = ""
+                        }
+                    }
+                ) {
+                    Text(text = "Mulai chat baru")
+                }
+            }
+        )
     }
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ChatCanvas)
-            .statusBarsPadding()
+            .background(TourifySurface)
             .navigationBarsPadding()
             .imePadding()
     ) {
-        // Tombol chat baru muncul setelah pengguna mengirim pesan.
+        // Judul dan aksi chat tetap terlihat saat tab pesan digulir.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 68.dp)
+                .statusBarsPadding()
+                .heightIn(min = 64.dp)
                 .padding(
-                    horizontal = 14.dp,
-                    vertical = 10.dp
+                    horizontal = 12.dp,
+                    vertical = 8.dp
                 ),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             ChatHeaderButton(
                 iconDescription = "Kembali ke aplikasi",
@@ -479,56 +611,67 @@ internal fun ChatbotAssistantScreen(
             Text(
                 text = "Asisten Tourify",
                 color = ChatInk,
-                fontSize = 17.sp,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .semantics {
+                        heading()
+                    }
             )
-            if (messages.isNotEmpty()) {
+            ChatHeaderButton(
+                iconDescription = "Bantuan chat",
+                onClick = {
+                    showHelp = true
+                }
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.HelpOutline,
+                    contentDescription = null
+                )
+            }
+            if (messages.isNotEmpty() || draft.isNotBlank()) {
                 ChatHeaderButton(
                     iconDescription = "Chat baru",
-                    enabled = !isSending && !isBooking,
+                    enabled = !chatBusy,
                     onClick = {
-                        messages.clear()
-                        draft = ""
+                        confirmNewChat = true
                     }
                 ) {
+                    // Ikon tambah percakapan memperjelas bahwa ini memulai chat baru.
                     Icon(
-                        imageVector = Icons.Filled.Edit,
+                        imageVector = Icons.Outlined.AddComment,
                         contentDescription = null
                     )
                 }
-            } else {
-                Spacer(modifier = Modifier.size(48.dp))
             }
         }
-
-        Surface(
+        HorizontalDivider(color = TourifyBorder)
+        // Percakapan memakai lebar yang sama dengan kolom pesan pada layar lebar.
+        Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp),
-            shape = RoundedCornerShape(
-                topStart = 28.dp,
-                topEnd = 28.dp
-            ),
-            color = TourifySurface
+                .background(ChatCanvas),
+            contentAlignment = Alignment.TopCenter
         ) {
             LazyColumn(
                 modifier = Modifier
+                    .widthIn(max = 600.dp)
                     .fillMaxSize()
                     .testTag("chat_message_list"),
                 state = messageListState,
                 contentPadding = PaddingValues(
-                    horizontal = 18.dp,
-                    vertical = 24.dp
+                    start = TourifySpacing.screen,
+                    top = TourifySpacing.screen,
+                    end = TourifySpacing.screen,
+                    bottom = if (showLatestShortcut) 68.dp else TourifySpacing.screen
                 ),
                 verticalArrangement = Arrangement.spacedBy(18.dp)
             ) {
                 if (messages.isEmpty()) {
                     item {
                         ChatEmptyState(
-                            modifier = Modifier.fillParentMaxHeight(),
                             onSuggestionClick = ::sendQuestion
                         )
                     }
@@ -537,10 +680,15 @@ internal fun ChatbotAssistantScreen(
                     ChatBubble(
                         message = message,
                         isBooking = isBooking,
-                        isSending = isSending,
+                        isSending = chatBusy,
                         canConfirmBooking = currentUser.isNotBlank(),
                         showBookingAction = index == messages.lastIndex &&
                             shouldShowBookingAction(message),
+                        onRetry = if (index == messages.lastIndex && message.isFailed) {
+                            { retryAnswer(index) }
+                        } else {
+                            null
+                        },
                         onOpenTickets = onOpenTickets,
                         onStartBooking = {
                             sendQuestion("Iya, aku mau pesan tiket")
@@ -557,19 +705,139 @@ internal fun ChatbotAssistantScreen(
                     )
                 }
             }
+            if (showLatestShortcut) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(12.dp),
+                    shape = CircleShape,
+                    shadowElevation = TourifyElevation.card,
+                    color = TourifySurface
+                ) {
+                    IconButton(
+                        onClick = {
+                            val lastIndex = messages.lastIndex
+                            scrollScope.launch {
+                                if (lastIndex >= 0) {
+                                    messageListState.animateScrollToItem(lastIndex)
+                                }
+                            }
+                        },
+                        modifier = Modifier.semantics {
+                            contentDescription = "Ke pesan terbaru"
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.KeyboardArrowDown,
+                            contentDescription = null
+                        )
+                    }
+                }
+            }
         }
 
-        ChatComposer(
-            draft = draft,
-            isSending = isSending || isBooking,
-            onDraftChange = {
-                draft = it.take(1000)
-            },
-            onSend = {
-                sendQuestion(draft)
+        HorizontalDivider(color = TourifyBorder)
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Jelaskan dampak mengirim pesan ketika ringkasan pesanan masih menunggu.
+            if (
+                draft.isNotBlank() &&
+                messages.any { it.proposalStatus == BookingProposalStatus.PENDING }
+            ) {
+                Text(
+                    text = "Pesan baru akan menutup draf pesanan.",
+                    modifier = Modifier
+                        .widthIn(max = 600.dp)
+                        .fillMaxWidth()
+                        .padding(
+                            start = TourifySpacing.screen,
+                            top = 8.dp,
+                            end = TourifySpacing.screen
+                        ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ChatMuted
+                )
             }
-        )
+            ChatComposer(
+                draft = draft,
+                isSending = chatBusy,
+                focusRequester = composerFocus,
+                onDraftChange = {
+                    draft = it.take(ChatMessageLimit).dropLastWhile(Char::isHighSurrogate)
+                },
+                onSend = {
+                    sendQuestion(draft)
+                }
+            )
+            // Beri tahu batas sebelum teks salinan terpotong.
+            if (draft.length >= ChatMessageLimit * 9 / 10) {
+                Text(
+                    text = "${draft.length}/$ChatMessageLimit karakter",
+                    modifier = Modifier
+                        .widthIn(max = 600.dp)
+                        .fillMaxWidth()
+                        .padding(
+                            start = TourifySpacing.screen,
+                            end = TourifySpacing.screen,
+                            bottom = 8.dp
+                        ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.End,
+                    color = ChatMuted
+                )
+            }
+        }
     }
+}
+
+// Bantuan tetap bisa dibaca saat percakapan sudah panjang.
+@Composable
+private fun ChatHelpDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        // Samakan warna dengan dialog konfirmasi di asisten.
+        containerColor = TourifySurface,
+        titleContentColor = ChatInk,
+        textContentColor = ChatMuted,
+        title = {
+            Text(text = "Bantuan Asisten")
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                val topics = listOf(
+                    "Cari wahana" to "Sebut nama wahana untuk menanyakan harga dan informasi kunjungan.",
+                    "Cek tiket" to "Tanya “Kapan jadwal kunjunganku berikutnya?” untuk melihat jadwal terdekat.",
+                    "Pesan tiket" to "Sebut wahana, tanggal, jumlah tiket, dan metode bayar. Periksa ringkasannya sebelum menekan konfirmasi."
+                )
+                topics.forEach { (title, description) ->
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = ChatInk
+                        )
+                        Text(
+                            text = description,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = ChatMuted
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = "Tutup bantuan")
+            }
+        }
+    )
 }
 
 private data class BookingReply(
@@ -1008,88 +1276,128 @@ private fun buildNearestTicketReply(
 // Saran awal langsung mengirim pertanyaan yang dipilih.
 @Composable
 private fun ChatEmptyState(
-    modifier: Modifier = Modifier,
     onSuggestionClick: (String) -> Unit
 ) {
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 20.dp),
-        horizontalAlignment = Alignment.Start,
-        // Seimbangkan ruang kosong di atas dan bawah welcome screen.
-        verticalArrangement = Arrangement.Center
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Surface(
-            modifier = Modifier.size(48.dp),
-            shape = RoundedCornerShape(16.dp),
-            color = ChatGreen
+        // Pakai foto wahana Tourify sebagai pembuka sebelum percakapan dimulai.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(TourifyShapes.card),
+            contentAlignment = Alignment.BottomStart
         ) {
+            Image(
+                painter = painterResource(id = R.drawable.pantai_mentari),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize()
+            )
             Box(
-                contentAlignment = Alignment.Center
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0f to Color.Black.copy(alpha = 0.08f),
+                            0.42f to Color.Black.copy(alpha = 0.28f),
+                            1f to Color.Black.copy(alpha = 0.82f)
+                        )
+                    )
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 172.dp)
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.Bottom
             ) {
-                ChatBrandMark(
-                    modifier = Modifier.size(28.dp)
+                Text(
+                    text = "Mau tahu apa tentang Tourify?",
+                    color = Color.White,
+                    style = MaterialTheme.typography.headlineSmall.copy(
+                        lineBreak = LineBreak.Heading
+                    ),
+                    modifier = Modifier.semantics {
+                        heading()
+                    }
                 )
             }
         }
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
         Text(
-            text = "Mau tahu apa tentang Tourify?",
+            text = "Tanya soal wahana, tiket, dan pemesanan.",
+            color = ChatMuted,
+            style = MaterialTheme.typography.bodyLarge
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        // Saran mengirim pertanyaan langsung, dengan ikon yang membedakan topiknya.
+        Text(
+            text = "Saran pertanyaan",
             color = ChatInk,
-            fontSize = 24.sp,
-            lineHeight = 30.sp,
+            style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold
         )
         Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "Tanya soal wahana, tiket, atau cara memesan.",
-            color = ChatMuted,
-            fontSize = 16.sp,
-            lineHeight = 24.sp
+        val suggestions = listOf(
+            Icons.Outlined.Explore to "Ada wahana apa saja?",
+            Icons.Outlined.ConfirmationNumber to "Bagaimana cara pesan tiket?",
+            Icons.Outlined.Sell to "Berapa harga tiket wahana?"
         )
-        Spacer(modifier = Modifier.height(24.dp))
-        listOf(
-            "Ada wahana apa saja?",
-            "Bagaimana cara pesan tiket?",
-            "Berapa harga tiket wahana?"
-        ).forEach { suggestion ->
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 10.dp)
-                    .heightIn(min = 54.dp)
-                    .clickable(
-                        role = Role.Button,
-                        onClickLabel = "Tanyakan: $suggestion",
-                        onClick = {
-                            onSuggestionClick(suggestion)
-                        }
-                    ),
-                shape = RoundedCornerShape(16.dp),
-                color = ChatCanvas
-            ) {
-                Row(
-                    modifier = Modifier.padding(
-                        horizontal = 16.dp,
-                        vertical = 14.dp
-                    ),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = suggestion,
-                        color = ChatInk,
-                        fontSize = 16.sp,
-                        lineHeight = 23.sp,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Send,
-                        contentDescription = null,
-                        tint = ChatGreen,
-                        modifier = Modifier.size(17.dp)
-                    )
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = TourifyShapes.input,
+            color = TourifySurface,
+            border = BorderStroke(
+                1.dp,
+                TourifyBorder
+            )
+        ) {
+            Column {
+                suggestions.forEachIndexed { index, (icon, question) ->
+                    if (index > 0) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            color = TourifyBorder
+                        )
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp)
+                            .clickable(
+                                role = Role.Button,
+                                onClickLabel = "Kirim pertanyaan",
+                                onClick = {
+                                    onSuggestionClick(question)
+                                }
+                            )
+                            .padding(
+                                horizontal = 16.dp,
+                                vertical = 12.dp
+                            ),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = TourifySuccess,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = question,
+                            color = ChatInk,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Send,
+                            contentDescription = null,
+                            tint = ChatMuted,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         }
@@ -1104,164 +1412,209 @@ private fun ChatBubble(
     isSending: Boolean,
     canConfirmBooking: Boolean,
     showBookingAction: Boolean,
+    onRetry: (() -> Unit)?,
     onOpenTickets: () -> Unit,
     onStartBooking: () -> Unit,
     onConfirmBooking: (ChatBookingProposal) -> Unit,
     onEditProposal: () -> Unit
 ) {
-    var visible by remember {
-        mutableStateOf(false)
-    }
-    LaunchedEffect(Unit) {
-        visible = true
-    }
-
-    // Pesan baru muncul perlahan supaya alur chat gampang diikuti.
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(tween(220)) + slideInVertically(
-            animationSpec = tween(220),
-            initialOffsetY = {
-                it / 4
-            }
-        )
+    // Posisi dan latar membedakan pengirim tanpa bergantung pada warna saja.
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                start = if (message.fromUser) 32.dp else 0.dp,
+                end = if (message.fromUser) 0.dp else 12.dp
+            ),
+        horizontalArrangement = if (message.fromUser) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.Top
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = if (message.fromUser) Arrangement.End else Arrangement.Start,
-            verticalAlignment = Alignment.Top
+        Surface(
+            modifier = Modifier
+                .widthIn(max = if (message.fromUser) 320.dp else 520.dp)
+                .animateContentSize(animationSpec = tween(260)),
+            shape = RoundedCornerShape(
+                topStart = if (message.fromUser) 16.dp else 4.dp,
+                topEnd = if (message.fromUser) 4.dp else 16.dp,
+                bottomStart = 16.dp,
+                bottomEnd = 16.dp
+            ),
+            color = when {
+                // Hijau pekat membedakan pesan pengguna dari balasan asisten.
+                message.fromUser -> TourifySuccess
+                message.isFailed -> TourifyErrorContainer
+                else -> TourifySurface
+            },
+            border = if (message.fromUser) {
+                null
+            } else {
+                BorderStroke(
+                    1.dp,
+                    TourifyBorder
+                )
+            }
         ) {
-            if (!message.fromUser) {
-                Surface(
-                    modifier = Modifier
-                        .padding(
-                            top = 5.dp,
-                            end = 8.dp
-                        )
-                        .size(30.dp),
-                    shape = CircleShape,
-                    // Logo putih tetap terlihat di latar gelap.
-                    color = TourifyGlassSurface,
-                    border = BorderStroke(
-                        1.dp,
-                        TourifyGlassHighlight
-                    )
-                ) {
-                    Box(
-                        contentAlignment = Alignment.Center
+            Column {
+                // Taruh identitas asisten di atas supaya isi pesan lebih lebar.
+                if (!message.fromUser) {
+                    Row(
+                        modifier = Modifier.padding(
+                            start = 16.dp,
+                            top = 12.dp,
+                            end = 16.dp
+                        ),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         ChatBrandMark(
-                            modifier = Modifier.size(18.dp),
-                            color = Color.White
+                            modifier = Modifier.size(16.dp),
+                            color = if (message.isFailed) TourifyError else TourifySuccess
+                        )
+                        Text(
+                            text = "Asisten",
+                            color = if (message.isFailed) TourifyError else TourifySuccess,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
-            }
-
-            Surface(
-                modifier = Modifier
-                    .widthIn(max = 310.dp)
-                    .animateContentSize(animationSpec = tween(260)),
-                shape = RoundedCornerShape(24.dp),
-                color = if (message.fromUser) TourifyMint else ChatBubble
-            ) {
-                Column {
-                    // Indikator memuat berubah jadi jawaban tanpa menggeser tampilan.
-                    AnimatedContent(
-                        targetState = message.isLoading,
-                        transitionSpec = {
-                            fadeIn(tween(220)) togetherWith fadeOut(tween(100))
-                        },
-                        label = "Status balasan"
-                    ) { loading ->
-                        if (loading) {
-                            Row(
-                                modifier = Modifier.padding(
+                // Indikator memuat berubah jadi jawaban tanpa menggeser tampilan.
+                AnimatedContent(
+                    targetState = message.isLoading,
+                    transitionSpec = {
+                        fadeIn(tween(220)) togetherWith fadeOut(tween(100))
+                    },
+                    label = "Status balasan"
+                ) { loading ->
+                    if (loading) {
+                        Row(
+                            modifier = Modifier
+                                .padding(
                                     horizontal = 16.dp,
                                     vertical = 14.dp
-                                ),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    color = ChatGreen,
-                                    strokeWidth = 2.dp
                                 )
-                                Text(
-                                    text = "Sedang menyiapkan jawaban...",
-                                    color = ChatMuted,
-                                    fontSize = 15.sp
+                                .semantics {
+                                    liveRegion = LiveRegionMode.Polite
+                                },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = ChatGreen,
+                                strokeWidth = 2.dp
+                            )
+                            Text(
+                                text = "Sedang menyiapkan jawaban...",
+                                color = ChatMuted,
+                                fontSize = 15.sp
+                            )
+                        }
+                    } else if (message.isFailed) {
+                        // Letakkan pemulihan di balasan yang gagal supaya mudah ditemukan.
+                        Column(
+                            modifier = Modifier
+                                .padding(
+                                    start = 16.dp,
+                                    top = 6.dp,
+                                    end = 16.dp,
+                                    bottom = 12.dp
                                 )
+                                .semantics {
+                                    liveRegion = LiveRegionMode.Polite
+                                },
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = message.text,
+                                color = TourifyOnErrorContainer,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            if (onRetry != null) {
+                                TextButton(
+                                    onClick = onRetry,
+                                    enabled = !isSending,
+                                    // Hijau lebih gelap menjaga kontras di atas latar pesan gagal.
+                                    colors = ButtonDefaults.textButtonColors(
+                                        contentColor = TourifySuccess
+                                    )
+                                ) {
+                                    Text(text = "Coba lagi")
+                                }
                             }
-                        } else {
+                        }
+                    } else {
+                        // Pilih dan salin teks tanpa membuka aksi tambahan.
+                        SelectionContainer {
                             if (message.fromUser) {
                                 Text(
                                     text = message.text,
-                                    color = ChatInk,
-                                    fontSize = 16.sp,
-                                    lineHeight = 25.sp,
+                                    // Teks putih tetap terbaca di atas hijau pekat.
+                                    color = TourifySurface,
+                                    style = MaterialTheme.typography.bodyLarge,
                                     modifier = Modifier.padding(
                                         horizontal = 16.dp,
-                                        vertical = 14.dp
+                                        vertical = 12.dp
                                     )
                                 )
                             } else {
-                                // Tampilkan jawaban per baris supaya judul dan daftar gampang dibaca.
+                                // Dekatkan isi jawaban dengan label Asisten supaya terbaca satu kelompok.
                                 ChatFormattedAnswer(
                                     text = message.text,
                                     modifier = Modifier.padding(
-                                        horizontal = 16.dp,
-                                        vertical = 14.dp
+                                        start = 16.dp,
+                                        top = 6.dp,
+                                        end = 16.dp,
+                                        bottom = 14.dp
                                     )
                                 )
                             }
                         }
                     }
-                    // Tampilkan bantuan pesan tiket hanya di jawaban terakhir tentang pembayaran.
-                    if (showBookingAction) {
-                        Row(
+                }
+                // Tampilkan bantuan pesan tiket hanya di jawaban terakhir tentang pembayaran.
+                if (showBookingAction) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                start = 12.dp,
+                                end = 12.dp,
+                                bottom = 12.dp
+                            ),
+                        horizontalArrangement = Arrangement.Start
+                    ) {
+                        Button(
+                            onClick = onStartBooking,
+                            enabled = !isSending && !isBooking,
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(
-                                    start = 12.dp,
-                                    end = 12.dp,
-                                    bottom = 12.dp
-                                ),
-                            horizontalArrangement = Arrangement.Start
+                                .heightIn(min = 48.dp)
+                                .testTag("chat_start_booking"),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = ChatGreen,
+                                contentColor = Color.White
+                            )
                         ) {
-                            Button(
-                                onClick = onStartBooking,
-                                enabled = !isSending && !isBooking,
-                                modifier = Modifier
-                                    .heightIn(min = 48.dp)
-                                    .testTag("chat_start_booking"),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = ChatGreen,
-                                    contentColor = Color.White
-                                )
-                            ) {
-                                Text(
-                                    text = "Iya"
-                                )
-                            }
+                            Text(
+                                text = "Pesan tiket"
+                            )
                         }
                     }
-                    val proposal = message.bookingProposal
-                    val proposalStatus = message.proposalStatus
-                    if (proposal != null && proposalStatus != null) {
-                        ChatBookingProposalCard(
-                            proposal = proposal,
-                            status = proposalStatus,
-                            isBooking = isBooking,
-                            canConfirmBooking = canConfirmBooking,
-                            onOpenTickets = onOpenTickets,
-                            onConfirm = {
-                                onConfirmBooking(proposal)
-                            },
-                            onEdit = onEditProposal
-                        )
-                    }
+                }
+                val proposal = message.bookingProposal
+                val proposalStatus = message.proposalStatus
+                if (proposal != null && proposalStatus != null) {
+                    ChatBookingProposalCard(
+                        proposal = proposal,
+                        status = proposalStatus,
+                        isBooking = isBooking,
+                        canConfirmBooking = canConfirmBooking,
+                        onOpenTickets = onOpenTickets,
+                        onConfirm = {
+                            onConfirmBooking(proposal)
+                        },
+                        onEdit = onEditProposal
+                    )
                 }
             }
         }
@@ -1273,6 +1626,7 @@ private fun shouldShowBookingAction(message: ChatMessage): Boolean {
     if (
         message.fromUser ||
             message.isLoading ||
+            message.isFailed ||
             message.bookingProposal != null
     ) {
         return false
@@ -1416,6 +1770,7 @@ private fun ChatBookingProposalCard(
         }.getOrDefault(proposal.visitDate)
     }
 
+    // Ringkasan draf punya latar terpisah agar mudah ditinjau sebelum dipesan.
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -1425,12 +1780,8 @@ private fun ChatBookingProposalCard(
                 bottom = 12.dp
             )
             .animateContentSize(animationSpec = tween(240)),
-        shape = TourifyShapes.card,
-        color = TourifySurface,
-        border = BorderStroke(
-            1.dp,
-            TourifyBorder
-        )
+        shape = TourifyShapes.input,
+        color = ChatCanvas
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -1439,7 +1790,7 @@ private fun ChatBookingProposalCard(
             Text(
                 text = "Ringkasan pesanan",
                 color = ChatInk,
-                fontSize = 15.sp,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
             BookingDetailRow(
@@ -1456,7 +1807,7 @@ private fun ChatBookingProposalCard(
             )
             BookingDetailRow(
                 "Harga/tiket",
-                "Rp ${currency.format(proposal.unitPrice)}"
+                "Rp\u00A0${currency.format(proposal.unitPrice)}"
             )
             BookingDetailRow(
                 "Metode",
@@ -1464,7 +1815,7 @@ private fun ChatBookingProposalCard(
             )
             Surface(
                 shape = RoundedCornerShape(12.dp),
-                color = TourifyMint
+                color = TourifySuccessContainer
             ) {
                 Row(
                     modifier = Modifier
@@ -1479,13 +1830,16 @@ private fun ChatBookingProposalCard(
                     Text(
                         "Total",
                         color = ChatMuted,
-                        fontSize = 14.sp
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f)
                     )
                     Text(
                         text = "Rp ${currency.format(proposal.totalPrice)}",
-                        color = ChatGreen,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
+                        color = TourifySuccess,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.weight(2f)
                     )
                 }
             }
@@ -1498,12 +1852,7 @@ private fun ChatBookingProposalCard(
 
             when (status) {
                 BookingProposalStatus.PENDING -> {
-                    Text(
-                        text = "Apakah pesanan ini sudah benar?",
-                        color = ChatInk,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                    // Tombol utama sudah menjelaskan bahwa konfirmasi membuat pesanan.
                     Button(
                         onClick = onConfirm,
                         enabled = !isBooking && canConfirmBooking,
@@ -1542,7 +1891,11 @@ private fun ChatBookingProposalCard(
 
                 BookingProposalStatus.PROCESSING -> {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics {
+                                liveRegion = LiveRegionMode.Polite
+                            },
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -1560,15 +1913,6 @@ private fun ChatBookingProposalCard(
                     }
                 }
 
-                BookingProposalStatus.CONFIRMED -> {
-                    Text(
-                        text = "Pesanan berhasil dibuat",
-                        color = ChatGreen,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-
                 BookingProposalStatus.CANCELLED -> {
                     Text(
                         "Draf ini tidak dipesan.",
@@ -1577,13 +1921,8 @@ private fun ChatBookingProposalCard(
                     )
                 }
 
-                BookingProposalStatus.FAILED -> {
-                    Text(
-                        "Cek menu Tiket sebelum mencoba lagi.",
-                        color = TourifyWarning,
-                        fontSize = 14.sp
-                    )
-                    // Muat status pesanan dulu sebelum pengguna mencoba lagi.
+                BookingProposalStatus.CONFIRMED, BookingProposalStatus.FAILED -> {
+                    // Buka tiket yang dibuat, atau periksa dulu jika status belum pasti.
                     OutlinedButton(
                         onClick = onOpenTickets,
                         modifier = Modifier
@@ -1604,23 +1943,23 @@ private fun BookingDetailRow(
     label: String,
     value: String
 ) {
-    Row(
+    // Turunkan nilai ke baris baru jika label dan nilai tidak muat berdampingan.
+    FlowRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.Top
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         Text(
-            label,
+            text = label,
             color = ChatMuted,
-            fontSize = 14.sp
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(end = 8.dp)
         )
-        Spacer(modifier = Modifier.size(8.dp))
         Text(
             text = value,
-            modifier = Modifier.weight(1f),
             color = ChatInk,
-            fontSize = 14.sp,
-            textAlign = TextAlign.End
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium
         )
     }
 }
@@ -1630,6 +1969,7 @@ private fun BookingDetailRow(
 private fun ChatComposer(
     draft: String,
     isSending: Boolean,
+    focusRequester: FocusRequester,
     onDraftChange: (String) -> Unit,
     onSend: () -> Unit
 ) {
@@ -1637,33 +1977,33 @@ private fun ChatComposer(
         mutableStateOf(false)
     }
     val borderColor by animateColorAsState(
-        targetValue = if (hasFocus) ChatGreen else TourifyOutline,
-        animationSpec = tween(TourifyMotion.standardMillis),
+        targetValue = if (hasFocus) TourifySuccess else TourifyBorder,
+        animationSpec = tween(durationMillis = TourifyMotion.standardMillis),
         label = "Fokus kolom chat"
     )
 
-    // Kolom tetap ringkas, dan tombol kirim terlihat jelas.
+    // Kolom dan tombol kirim berada di area tetap, termasuk saat keyboard terbuka.
     Surface(
         modifier = Modifier
+            .widthIn(max = 600.dp)
             .fillMaxWidth()
             .padding(
-                horizontal = 14.dp,
+                horizontal = TourifySpacing.screen,
                 vertical = 12.dp
             ),
-        shape = TourifyShapes.card,
-        color = TourifySurface,
+        shape = TourifyShapes.input,
+        color = ChatCanvas,
         border = BorderStroke(
             1.dp,
             borderColor
-        ),
-        shadowElevation = 2.dp
+        )
     ) {
         Row(
             modifier = Modifier.padding(
                 start = 16.dp,
                 end = 6.dp,
-                top = 8.dp,
-                bottom = 8.dp
+                top = 6.dp,
+                bottom = 6.dp
             ),
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1671,13 +2011,13 @@ private fun ChatComposer(
             BasicTextField(
                 value = draft,
                 onValueChange = onDraftChange,
-                enabled = !isSending,
                 modifier = Modifier
                     .weight(1f)
                     .heightIn(
                         min = 48.dp,
                         max = 116.dp
                     )
+                    .focusRequester(focusRequester)
                     .onFocusChanged {
                         hasFocus = it.isFocused
                     }
@@ -1691,37 +2031,34 @@ private fun ChatComposer(
                         onSend()
                     }
                 ),
-                textStyle = TextStyle(
-                    color = ChatInk,
-                    // Samakan ukuran input dengan teks chat supaya mudah dibaca.
-                    fontSize = 16.sp,
-                    lineHeight = 24.sp
-                ),
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = ChatInk),
+                cursorBrush = SolidColor(TourifySuccess),
                 decorationBox = { innerTextField ->
                     Box(
                         modifier = Modifier.padding(vertical = 12.dp)
                     ) {
                         if (draft.isEmpty()) {
                             Text(
-                                text = "Tanya tentang Tourify...",
+                                text = "Tulis pesan…",
                                 color = ChatMuted,
-                                fontSize = 16.sp
+                                style = MaterialTheme.typography.bodyLarge
                             )
                         }
                         innerTextField()
                     }
                 }
             )
+            val canSend = draft.isNotBlank() && !isSending
             val sendColor by animateColorAsState(
-                targetValue = if (draft.isNotBlank() && !isSending) ChatGreen else TourifySoftSurface,
-                animationSpec = tween(220),
+                targetValue = if (canSend) TourifySuccess else TourifySecondaryContainer,
+                animationSpec = tween(durationMillis = TourifyMotion.standardMillis),
                 label = "Kesiapan kirim"
             )
             Surface(
                 modifier = Modifier
                     .size(48.dp)
                     .clickable(
-                        enabled = draft.isNotBlank() && !isSending,
+                        enabled = canSend,
                         role = Role.Button,
                         onClickLabel = "Kirim pesan",
                         onClick = onSend
@@ -1739,10 +2076,10 @@ private fun ChatComposer(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Send,
                         contentDescription = null,
-                        tint = if (draft.isNotBlank() && !isSending) {
+                        tint = if (canSend) {
                             Color.White
                         } else {
-                            ChatMuted.copy(alpha = TourifyInteraction.disabledContentAlpha)
+                            ChatMuted.copy(alpha = 0.64f)
                         },
                         modifier = Modifier.size(20.dp)
                     )
@@ -1805,6 +2142,7 @@ internal data class ChatMessage(
     val fromUser: Boolean,
     val text: String,
     val isLoading: Boolean = false,
+    val isFailed: Boolean = false,
     val bookingProposal: ChatBookingProposal? = null,
     val proposalStatus: BookingProposalStatus? = null
 )

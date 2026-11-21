@@ -60,9 +60,10 @@ try {
         $statement->execute(['today' => $today, 'user_id' => $user['id']]);
 
         $statement = $pdo->prepare(
-            'SELECT t.id, u.username, w.name AS wahana_name, t.booking_date, t.visit_date, t.quantity, '
-            . 't.checked_in_quantity, t.unit_price, t.total_price, t.payment_method, t.status '
+            'SELECT t.id, u.username, w.name AS wahana_name, w.image_path, t.booking_date, t.visit_date, t.quantity, '
+            . 't.checked_in_quantity, t.unit_price, t.total_price, t.payment_method, t.status, r.rating '
             . 'FROM tickets t INNER JOIN users u ON u.id = t.user_id INNER JOIN wahana w ON w.id = t.wahana_id '
+            . 'LEFT JOIN ratings r ON r.ticket_id = t.id '
             . 'WHERE t.user_id = :user_id AND t.history_hidden_at IS NULL '
             . 'ORDER BY t.booking_date DESC, t.id DESC'
         );
@@ -72,6 +73,8 @@ try {
                 'id' => (string) $row['id'],
                 'username' => $row['username'],
                 'wahana_name' => $row['wahana_name'],
+                // Kartu tiket memakai foto yang sama dengan katalog wahana.
+                'image_path' => $row['image_path'],
                 'booking_date' => $row['booking_date'],
                 'visit_date' => $row['visit_date'],
                 'quantity' => (int) $row['quantity'],
@@ -81,6 +84,7 @@ try {
                 'payment_method' => $row['payment_method'],
                 // Kirim status yang sama dengan tab Aktif, Terpakai, dan Kedaluwarsa.
                 'status' => $row['status'],
+                'rating' => $row['rating'] === null ? null : (int) $row['rating'],
             ];
         }, $statement->fetchAll());
 
@@ -106,7 +110,9 @@ try {
         respond(400, ['success' => false, 'message' => 'payment_method harus Bank, QRIS, atau E-Wallet.']);
     }
 
-    $statement = $pdo->prepare('SELECT id, name, ticket_price FROM wahana WHERE id = :id LIMIT 1');
+    $statement = $pdo->prepare(
+        'SELECT id, name, ticket_price, image_path FROM wahana WHERE id = :id AND is_deleted = 0 LIMIT 1'
+    );
     $statement->execute(['id' => $wahanaId]);
     $selectedWahana = $statement->fetch();
     if (!$selectedWahana) {
@@ -137,6 +143,8 @@ try {
             'id' => (string) $pdo->lastInsertId(),
             'username' => $user['username'],
             'wahana_name' => $selectedWahana['name'],
+            // Respons booking langsung membawa foto wahana terbaru.
+            'image_path' => $selectedWahana['image_path'],
             'visit_date' => $visitDate,
             // Kirim status awal yang sama dengan default di database.
             'status' => 'Active',

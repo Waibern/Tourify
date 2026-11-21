@@ -14,6 +14,10 @@ const percentFormat = new Intl.NumberFormat('id-ID', {
   style: 'percent',
   maximumFractionDigits: 1
 })
+const ratingFormat = new Intl.NumberFormat('id-ID', {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1
+})
 const currencyFormat = new Intl.NumberFormat('id-ID', {
   style: 'currency',
   currency: 'IDR',
@@ -98,7 +102,10 @@ const ticketShareDescription = computed(() => 'Total tiket terjual: ' + numberFo
           <div class="space-y-3">
             <!-- Isi sementara mengikuti posisi judul dan subjudul. -->
             <USkeleton class="h-9 w-52 sm:h-10" aria-hidden="true" />
-            <USkeleton class="h-6 w-3/5" aria-hidden="true" />
+            <div class="flex flex-wrap items-center gap-2">
+              <USkeleton class="h-6 w-3/5" aria-hidden="true" />
+              <USkeleton class="h-7 w-28 rounded-full" aria-hidden="true" />
+            </div>
           </div>
           <!-- Sisakan tempat grafik supaya isi kartu tidak bergeser saat data siap. -->
           <div data-wahana-chart class="relative z-10 order-3 flex w-full items-center gap-2.5 rounded-xl bg-black/45 p-3 shadow-xl shadow-black/40 backdrop-blur-md sm:gap-3" aria-hidden="true">
@@ -159,9 +166,28 @@ const ticketShareDescription = computed(() => 'Total tiket terjual: ' + numberFo
           <h2 class="text-3xl font-semibold leading-tight tracking-tight text-white sm:text-4xl">
             Wahana terlaris
           </h2>
-          <p class="mt-2 break-words text-lg font-medium text-white/85 sm:text-xl">
-            {{ wahana.name }}
-          </p>
+          <div class="mt-2 flex flex-wrap items-center gap-2.5">
+            <p class="break-words text-lg font-medium text-white/85 sm:text-xl">
+              {{ wahana.name }}
+            </p>
+            <!-- Tampilkan rating dan jumlah ulasan tanpa latar tambahan. -->
+            <div
+              class="inline-flex min-h-8 items-center gap-1.5 text-white"
+            >
+              <UIcon
+                name="i-lucide-star"
+                :class="wahana.rating_count > 0 ? 'fill-amber-300 text-amber-300' : 'text-white/65'"
+                class="size-4 shrink-0"
+                aria-hidden="true"
+              />
+              <span class="text-sm font-semibold tabular-nums">
+                {{ wahana.average_rating === null ? 'Belum ada rating' : ratingFormat.format(wahana.average_rating) }}
+              </span>
+              <span v-if="wahana.rating_count > 0" class="text-xs text-white/75">
+                · {{ numberFormat.format(wahana.rating_count) }} ulasan
+              </span>
+            </div>
+          </div>
         </div>
 
         <!-- Di layar lebar, grafik di kanan; di layar sempit, lebarnya penuh. -->

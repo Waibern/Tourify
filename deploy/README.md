@@ -112,6 +112,7 @@ Hanya untuk staging baru tanpa data MAMP: impor `database/schema.sql`, lalu `dat
 - Nginx harus meneruskan endpoint PHP yang tercantum di template ke socket PHP-FPM, meneruskan `HTTP_AUTHORIZATION`, dan memberi `HTTPS=on`. Endpoint lain di `/tourify-api/`, termasuk `/cli/`, harus 404.
 - Foto dapat berukuran sampai 5 MB. Template Nginx menetapkan `client_max_body_size 6m`; pasang `deploy/php-fpm/99-tourify.ini` ke `/etc/php/8.3/fpm/conf.d/` agar PHP-FPM memakai `upload_max_filesize=5M` dan `post_max_size=6M`, lalu reload layanan.
 - Buat `/var/lib/tourify/uploads/profile` untuk file foto persisten, lalu jadikan `database/api/uploads/profile` symlink ke folder tersebut. Pastikan `www-data` dapat menulis dan Nginx membacanya.
+- Untuk foto wahana, siapkan `/var/lib/tourify/uploads/wahana` dan symlink `database/api/uploads/wahana` dengan izin yang sama. Terapkan migrasi `009_wahana_image.sql` dan `010_wahana_soft_delete.sql` sebelum memasang API baru. Sertakan folder unggahan wahana dalam pencadangan.
 - Di pool PHP-FPM `[www]`, set `env[TOURIFY_DASHBOARD_ORIGIN]` ke origin HTTPS yang dipakai, lalu reload PHP-FPM. `OPENAI_API_KEY` hanya diperlukan untuk pertanyaan chatbot yang memakai AI; bila dipakai, simpan di konfigurasi privat PHP-FPM, bukan di repo atau Android.
 
 ## HTTPS tanpa domain

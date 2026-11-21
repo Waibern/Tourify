@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -19,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
@@ -91,121 +91,133 @@ fun DestinationsScreen(
         matchesSearch && matchesCategory
     }
 
-    LazyColumn(
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(TourifyCanvas),
-        // Tambahkan ruang bawah supaya navbar nggak menutupi isi terakhir.
-        contentPadding = PaddingValues(
-            start = TourifySpacing.screen,
-            // Latar boleh melewati status bar, tapi judul tetap mulai di bawah ikon.
-            top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 32.dp,
-            end = TourifySpacing.screen,
-            bottom = 104.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-        ),
-        verticalArrangement = Arrangement.spacedBy(TourifySpacing.control)
+            .background(TourifyCanvas)
     ) {
-        item {
-            Column {
-                // TalkBack membaca judul ini sebagai heading.
-                Text(
-                    text = "Destinasi",
-                    modifier = Modifier.semantics {
-                        heading()
-                    },
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = TourifyInk
+        // Header halaman menyatu dengan latar utama.
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(
+                    start = TourifySpacing.screen,
+                    top = TourifySpacing.screenHeaderTop,
+                    end = TourifySpacing.screen,
+                    bottom = 16.dp
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-            }
-        }
-
-        item {
-            DestinationFilters(
-                searchQuery = searchQuery,
-                onSearchQueryChange = {
-                    searchQuery = it
+        ) {
+            // TalkBack membaca judul ini sebagai heading.
+            Text(
+                text = "Destinasi",
+                modifier = Modifier.semantics {
+                    heading()
                 },
-                selectedCategory = selectedCategory,
-                onCategorySelected = {
-                    selectedCategory = it
-                }
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = TourifyInk
             )
         }
 
-        if (viewModel.isLoadingWahana && destinations.isEmpty()) {
+        Spacer(modifier = Modifier.height(TourifySpacing.control))
+
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            // Tambahkan ruang bawah supaya navbar nggak menutupi isi terakhir.
+            contentPadding = PaddingValues(
+                start = TourifySpacing.screen,
+                end = TourifySpacing.screen,
+                bottom = 104.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+            ),
+            verticalArrangement = Arrangement.spacedBy(TourifySpacing.control)
+        ) {
             item {
-                DestinationListMessage {
-                    CircularProgressIndicator(
-                        color = TourifyForest
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        "Memuat destinasi...",
-                        color = TourifyMuted
-                    )
-                }
-            }
-        } else if (viewModel.wahanaError.isNotEmpty() && destinations.isEmpty()) {
-            item {
-                DestinationListMessage {
-                    Text(
-                        text = viewModel.wahanaError,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = {
-                            viewModel.loadWahana()
-                        }
-                    ) {
-                        Text(
-                            "Coba lagi"
-                        )
-                    }
-                }
-            }
-        } else if (filteredDestinations.isEmpty()) {
-            item {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = TourifyShapes.card,
-                    color = TourifySoftSurface
-                ) {
-                    Text(
-                        text = if (destinations.isEmpty()) {
-                            "Belum ada destinasi tersedia."
-                        } else {
-                            "Tidak ada destinasi yang cocok. Coba kata kunci atau kategori lain."
-                        },
-                        color = TourifyMuted,
-                        modifier = Modifier.padding(18.dp)
-                    )
-                }
-            }
-        } else {
-            items(
-                filteredDestinations,
-                key = { destination ->
-                    destination.id
-                }
-            ) { destination ->
-                // Kartu ikut bergerak saat daftar kategori berubah.
-                DestinationCard(
-                    wahana = destination,
-                    modifier = Modifier
-                        .animateItem(
-                            fadeInSpec = tween(TourifyMotion.standardMillis),
-                            placementSpec = tween(TourifyMotion.standardMillis),
-                            fadeOutSpec = tween(TourifyMotion.standardMillis)
-                        )
-                        .fillMaxWidth()
-                        .aspectRatio(1.65f),
-                    onClick = {
-                        onDestinationClick(destination.id)
+                DestinationFilters(
+                    searchQuery = searchQuery,
+                    onSearchQueryChange = {
+                        searchQuery = it
+                    },
+                    selectedCategory = selectedCategory,
+                    onCategorySelected = {
+                        selectedCategory = it
                     }
                 )
+            }
+
+            if (viewModel.isLoadingWahana && destinations.isEmpty()) {
+                item {
+                    DestinationListMessage {
+                        CircularProgressIndicator(
+                            color = TourifyForest
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            "Memuat destinasi...",
+                            color = TourifyMuted
+                        )
+                    }
+                }
+            } else if (viewModel.wahanaError.isNotEmpty() && destinations.isEmpty()) {
+                item {
+                    DestinationListMessage {
+                        Text(
+                            text = viewModel.wahanaError,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = {
+                                viewModel.loadWahana()
+                            }
+                        ) {
+                            Text(
+                                "Coba lagi"
+                            )
+                        }
+                    }
+                }
+            } else if (filteredDestinations.isEmpty()) {
+                item {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = TourifyShapes.card,
+                        color = TourifySoftSurface
+                    ) {
+                        Text(
+                            text = if (destinations.isEmpty()) {
+                                "Belum ada destinasi tersedia."
+                            } else {
+                                "Tidak ada destinasi yang cocok. Coba kata kunci atau kategori lain."
+                            },
+                            color = TourifyMuted,
+                            modifier = Modifier.padding(18.dp)
+                        )
+                    }
+                }
+            } else {
+                items(
+                    filteredDestinations,
+                    key = { destination ->
+                        destination.id
+                    }
+                ) { destination ->
+                    // Kartu ikut bergerak saat daftar kategori berubah.
+                    DestinationCard(
+                        wahana = destination,
+                        modifier = Modifier
+                            .animateItem(
+                                fadeInSpec = tween(TourifyMotion.standardMillis),
+                                placementSpec = tween(TourifyMotion.standardMillis),
+                                fadeOutSpec = tween(TourifyMotion.standardMillis)
+                            )
+                            .fillMaxWidth()
+                            .aspectRatio(1.65f),
+                        onClick = {
+                            onDestinationClick(destination.id)
+                        }
+                    )
+                }
             }
         }
     }

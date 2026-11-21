@@ -18,10 +18,10 @@ export function useTourifyApi() {
     post<T>(path: string, body: Record<string, unknown>, options: { timeout?: number } = {}) {
       return $fetch<T>(url(path), { method: 'POST', body, credentials: 'include', ...options })
     },
-    // FormData mengirim foto dan data lain dengan format yang benar.
-    upload<T>(path: string, file: File, fields: Record<string, string> = {}) {
+    // FormData bisa mengirim data saja atau sekaligus dengan foto.
+    upload<T>(path: string, file: File | null, fields: Record<string, string> = {}) {
       const body = new FormData()
-      body.append('image', file)
+      if (file) body.append('image', file)
       for (const [name, value] of Object.entries(fields)) body.append(name, value)
       return $fetch<T>(url(path), { method: 'POST', body, credentials: 'include' })
     },

@@ -1,5 +1,13 @@
 package com.example.tourify_v2.ui.theme
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 
@@ -9,6 +17,8 @@ object TourifySpacing {
     val control = 12.dp
     val card = 16.dp
     val screen = 20.dp
+    // Jarak bersama dari status bar ke judul halaman.
+    val screenHeaderTop = 24.dp
     val section = 24.dp
 }
 
@@ -31,7 +41,23 @@ object TourifyElevation {
 // Animasi singkat memberi respons cepat saat pindah layar atau menekan tombol.
 object TourifyMotion {
     const val standardMillis = 220
+    internal val navigationEasing = CubicBezierEasing(0.23f, 1f, 0.32f, 1f)
 }
+
+// Detail masuk dari kanan dan kembali lewat jalur yang sama.
+internal fun detailEnterTransition(): EnterTransition =
+    fadeIn(animationSpec = tween(TourifyMotion.standardMillis, easing = TourifyMotion.navigationEasing)) +
+        slideInHorizontally(
+            animationSpec = tween(TourifyMotion.standardMillis, easing = TourifyMotion.navigationEasing),
+            initialOffsetX = { width -> width / 16 }
+        )
+
+internal fun detailExitTransition(): ExitTransition =
+    fadeOut(animationSpec = tween(TourifyMotion.standardMillis, easing = TourifyMotion.navigationEasing)) +
+        slideOutHorizontally(
+            animationSpec = tween(TourifyMotion.standardMillis, easing = TourifyMotion.navigationEasing),
+            targetOffsetX = { width -> width / 16 }
+        )
 
 // Kontrol nonaktif tetap terlihat, tapi nggak lebih menonjol dari tombol aktif.
 object TourifyInteraction {

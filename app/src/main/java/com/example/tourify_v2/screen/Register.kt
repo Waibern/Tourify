@@ -4,21 +4,12 @@ import com.example.tourify_v2.ui.theme.*
 
 import com.example.tourify_v2.viewmodel.AuthViewModel
 
-import com.example.tourify_v2.R
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -29,13 +20,15 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.input.ImeAction
@@ -43,12 +36,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
 
-// Form daftar akun.
+// Isi form daftar ikut fade di panel akun.
 @Composable
-fun RegisterScreen(
+internal fun RegisterForm(
     authViewModel: AuthViewModel,
     onRegisterSuccess: () -> Unit,
-    onBackToLogin: () -> Unit
+    onBackToLogin: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier
 ) {
     // Simpan isian form dan pesan validasi.
     var username by remember {
@@ -72,32 +67,45 @@ fun RegisterScreen(
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val fieldColors = OutlinedTextFieldDefaults.colors(
-        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+        unfocusedContainerColor = TourifySoftSurface,
+        focusedContainerColor = TourifySoftSurface,
+        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
         focusedBorderColor = MaterialTheme.colorScheme.primary,
-        focusedLabelColor = MaterialTheme.colorScheme.primary,
         cursorColor = MaterialTheme.colorScheme.primary,
         errorBorderColor = MaterialTheme.colorScheme.error
     )
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(TourifyCanvas)
-            .verticalScroll(rememberScrollState())
-            .padding(TourifySpacing.screen),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+    AuthFormPanel(
+        enabled = enabled,
+        modifier = modifier,
+        footer = {
+            // Taruh tautan masuk di bawah panel, seperti tautan daftar di Login.
+            TextButton(
+                onClick = onBackToLogin,
+                enabled = enabled
+            ) {
+                Text(text = "Sudah punya akun? Masuk di sini")
+            }
+        }
     ) {
-        // Logo di atas form.
-        Image(
-            painter = painterResource(id = R.drawable.logo),
-            contentDescription = "Tourify Logo",
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.height(150.dp)
+        // Judul form membedakan pendaftaran dari layar masuk.
+        Text(
+            text = "Daftar akun",
+            color = TourifyInk,
+            style = MaterialTheme.typography.headlineMedium
         )
-        Spacer(modifier = Modifier.height(30.dp))
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "Buat akun untuk mulai memesan tiket wahana.",
+            color = TourifyMuted,
+            style = MaterialTheme.typography.bodyMedium
+        )
+        Spacer(modifier = Modifier.height(22.dp))
 
-        // Label input form daftar.
+        // Label di atas dan petunjuk di dalam kolom nama pengguna.
+        AuthFieldLabel(
+            text = "Nama pengguna"
+        )
         OutlinedTextField(
             value = username,
             onValueChange = {
@@ -105,9 +113,11 @@ fun RegisterScreen(
                 errorMessage = ""
                 authViewModel.clearError()
             },
-            label = {
+            enabled = enabled,
+            placeholder = {
                 Text(
-                    "Nama pengguna"
+                    text = "Masukkan nama pengguna",
+                    color = TourifyMuted
                 )
             },
             // Enter pindah ke kolom password.
@@ -119,11 +129,18 @@ fun RegisterScreen(
             ),
             colors = fieldColors,
             shape = TourifyShapes.input,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics {
+                    contentDescription = "Nama pengguna"
+                }
         )
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-        // Input password dan tombol lihat/sembunyikan.
+        // Label di atas kolom kata sandi dan tombol lihat/sembunyikan.
+        AuthFieldLabel(
+            text = "Kata sandi"
+        )
         OutlinedTextField(
             value = password,
             onValueChange = {
@@ -131,9 +148,11 @@ fun RegisterScreen(
                 errorMessage = ""
                 authViewModel.clearError()
             },
-            label = {
+            enabled = enabled,
+            placeholder = {
                 Text(
-                    "Kata sandi"
+                    text = "Masukkan kata sandi",
+                    color = TourifyMuted
                 )
             },
             visualTransformation = if (passwordVisible) {
@@ -155,7 +174,8 @@ fun RegisterScreen(
                 IconButton(
                     onClick = {
                         passwordVisible = !passwordVisible
-                    }
+                    },
+                    enabled = enabled
                 ) {
                     Icon(
                         painter = painterResource(
@@ -175,20 +195,29 @@ fun RegisterScreen(
             },
             colors = fieldColors,
             shape = TourifyShapes.input,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics {
+                    contentDescription = "Kata sandi"
+                }
         )
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-        // Pakai ikon mata yang sama untuk konfirmasi password.
+        // Label di atas konfirmasi kata sandi dengan ikon mata yang sama.
+        AuthFieldLabel(
+            text = "Konfirmasi kata sandi"
+        )
         OutlinedTextField(
             value = confirmPassword,
             onValueChange = {
                 confirmPassword = it
                 errorMessage = ""
             },
-            label = {
+            enabled = enabled,
+            placeholder = {
                 Text(
-                    "Konfirmasi kata sandi"
+                    text = "Ulangi kata sandi",
+                    color = TourifyMuted
                 )
             },
             visualTransformation = if (confirmVisible) {
@@ -196,7 +225,7 @@ fun RegisterScreen(
             } else {
                 PasswordVisualTransformation()
             },
-        // Tombol Done menutup keyboard setelah kolom terakhir.
+            // Tombol Done menutup keyboard setelah kolom terakhir.
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Password,
                 imeAction = ImeAction.Done
@@ -210,7 +239,8 @@ fun RegisterScreen(
                 IconButton(
                     onClick = {
                         confirmVisible = !confirmVisible
-                    }
+                    },
+                    enabled = enabled
                 ) {
                     Icon(
                         painter = painterResource(
@@ -221,17 +251,36 @@ fun RegisterScreen(
                             }
                         ),
                         contentDescription = if (confirmVisible) {
-                            "Sembunyikan kata sandi"
+                            "Sembunyikan konfirmasi kata sandi"
                         } else {
-                            "Tampilkan kata sandi"
+                            "Tampilkan konfirmasi kata sandi"
                         }
                     )
                 }
             },
             colors = fieldColors,
             shape = TourifyShapes.input,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics {
+                    contentDescription = "Konfirmasi kata sandi"
+                }
         )
+        // Tampilkan kesalahan dekat isian agar mudah ditemukan dan dibacakan.
+        val formError = errorMessage.ifEmpty {
+            authViewModel.errorMessage
+        }
+        if (formError.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = formError,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.semantics {
+                    liveRegion = LiveRegionMode.Polite
+                }
+            )
+        }
         Spacer(modifier = Modifier.height(20.dp))
 
         // Cek isian sesuai aturan API sebelum membuat akun.
@@ -253,11 +302,12 @@ fun RegisterScreen(
                     )
                 }
             },
-            enabled = !authViewModel.isLoading,
+            enabled = enabled && !authViewModel.isLoading,
+            // Biarkan tombol bertambah tinggi kalau ukuran teks diperbesar.
             modifier = Modifier
                 .fillMaxWidth()
-                .height(53.dp),
-            shape = RoundedCornerShape(12.dp),
+                .heightIn(min = 53.dp),
+            shape = TourifyShapes.input,
             colors = ButtonDefaults.buttonColors(containerColor = TourifyForest)
         ) {
             Text(
@@ -265,27 +315,6 @@ fun RegisterScreen(
             )
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Kembali ke layar login.
-        TextButton(
-            onClick = onBackToLogin
-        ) {
-            Text(
-                "Sudah punya akun? Masuk di sini"
-            )
-        }
-
-        // Pesan kalau pendaftaran gagal.
-        if (errorMessage.isNotEmpty() || authViewModel.errorMessage.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = errorMessage.ifEmpty {
-                    authViewModel.errorMessage
-                },
-                color = MaterialTheme.colorScheme.error
-            )
-        }
     }
 }
 
@@ -293,9 +322,13 @@ fun RegisterScreen(
 @Preview(showBackground = true)
 @Composable
 fun RegisterScreenPreview() {
-    RegisterScreen(
-        authViewModel = AuthViewModel(),
-        onRegisterSuccess = {},
-        onBackToLogin = {}
-    )
+    AuthScreenLayout { minimumPanelHeight ->
+        RegisterForm(
+            authViewModel = AuthViewModel(),
+            onRegisterSuccess = {},
+            onBackToLogin = {},
+            enabled = true,
+            modifier = Modifier.heightIn(min = minimumPanelHeight)
+        )
+    }
 }

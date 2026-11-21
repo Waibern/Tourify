@@ -108,6 +108,12 @@ fun AccountScreen(
     val accountName = currentUser.ifBlank {
         "Pengguna Tourify"
     }
+    // Tampilkan username profil dengan satu @ di depan.
+    val accountHandle = if (currentUser.isBlank()) {
+        accountName
+    } else {
+        "@${currentUser.trimStart('@')}"
+    }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var selectedImageBitmap by remember {
@@ -238,7 +244,8 @@ fun AccountScreen(
                     .fillMaxWidth()
                     .padding(
                         start = TourifySpacing.screen,
-                        top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 24.dp,
+                        top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() +
+                            TourifySpacing.screenHeaderTop,
                         end = TourifySpacing.screen,
                         bottom = 24.dp
                     ),
@@ -300,7 +307,7 @@ fun AccountScreen(
                     }
 
                     Text(
-                        text = accountName,
+                        text = accountHandle,
                         color = TourifyInk,
                         style = MaterialTheme.typography.titleLarge,
                         textAlign = TextAlign.Center,

@@ -5,6 +5,7 @@ import com.example.tourify_v2.model.ChatRequest
 import com.example.tourify_v2.model.ChatResponse
 import com.example.tourify_v2.model.ProfileResponse
 import com.example.tourify_v2.model.TicketBookingRequest
+import com.example.tourify_v2.model.TicketRatingRequest
 import com.example.tourify_v2.model.TicketResultResponse
 import com.example.tourify_v2.model.TicketsResponse
 import com.example.tourify_v2.model.WahanaResponse
@@ -54,6 +55,12 @@ interface ApiService {
     // Ambil tiket milik akun yang login.
     @GET("tickets.php")
     suspend fun getTickets(@Header("Authorization") authorization: String): Response<TicketsResponse>
+
+    @POST("ratings.php")
+    suspend fun submitTicketRating(
+        @Header("Authorization") authorization: String,
+        @Body request: TicketRatingRequest
+    ): Response<ApiResponse>
 
     // Sembunyikan tiket selesai dari riwayat akun yang sedang login.
     @DELETE("tickets.php")

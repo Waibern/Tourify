@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { h, resolveComponent } from 'vue'
+import type { RowSelectionState } from '@tanstack/table-core'
 import type { TableColumn } from '@nuxt/ui'
 import type { DashboardOrder, DashboardOrdersApiResponse, DashboardOrderTrendPoint } from '~/types/tourify'
 import { wahanaImage } from '~/utils/wahana-images'
@@ -8,6 +10,7 @@ import type { AsciiRevealController } from 'ascii-reveal/core'
 const api = useTourifyApi()
 const route = useRoute()
 const router = useRouter()
+const UCheckbox = resolveComponent('UCheckbox')
 // Tautan riwayat memfilter pesanan ke ID tiket yang dipilih.
 const ticketId = computed(() => {
   const ticketQuery = route.query.ticket
@@ -40,6 +43,10 @@ const { asciiAnimations } = useDashboardPreferences()
 const detailSurfaceSelector = '[data-slot="content"][role="dialog"]'
 const table = useTemplateRef('table')
 const columnVisibility = ref()
+const rowSelection = ref<RowSelectionState>({})
+const deleteModalOpen = ref(false)
+const deletingTickets = ref(false)
+const deleteError = ref('')
 let detailReveal: AsciiRevealController | null = null
 let closingDetail = false
 const statusItems = [
@@ -66,6 +73,36 @@ function showDetail(order: DashboardOrder) {
   selected.value = order
   detailOpen.value = true
 }
+
+// Tiket terpakai tidak dapat dihapus agar riwayat kunjungan tetap tersimpan.
+function canDeleteTicket(order: DashboardOrder): boolean {
+  return order.can_delete
+}
+
+// Ubah pilihan berdasarkan ID supaya pilihan tetap tepat setelah daftar diperbarui.
+function updateTicketSelection(order: DashboardOrder, isSelected: boolean) {
+  if (!canDeleteTicket(order)) return
+
+  if (isSelected) {
+    rowSelection.value = {
+      ...rowSelection.value,
+      [order.id]: true
+    }
+    return
+  }
+
+  rowSelection.value = Object.fromEntries(
+    Object.entries(rowSelection.value).filter(([id]) => id !== order.id)
+  )
+}
+
+// Hanya kirim ID dari halaman aktif dan tiket yang masih bisa dihapus.
+const selectedTicketIds = computed(() => {
+  const deletableIds = new Set(rows.value.filter(canDeleteTicket).map(order => order.id))
+  return Object.entries(rowSelection.value)
+    .filter(([id, isSelected]) => isSelected && deletableIds.has(id))
+    .map(([id]) => id)
+})
 
 // Saat dialog dibuka, animasinya selesai dulu sebelum bisa ditutup.
 async function revealOrderDetail() {
@@ -163,6 +200,10 @@ async function loadRows(background = false) {
     const response = await api.get<DashboardOrdersApiResponse>(`dashboard_orders.php?${params}`)
     if (request !== requestId) return
     rows.value = response.orders
+    const deletableIds = new Set(response.orders.filter(canDeleteTicket).map(order => order.id))
+    rowSelection.value = Object.fromEntries(
+      Object.entries(rowSelection.value).filter(([id, isSelected]) => isSelected && deletableIds.has(id))
+    )
     total.value = response.total
     perPage.value = response.per_page
     summaryStats.value = response.stats
@@ -186,15 +227,50 @@ async function loadRows(background = false) {
   }
 }
 
+// Hapus pilihan secara massal setelah konfirmasi admin.
+async function deleteSelectedTickets() {
+  const ids = [...selectedTicketIds.value]
+  if (!ids.length || deletingTickets.value) return
+
+  deletingTickets.value = true
+  deleteError.value = ''
+  try {
+    const response = await api.delete<{ success: boolean, deleted_count: number, message?: string }>(
+      'dashboard_orders.php',
+      { ids }
+    )
+    if (!response.success || response.deleted_count !== ids.length) {
+      throw new Error(response.message || 'Sebagian tiket gagal dihapus. Muat ulang daftar lalu coba lagi.')
+    }
+
+    requestId += 1
+    rowSelection.value = {}
+    deleteModalOpen.value = false
+    if (selected.value && ids.includes(selected.value.id)) {
+      await closeOrderDetail()
+      selected.value = null
+    }
+    await loadRows()
+  } catch (error) {
+    deleteError.value = getTourifyErrorMessage(error, 'Tiket gagal dihapus. Muat ulang daftar lalu coba lagi.')
+  } finally {
+    deletingTickets.value = false
+  }
+}
+
 // Mulai dari halaman pertama setelah filter berubah.
 watch(ticketId, () => {
   openedTicketId = ''
 })
 watch([query, date, status, ticketId], () => {
+  rowSelection.value = {}
   if (page.value !== 1) page.value = 1
   else loadRows()
 })
-watch(page, () => loadRows())
+watch(page, () => {
+  rowSelection.value = {}
+  loadRows()
+})
 onMounted(() => loadRows())
 useDashboardAutoRefresh(() => loadRows(true), () => loading.value)
 
@@ -243,6 +319,22 @@ function isOrderColumnVisible(id: string): boolean {
 }
 
 const columns: TableColumn<DashboardOrder>[] = [
+  {
+    id: 'select',
+    enableHiding: false,
+    header: ({ table: tableInstance }) => h(UCheckbox, {
+      'aria-label': 'Pilih semua tiket yang bisa dihapus di halaman ini',
+      'modelValue': tableInstance.getIsAllPageRowsSelected(),
+      'indeterminate': tableInstance.getIsSomePageRowsSelected(),
+      'onUpdate:modelValue': (value: boolean) => tableInstance.toggleAllPageRowsSelected(!!value)
+    }),
+    cell: ({ row }) => h(UCheckbox, {
+      'aria-label': `Pilih tiket #${row.original.id} untuk dihapus`,
+      'modelValue': row.getIsSelected(),
+      'disabled': !canDeleteTicket(row.original),
+      'onUpdate:modelValue': (value: boolean) => row.toggleSelected(!!value)
+    })
+  },
   { accessorKey: 'id', header: 'Tiket / pelanggan', enableHiding: false, cell: ({ row }) => `#${row.original.id}` },
   { accessorKey: 'wahana_name', header: 'Wahana' },
   { accessorKey: 'visit_date', header: 'Kunjungan', cell: ({ row }) => formatDate(row.original.visit_date) },
@@ -354,6 +446,22 @@ const displayItems = computed(() => {
               variant="ghost"
               @click="resetFilters"
             />
+            <OrdersDeleteModal
+              v-model:open="deleteModalOpen"
+              :count="selectedTicketIds.length"
+              :loading="deletingTickets"
+              :error="deleteError"
+              @confirm="deleteSelectedTickets"
+            >
+              <UButton
+                v-if="selectedTicketIds.length"
+                :label="`Hapus tiket (${selectedTicketIds.length})`"
+                icon="i-lucide-trash-2"
+                color="error"
+                variant="subtle"
+                @click="deleteModalOpen = true"
+              />
+            </OrdersDeleteModal>
             <UDropdownMenu :items="displayItems" :content="{ align: 'end' }">
               <UButton
                 label="Tampilan"
@@ -378,6 +486,11 @@ const displayItems = computed(() => {
           />
         </div>
 
+        <!-- Beri alasan kenapa tiket yang sudah dipakai tidak bisa dicentang. -->
+        <p class="text-xs text-muted">
+          Tiket yang sudah dipakai atau memiliki riwayat check-in tidak bisa dihapus.
+        </p>
+
         <UAlert
           v-if="errorMessage"
           color="error"
@@ -389,6 +502,9 @@ const displayItems = computed(() => {
         <UTable
           ref="table"
           v-model:column-visibility="columnVisibility"
+          v-model:row-selection="rowSelection"
+          :row-selection-options="{ enableRowSelection: row => canDeleteTicket(row.original) }"
+          :get-row-id="row => String(row.id)"
           :data="rows"
           :columns="columns"
           :loading="loading"
@@ -489,18 +605,27 @@ const displayItems = computed(() => {
               </p>
             </div>
             <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0">
-                <button
-                  type="button"
-                  class="min-h-11 rounded font-semibold text-highlighted underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
-                  :aria-label="`Lihat detail tiket #${order.id} milik ${order.username}`"
-                  @click="showDetail(order)"
-                >
-                  Tiket #{{ order.id }}
-                </button>
-                <p class="break-words text-sm text-muted">
-                  {{ order.username }}
-                </p>
+              <div class="flex min-w-0 items-start gap-2">
+                <UCheckbox
+                  :model-value="Boolean(rowSelection[String(order.id)])"
+                  :disabled="!canDeleteTicket(order)"
+                  :aria-label="`Pilih tiket #${order.id} milik ${order.username} untuk dihapus`"
+                  class="min-h-11 min-w-11 justify-center"
+                  @update:model-value="(value: boolean) => updateTicketSelection(order, value)"
+                />
+                <div class="min-w-0">
+                  <button
+                    type="button"
+                    class="min-h-11 rounded font-semibold text-highlighted underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
+                    :aria-label="`Lihat detail tiket #${order.id} milik ${order.username}`"
+                    @click="showDetail(order)"
+                  >
+                    Tiket #{{ order.id }}
+                  </button>
+                  <p class="break-words text-sm text-muted">
+                    {{ order.username }}
+                  </p>
+                </div>
               </div>
               <UBadge :color="order.status === 'Active' ? 'success' : order.status === 'Used' ? 'primary' : 'neutral'" variant="subtle">
                 {{ statusLabel(order.status) }}
@@ -573,21 +698,30 @@ const displayItems = computed(() => {
             :key="order.id"
             class="flex flex-wrap items-center gap-x-5 gap-y-3 px-1 py-3 sm:px-3"
           >
-            <div class="min-w-36 flex-1">
-              <button
-                type="button"
-                class="min-h-11 rounded font-semibold text-highlighted underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
-                :aria-label="`Lihat detail tiket #${order.id} milik ${order.username}`"
-                @click="showDetail(order)"
-              >
-                Tiket #{{ order.id }}
-              </button>
-              <p class="break-words text-sm text-muted">
-                {{ order.username }}
-                <template v-if="isOrderColumnVisible('wahana_name')">
-                  · {{ order.wahana_name }}
-                </template>
-              </p>
+            <div class="flex min-w-36 flex-1 items-center gap-2">
+              <UCheckbox
+                :model-value="Boolean(rowSelection[String(order.id)])"
+                :disabled="!canDeleteTicket(order)"
+                :aria-label="`Pilih tiket #${order.id} milik ${order.username} untuk dihapus`"
+                class="min-h-11 min-w-11 justify-center"
+                @update:model-value="(value: boolean) => updateTicketSelection(order, value)"
+              />
+              <div class="min-w-0">
+                <button
+                  type="button"
+                  class="min-h-11 rounded font-semibold text-highlighted underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
+                  :aria-label="`Lihat detail tiket #${order.id} milik ${order.username}`"
+                  @click="showDetail(order)"
+                >
+                  Tiket #{{ order.id }}
+                </button>
+                <p class="break-words text-sm text-muted">
+                  {{ order.username }}
+                  <template v-if="isOrderColumnVisible('wahana_name')">
+                    · {{ order.wahana_name }}
+                  </template>
+                </p>
+              </div>
             </div>
 
             <dl class="grid w-full grid-cols-2 gap-x-4 gap-y-2 text-sm sm:w-auto sm:flex sm:flex-wrap sm:gap-x-5">

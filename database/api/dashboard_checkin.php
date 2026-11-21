@@ -17,9 +17,11 @@ try {
     $pdo->beginTransaction();
 
     // Kunci pesanan saat scan supaya jumlah check-in tidak melebihi tiket yang dibeli.
+    // Ambil username pemesan untuk ditampilkan pada hasil scan.
     $statement = $pdo->prepare(
-        'SELECT t.id, t.visit_date, t.quantity, t.checked_in_quantity, w.name AS wahana_name '
+        'SELECT t.id, t.visit_date, t.quantity, t.checked_in_quantity, w.name AS wahana_name, u.username '
         . 'FROM tickets t INNER JOIN wahana w ON w.id = t.wahana_id '
+        . 'INNER JOIN users u ON u.id = t.user_id '
         . 'WHERE t.id = :id FOR UPDATE'
     );
     $statement->execute(['id' => (string) $ticketId]);
@@ -68,6 +70,8 @@ try {
         'ticket' => [
             'id' => (string) $ticket['id'],
             'wahana_name' => $ticket['wahana_name'],
+            // Sertakan identitas pemesan bersama ringkasan check-in.
+            'username' => $ticket['username'],
             'visit_date' => $ticket['visit_date'],
             'quantity' => $quantity,
             'checked_in_quantity' => $checkedIn,

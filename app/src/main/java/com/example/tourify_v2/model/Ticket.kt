@@ -14,7 +14,10 @@ data class Ticket(
     @SerializedName("username") val username: String = "",
     // Status juga menghitung pengunjung yang sudah check-in.
     @SerializedName("status") val status: String = "Active",
-    @SerializedName("checked_in_quantity") val checkedInQuantity: Int = 0
+    @SerializedName("checked_in_quantity") val checkedInQuantity: Int = 0,
+    @SerializedName("rating") val rating: Int? = null,
+    // Foto wahana dari API dipakai di kartu dan detail tiket.
+    @SerializedName("image_path") val imagePath: String? = null
 )
 
 // Server membaca akun dari token, jadi ID akun nggak perlu dikirim di body.
@@ -23,6 +26,11 @@ data class TicketBookingRequest(
     @SerializedName("visit_date") val visitDate: String,
     @SerializedName("quantity") val quantity: Int,
     @SerializedName("payment_method") val paymentMethod: String
+)
+
+data class TicketRatingRequest(
+    @SerializedName("ticket_id") val ticketId: String,
+    @SerializedName("rating") val rating: Int
 )
 
 data class TicketsResponse(

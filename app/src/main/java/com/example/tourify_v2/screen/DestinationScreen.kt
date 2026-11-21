@@ -13,7 +13,6 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -45,7 +44,6 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -203,10 +201,9 @@ internal fun DestinationContent(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        val destinationPhoto = painterResource(destinationImage(destination.id))
-
-        Image(
-            painter = destinationPhoto,
+        // Foto detail dan lapisan blur mengikuti foto yang diatur admin.
+        WahanaPhoto(
+            wahana = destination,
             contentDescription = "Foto ${destination.name}",
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
@@ -231,8 +228,8 @@ internal fun DestinationContent(
                     )
                 }
         ) {
-            Image(
-                painter = destinationPhoto,
+            WahanaPhoto(
+                wahana = destination,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
@@ -566,8 +563,9 @@ private fun DestinationBookingForm(
                         Box(
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Image(
-                                painter = painterResource(destinationImage(destination.id)),
+                            // Pakai foto katalog juga di ringkasan pesanan.
+                            WahanaPhoto(
+                                wahana = destination,
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.matchParentSize()
@@ -719,6 +717,8 @@ private fun DestinationBookingForm(
                                         onClick = {
                                             quantity++
                                         },
+                                        // Samakan batas jumlah pesanan dengan API tiket.
+                                        enabled = quantity < 20,
                                         modifier = Modifier.size(40.dp)
                                     ) {
                                         Icon(
@@ -757,7 +757,8 @@ private fun DestinationBookingForm(
                                     colors = FilterChipDefaults.filterChipColors(
                                         containerColor = TourifySurface,
                                         labelColor = DestinationInk,
-                                        selectedContainerColor = DestinationMint,
+                                        // Chip terpilih tetap menampilkan bidang hijau muda.
+                                        selectedContainerColor = TourifySuccessContainer,
                                         selectedLabelColor = DestinationGreen
                                     ),
                                     modifier = Modifier.weight(1f)

@@ -379,7 +379,7 @@ try {
     }
 
     $rows = $pdo->query(
-        'SELECT id, name, description, ticket_price FROM wahana ORDER BY id'
+        'SELECT id, name, description, ticket_price FROM wahana WHERE is_deleted = 0 ORDER BY id'
     )->fetchAll(PDO::FETCH_ASSOC);
     $wahana = array_map(static function (array $row): array {
         return [
